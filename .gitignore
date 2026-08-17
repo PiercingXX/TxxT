@@ -1,0 +1,9 @@
+# Skippy workspace state — never commit
+.skippy/
+
+# Build artifacts
+build/
+.gradle/
+local.properties
+*.iml
+.idea/
