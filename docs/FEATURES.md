@@ -104,9 +104,3 @@ The three PiercingXX repos were read this session and their findings are in
 - **Q14 language:** Kotlin confirmed. **Stack:** Views + viewBinding (not
   Compose), Room + Gson, pure-Kotlin core — all from the sibling repos.
 - **Q15 package:** `com.piercingxx.txxt` per the brand naming system.
-
-## Blocked items (need operator action)
-- **git/gh commit + push** to the private `TxxT` repo — `gh` is not
-  authenticated. Requires `gh auth login` (operator) before I can create and
-  push the repo.
-- **Nagatha cleanroom** of the best options — explicitly deferred by operator.
