@@ -59,8 +59,9 @@ GPLv3, ~228 stars. Fork of QKSMS with SMS encryption, built for protesters.
 ### Signal (signalapp/Signal-Android)
 AGPLv3. Primarily an internet-based messenger now; SMS support has been
 deprecated on Android and removed on iOS. Not an SMS-forward app.
-- **Design inspiration only**: clean bubble layout, Material You dynamic color,
-  minimal chrome. Not a candidate base for a pure SMS app.
+- **Design inspiration only**: clean layout, Material You dynamic color,
+  minimal chrome. Note: TxxT does **not** adopt Signal's bubble layout — see
+  PRIVACY.md §2 (nothing ever bubbles). Not a candidate base for a pure SMS app.
 
 ### AOSP Messaging (stock Android Messages)
 Apache 2.0. The reference stock SMS/MMS app.

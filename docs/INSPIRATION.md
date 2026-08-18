@@ -169,7 +169,8 @@ Both repos ship a failure-mode table (§14 / §10). TxxT should too. Draft rows:
 ## 6. What TxxT should NOT take from these repos
 
 - **xx-vitals' Compose choice** — that app needed animated rings/charts; TxxT
-  is list + bubbles, so Views matches the launcher and keeps the stack uniform.
+  is list + text-first lines (no message bubbles — PRIVACY.md §2), so Views
+  matches the launcher and keeps the stack uniform.
 - **xx-vitals' server/Postgres** — TxxT is fully offline (no `INTERNET`), so
   there is no server. Backup is local JSON, matching the launcher.
 - **Nope-Mode's device-owner MDM role** — irrelevant to a messaging app.

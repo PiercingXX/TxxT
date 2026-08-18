@@ -5,14 +5,17 @@ Design phase for a Google-free, sideloaded SMS/MMS app for a GrapheneOS Pixel 9.
 > **Read `INSPIRATION.md` after this file.** It holds the concrete brand-system
 > and technical-stack inheritance from the three PiercingXX repos
 > (`piercingxx-branding`, `Nope-Mode`, `xx-vitals`), all read this session.
+> **Read `PRIVACY.md` too** — it holds the privacy/notification posture that
+> governs how every screen behaves.
 
 ## Aesthetic direction (defaulted, pending operator confirmation)
 
 **Hybrid.** Keep the operator's brand DNA — AMOLED black, Space Mono,
 gesture-driven, text-first, no icon grid — but allow the minimal affordances a
-messaging surface actually needs (compose bar, message bubbles, attachment
-picker). A pure terminal UI is impractical for SMS/MMS; the hybrid keeps the
-brand while remaining usable.
+messaging surface actually needs (compose bar, attachment picker). A pure
+terminal UI is impractical for SMS/MMS; the hybrid keeps the brand while
+remaining usable. **Messages are text-first lines, never chat bubbles** (see
+§2 of PRIVACY.md — "nothing ever bubbles").
 
 This is the pivotal decision and was defaulted on best judgment because the
 operator declined to answer the pivotal design question and asked me to proceed.
@@ -27,10 +30,14 @@ operator declined to answer the pivotal design question and asked me to proceed.
    for message body. Tabular figures throughout. Fonts shipped in `res/font/`.
 4. **Gesture-driven.** Swipe-to-archive, swipe-to-delete, swipe-to-call,
    swipe-to-schedule. Minimize taps.
-5. **Theme presets.** Replicate the launcher's six-preset pattern rather than a
-   single theme.
+5. **Theme presets.** Replicate the launcher's seven-preset pattern rather than
+   a single theme.
 6. **Local-first.** No Internet permission. Everything (send, receive, search,
    backup) works offline.
+7. **Privacy by default.** Read/typing receipts, MMS smart features, and
+   notification bubbles are off; metadata is scrubbed on every send; starred
+   contacts always get through. The full posture is `PRIVACY.md` — read it
+   after this file.
 
 ## Brand system (from `piercingxx-branding`)
 
@@ -42,9 +49,10 @@ TxxT inherits the house brand. Two rules are load-bearing for a messaging UI:
   the conventional messaging palette (blue sent / grey received / red unread);
   hierarchy comes from the white-opacity ramp, not hue.
 
-Concrete mapping for messages: **sent** = `signal` block with `ink` text
-(inverted emphasis); **received** = `slate`/`graphite` block; **unread** =
-`signal` glyph, not a red dot. Full tokens and rules in `INSPIRATION.md` §1.
+Concrete mapping for messages (text-first lines, no bubbles — PRIVACY.md §2):
+**sent** = `signal` text on black (inverted emphasis); **received** = `slate`/
+`graphite` text on black; **unread** = `signal` glyph, not a red dot. Full
+tokens and rules in `INSPIRATION.md` §1.
 
 ## Screens
 
@@ -55,14 +63,21 @@ Concrete mapping for messages: **sent** = `signal` block with `ink` text
 - Search accessible via gesture/keystroke.
 
 ### Conversation thread
-- Message bubbles on AMOLED black; minimal chrome.
+- **Text-first message lines on AMOLED black** — no chat bubbles, no rounded
+  cards (PRIVACY.md §2 — "nothing ever bubbles"). Inbound left, outbound right;
+  minimal chrome.
 - Timestamps in Space Mono.
-- Compose bar at bottom; attachment and voice-message affordances minimal.
+- Compose bar at bottom; attachment affordance minimal. **No voice-message
+  affordance** (voice messages are never sent or received — PRIVACY.md §5).
 - Quick reply from notification.
+- **No notification bubbles / chat-heads** — ever (PRIVACY.md §2).
 
 ### Settings
 - Theme presets, font toggle, backup/restore, blocking management,
   lock-screen privacy, notification preferences.
+- **Starred contacts** — the call-through list that bypasses every suppression
+  (PRIVACY.md §6).
+- **Theme auto-sync** with the xx-launcher (PRIVACY.md §7).
 
 ## Stack (defaulted, pending confirmation)
 - **Kotlin** (matches PiercingXX-Launcher).
