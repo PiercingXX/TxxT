@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  TxxT adaptive-icon foreground: the underlined-XX logomark, rendered as white
+  stroke vectors on a transparent ground (the Ink tile is the background color,
+  see values/ic_launcher_colors.xml). Geometry is faithful to the brand source
+  (piercingxx-branding/assets/logomark.svg): two white X's stacked and
+  overlapping by a quarter, with a white bar beneath.
+
+  Viewport is the standard 108x108 adaptive-icon canvas; the logomark sits
+  inside the 66dp safe zone.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Top X: white cross centred at (54,40), half-extent 14. -->
+    <path
+        android:pathData="M40,26 L68,54 M40,54 L68,26"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+
+    <!-- Bottom X: white cross centred at (54,66), half-extent 14, overlapping
+         the top X by a quarter of its height. -->
+    <path
+        android:pathData="M40,52 L68,80 M40,80 L68,52"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+
+    <!-- Underline: white bar beneath the two X's. -->
+    <path
+        android:pathData="M38,88 L70,88"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+
+</vector>

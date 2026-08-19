@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  TxxT adaptive-icon colors. The background is brand Ink (#000000, AMOLED
+  black); the logomark foreground is white. See docs/INSPIRATION.md §1.4.
+-->
+<resources>
+    <color name="ic_launcher_background">#000000</color>
+</resources>

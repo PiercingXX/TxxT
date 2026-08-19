@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Default-SMS-handler role. Declaring this permission makes the app
+         eligible to be offered as the default SMS handler by the OS. The
+         broadcast-receiver components that complete the role are WS7's scope. -->
+    <uses-permission android:name="android.permission.role.SMS" />
+
+    <!-- Runtime notification permission (API 33+). Requested alongside the
+         SMS-role grant so the app can surface its own notifications. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Deliberately NO INTERNET permission. TxxT never talks to a network;
+         keeping this absent makes that claim verifiable. -->
+
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="TxxT"
+        android:supportsRtl="true">
+
+        <!-- Launcher entry. FLAG_SECURE is set in code, so the activity
+             declares nothing that would block it: no screenOrientation lock,
+             no exported without an intent-filter need. -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="TxxT">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+    </application>
+
+</manifest>
