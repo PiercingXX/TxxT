@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  TxxT adaptive launcher icon (API 26+). Foreground is the underlined-XX
+  logomark vector; background is the Ink tile color. Mirrors the sibling-repo
+  convention (Nope-Mode / xx-vitals).
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+</adaptive-icon>
