@@ -87,8 +87,7 @@ class ScheduleDelayTest {
     fun `a cancelled message is never due`() {
         val scheduled = ScheduledMessage(
             message = message(),
-            delayMillis = 0L,
-            baseTimeMillis = 1_000L,
+            scheduledAtMillis = 1_000L,
             state = ScheduledState.CANCELLED,
         )
         assertFalse(scheduled.isDue(1_000_000L))
