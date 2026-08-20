@@ -118,17 +118,19 @@ class ConversationListTest {
     }
 
     @Test
-    fun `pinned first defaults to unread then recency`() {
-        val read = conversation(
+    fun `pinned first puts a pinned conversation before an unpinned unread one`() {
+        // Pinning now wins over unread: the pinned conversation sorts first even
+        // though the unpinned one is both newer and unread.
+        val pinnedRead = conversation(
             1L,
-            message(id = 1L, conversationId = 1L, timestampMillis = 3000L, isRead = true),
+            message(id = 1L, conversationId = 1L, timestampMillis = 1000L, isRead = true),
         )
-        val unread = conversation(
+        val unpinnedUnread = conversation(
             2L,
-            message(id = 2L, conversationId = 2L, timestampMillis = 1000L, isRead = false),
+            message(id = 2L, conversationId = 2L, timestampMillis = 3000L, isRead = false),
         )
-        val ordered = ConversationList.sorted(listOf(read, unread))
-        assertEquals(listOf(2L, 1L), ids(ordered))
+        val ordered = ConversationList.sorted(listOf(unpinnedUnread, pinnedRead), pinnedIds = setOf(1L))
+        assertEquals(listOf(1L, 2L), ids(ordered))
     }
 
     @Test
