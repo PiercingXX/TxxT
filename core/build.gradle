@@ -1,0 +1,21 @@
+// Pure-JVM Kotlin module: the message/state-machine domain with zero android.*
+// imports, so the logic that must be correct is JVM-testable without a device.
+plugins {
+    id 'org.jetbrains.kotlin.jvm'
+}
+
+// Match the app module's JVM target so the core can be consumed by the Android
+// data layer (WS6) without a bytecode mismatch.
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8)
+    }
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+}
