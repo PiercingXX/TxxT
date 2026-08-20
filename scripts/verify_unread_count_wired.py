@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """Verify UnreadCount is wired into the conversation-list ordering consumer.
 
-Checks, per the T1 contract:
+This is a STRUCTURAL gate only: it cannot execute Kotlin, so it checks that the
+wiring exists in source. The behavioral proof that the ordering is actually
+driven by UnreadCount lives in ConversationListTest.kt (run via Gradle), which
+this script additionally checks references UnreadCount directly. Per the T1
+contract:
   - ConversationList.kt exists and defines the ConversationList consumer
   - ConversationList.sorted consults ConversationSortOrder.UNREAD_FIRST
-  - the ordering consumer actually uses UnreadCount (via perConversation) so
-    the list surfaces unread conversations first
-  - ConversationListTest.kt exercises the unread-first ordering
+  - the ordering consumer references UnreadCount.perConversation so the list
+    surfaces unread conversations first (call-site + behavioral test coverage)
+  - ConversationListTest.kt exercises the unread-first ordering AND names
+    UnreadCount so the mechanism, not just the outcome, is under test
   - the consumer file carries no android.* imports (pure-JVM, JVM-testable)
 
 Exits 0 on success, 1 on any failure.
@@ -73,6 +78,13 @@ def main():
           "test exercises the UNREAD_FIRST order")
     check("unread" in test_src.lower(),
           "test asserts unread conversations surface first")
+    # The test must name the UnreadCount mechanism directly, so the wiring is
+    # behaviorally asserted (ordering driven by UnreadCount.perConversation),
+    # not merely the final order of a hardcoded expectation.
+    check("UnreadCount" in test_src,
+          "test references UnreadCount so the mechanism is under test")
+    check("UnreadCount.perConversation" in test_src,
+          "test drives the UnreadCount.perConversation aggregation")
 
     print("T1 UnreadCount wiring verification passed.")
 

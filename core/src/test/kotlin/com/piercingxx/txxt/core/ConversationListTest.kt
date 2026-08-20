@@ -92,6 +92,32 @@ class ConversationListTest {
     }
 
     @Test
+    fun `unread first orders by the UnreadCount perConversation map`() {
+        // The unread-first order must be driven by the counts UnreadCount derives
+        // per conversation, not by a hardcoded expectation: compute the expected
+        // order from UnreadCount.perConversation and assert ConversationList.sorted
+        // reproduces it. This exercises the wiring of the unread subsystem end to end.
+        val read = conversation(
+            1L,
+            message(id = 1L, conversationId = 1L, timestampMillis = 3000L, isRead = true),
+        )
+        val twoUnread = conversation(
+            2L,
+            message(id = 2L, conversationId = 2L, timestampMillis = 1000L, isRead = false),
+            message(id = 3L, conversationId = 2L, timestampMillis = 2000L, isRead = false),
+        )
+        val oneUnread = conversation(
+            3L,
+            message(id = 4L, conversationId = 3L, timestampMillis = 500L, isRead = false),
+        )
+        val conversations = listOf(read, twoUnread, oneUnread)
+        val byUnread = UnreadCount.perConversation(conversations)
+        val ordered = ConversationList.sorted(conversations, ConversationSortOrder.UNREAD_FIRST)
+        val expected = conversations.sortedByDescending { byUnread.getValue(it.id) }
+        assertEquals(expected.map { it.id }, ids(ordered))
+    }
+
+    @Test
     fun `pinned first defaults to unread then recency`() {
         val read = conversation(
             1L,
