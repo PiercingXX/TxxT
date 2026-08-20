@@ -71,6 +71,12 @@ class BackupExportTest {
     }
 
     @Test
+    fun `negative thread id is rejected (range gate)`() {
+        val json = """{"version":1,"messages":[{"id":1,"threadId":-10,"address":"+1","body":"x","date":100}],"settings":{},"blocklist":[],"starred":[]}"""
+        assertThrows(BackupException::class.java) { BackupSerializer.deserialize(json) }
+    }
+
+    @Test
     fun `escaped characters round trip`() {
         val data = sampleData().copy(
             messages = listOf(
