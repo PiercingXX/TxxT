@@ -43,6 +43,14 @@
             </intent-filter>
         </activity>
 
+        <!-- Conversation thread. Not exported: launched only by MainActivity /
+             the notification content intent, never by external apps. FLAG_SECURE
+             is set in code. -->
+        <activity
+            android:name=".ui.ThreadActivity"
+            android:exported="false"
+            android:label="TxxT" />
+
         <!-- Inbound SMS. Part of the default-SMS-handler role: receives
              SMS_RECEIVED broadcasts and applies the auto-reply gate. -->
         <receiver
