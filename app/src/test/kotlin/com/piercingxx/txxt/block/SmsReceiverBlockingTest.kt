@@ -4,7 +4,9 @@ import android.content.Context
 import android.content.Intent
 import com.piercingxx.txxt.service.ReceivePolicy
 import com.piercingxx.txxt.service.SmsReceiver
+import io.mockk.every
 import io.mockk.mockk
+import io.mockk.spyk
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -45,7 +47,10 @@ class SmsReceiverBlockingTest {
     // ---- Helper: build an SMS_RECEIVED intent ----
 
     private fun smsIntent(): Intent =
-        Intent("android.provider.Telephony.SMS_RECEIVED").apply { `package` = "test" }
+        spyk(Intent()).apply {
+            every { action } returns "android.provider.Telephony.SMS_RECEIVED"
+            `package` = "test"
+        }
 
     // ---- BLOCK: blocked address drops the message ----
 
