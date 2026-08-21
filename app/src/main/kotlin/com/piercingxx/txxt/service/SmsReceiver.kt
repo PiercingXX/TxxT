@@ -55,7 +55,7 @@ class SmsReceiver(
     private val extractBody: (Intent) -> String = { intent ->
         Telephony.Sms.Intents.getMessagesFromIntent(intent)
             ?.firstOrNull()
-            ?.body
+            ?.displayMessageBody
             ?: ""
     },
     /**
@@ -64,10 +64,16 @@ class SmsReceiver(
      * object.
      */
     private val sendReply: (Context, String, String) -> Unit = SendPipeline::sendSms,
+    /**
+     * Action string to match against the inbound [Intent]. Defaults to the
+     * platform constant; injectable so a JVM unit test can drive [onReceive]
+     * without the Android stub returning null for the constant.
+     */
+    private val smsAction: String = Telephony.Sms.Intents.SMS_RECEIVED_ACTION,
 ) : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) return
+        if (intent.action != smsAction) return
 
         val sender = extractSender(intent) ?: return
         val body = extractBody(intent)

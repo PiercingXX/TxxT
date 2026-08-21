@@ -1,13 +1,17 @@
 package com.piercingxx.txxt.block
 
+import android.content.Context
 import android.content.Intent
 import com.piercingxx.txxt.service.ReceivePolicy
 import com.piercingxx.txxt.service.SmsReceiver
+import io.mockk.mockk
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SmsReceiverBlockingTest {
+
+    private val context: Context = mockk(relaxed = true)
 
     // ---- Helper: build an SmsReceiver with injectable extractors ----
 
@@ -33,8 +37,9 @@ class SmsReceiverBlockingTest {
             sendReply = { _, to, message ->
                 repliesSent.add(to to message)
             },
+            smsAction = "android.provider.Telephony.SMS_RECEIVED",
         )
-        Triple(rcv, contextsSeen, repliesSent)
+        return Triple(rcv, contextsSeen, repliesSent)
     }
 
     // ---- Helper: build an SMS_RECEIVED intent ----
@@ -52,7 +57,7 @@ class SmsReceiverBlockingTest {
             autoReplyEnabled = true,
             sender = "+1 555 1000",
         )
-        rcv.onReceive(null, smsIntent())
+        rcv.onReceive(context, smsIntent())
         assertTrue(replies.isEmpty())
     }
 
@@ -69,7 +74,7 @@ class SmsReceiverBlockingTest {
             sender = "+1 555 1000",
             body = "clean message",
         )
-        rcv.onReceive(null, smsIntent())
+        rcv.onReceive(context, smsIntent())
         assertTrue(replies.isEmpty())
     }
 
@@ -83,7 +88,7 @@ class SmsReceiverBlockingTest {
             autoReplyEnabled = true,
             sender = "+1 555 9999",
         )
-        rcv.onReceive(null, smsIntent())
+        rcv.onReceive(context, smsIntent())
         assertTrue(replies.isEmpty())
     }
 
@@ -97,7 +102,7 @@ class SmsReceiverBlockingTest {
             autoReplyEnabled = true,
             sender = "+1 555 1000",
         )
-        rcv.onReceive(null, smsIntent())
+        rcv.onReceive(context, smsIntent())
         assertEquals(1, replies.size)
         assertEquals("+1 555 1000", replies[0].first)
         assertEquals(ReceivePolicy.AUTO_REPLY_BODY, replies[0].second)
@@ -111,7 +116,7 @@ class SmsReceiverBlockingTest {
             autoReplyEnabled = false,
             sender = "+1 555 1000",
         )
-        rcv.onReceive(null, smsIntent())
+        rcv.onReceive(context, smsIntent())
         assertTrue(replies.isEmpty())
     }
 
@@ -129,7 +134,7 @@ class SmsReceiverBlockingTest {
             sender = "+1 555 1000",
             body = "Get a loan today",
         )
-        rcv.onReceive(null, smsIntent())
+        rcv.onReceive(context, smsIntent())
         assertTrue(replies.isEmpty())
     }
 
@@ -146,7 +151,7 @@ class SmsReceiverBlockingTest {
             autoReplyEnabled = true,
             sender = "+1 555 1000",
         )
-        rcv.onReceive(null, smsIntent())
+        rcv.onReceive(context, smsIntent())
         assertEquals(1, replies.size)
         assertEquals("+1 555 1000", replies[0].first)
     }
@@ -156,7 +161,7 @@ class SmsReceiverBlockingTest {
     @Test
     fun `non-SMS action is ignored`() {
         val (rcv, _, replies) = receiver(autoReplyEnabled = true)
-        rcv.onReceive(null, Intent("some.other.action"))
+        rcv.onReceive(context, Intent("some.other.action"))
         assertTrue(replies.isEmpty())
     }
 
@@ -165,7 +170,7 @@ class SmsReceiverBlockingTest {
     @Test
     fun `null sender is ignored`() {
         val (rcv, _, replies) = receiver(sender = null)
-        rcv.onReceive(null, smsIntent())
+        rcv.onReceive(context, smsIntent())
         assertTrue(replies.isEmpty())
     }
 
@@ -180,7 +185,7 @@ class SmsReceiverBlockingTest {
             sender = "+1 555 1000",
             body = "",
         )
-        rcv.onReceive(null, smsIntent())
+        rcv.onReceive(context, smsIntent())
         assertEquals(1, replies.size)
     }
 }
