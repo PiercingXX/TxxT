@@ -73,6 +73,10 @@ dependencies {
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
 
     testImplementation 'junit:junit:4.13.2'
+    // MockK lets a plain JVM unit test drive the Android BroadcastReceiver
+    // (mockkStatic on the mockable android.jar Telephony class) without
+    // Robolectric, which is not in the offline cache. 1.13.10 is in the cache.
+    testImplementation 'io.mockk:mockk:1.13.10'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test:core:1.5.0'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'

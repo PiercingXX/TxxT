@@ -10,6 +10,17 @@
          SMS-role grant so the app can surface its own notifications. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- SMS/MMS runtime permissions. RECEIVE_SMS + RECEIVE_MMS let the receivers
+         in service/ observe inbound SMS/MMS broadcasts; SEND_SMS lets the send
+         pipeline send; READ_SMS/WRITE_SMS let the receivers persist received
+         messages through the data layer. All are part of the default-SMS-handler
+         role the app already declares. -->
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <uses-permission android:name="android.permission.RECEIVE_MMS" />
+    <uses-permission android:name="android.permission.SEND_SMS" />
+    <uses-permission android:name="android.permission.READ_SMS" />
+    <uses-permission android:name="android.permission.WRITE_SMS" />
+
     <!-- Deliberately NO INTERNET permission. TxxT never talks to a network;
          keeping this absent makes that claim verifiable. -->
 
@@ -31,6 +42,29 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Inbound SMS. Part of the default-SMS-handler role: receives
+             SMS_RECEIVED broadcasts and applies the auto-reply gate. -->
+        <receiver
+            android:name=".service.SmsReceiver"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter>
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Inbound MMS. Part of the default-SMS-handler role: receives
+             WAP_PUSH_RECEIVED broadcasts and applies the audio-MMS drop. -->
+        <receiver
+            android:name=".service.MmsReceiver"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_WAP_PUSH">
+            <intent-filter>
+                <action android:name="android.provider.Telephony.WAP_PUSH_RECEIVED" />
+                <data android:mimeType="application/vnd.wap.mms-message" />
+            </intent-filter>
+        </receiver>
 
     </application>
 
