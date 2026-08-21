@@ -152,6 +152,28 @@ send and receive work, no delivery/read-report request is made, MMS is not
 auto-downloaded, an inbound audio MMS is dropped un-stored, and the auto-reply
 SMS fires only when enabled.
 
+### WS7a — Wire the SMS/MMS receivers into the app's execution flow
+
+goal: WS7 built `SmsReceiver`, `MmsReceiver` and the send pipeline, and the
+audit found them to be DEAD CODE: declared in `AndroidManifest.xml` but never
+reached from the running application, so no inbound SMS or MMS is ever handled.
+Wire them in — registration/dispatch reaches `SmsReceiver.onReceive` and
+`MmsReceiver.onReceive` for a real inbound intent, those handlers route through
+the existing `ReceivePolicy` and send pipeline, and the privacy behaviour WS7
+already implements (no delivery/read reports, MMS auto-download off, inbound
+audio MMS dropped un-stored, auto-reply only when enabled) holds on that live
+path. Do NOT re-extract or rename anything: WS7's policy classes and their
+tests are correct and already delivered — the gap is only that nothing calls
+them.
+
+done when: a JVM unit test drives an inbound SMS intent and an inbound
+audio-MMS intent through the app's registered receiver entry points and asserts
+the resulting behaviour (auto-reply decision honoured, audio MMS dropped
+un-stored), such that the test FAILS if the receivers are never invoked; and a
+test asserts the manifest-declared receiver class names resolve to those
+classes. `./gradlew :app:testDebugUnitTest --offline` passes. Compilation is
+NOT evidence here — WS7 compiled green while the receivers were unreachable.
+
 ### WS8 — Notification service
 
 goal: Write `NotificationService` in `service/` that posts notifications
