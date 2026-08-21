@@ -190,6 +190,38 @@ ever posted, `FLAG_SECURE` blocks recents preview and screenshots, starred
 contacts always notify while unstarred follow the redacted/suppressed posture,
 and quick reply works.
 
+### WS8a — The notification service WS8 did not build
+
+goal: WS8 delivered only `NotificationPolicy` — three pure functions
+(`notificationTitle`, `redactedContent`, `shouldBubble`) — and was marked
+delivered against one seventh of its stated goal. Its scoped contract asked for
+that single slice, and its `files:` line was 768 characters of repetition-loop
+noise. Build the rest of WS8, WITHOUT rebuilding `NotificationPolicy`, which is
+correct and already merged:
+
+  1. a `NotificationService` that actually POSTS a notification, taking its
+     visible text from `NotificationPolicy` so the sender-name-only rule holds
+     on the real path (`docs/PRIVACY.md:60`);
+  2. `FLAG_SECURE` set on the thread and conversation-list activities
+     (`docs/PRIVACY.md:64`, `:160`);
+  3. no bubbles or chat-heads on the posted notification — no `BUBBLE_DATA`,
+     no `FLAG_BUBBLE`, and no overlay permission in the manifest
+     (`docs/PRIVACY.md:51`);
+  4. per-contact silent / vibrate / sound / redacted control, defaulting to the
+     global posture when a contact has no override;
+  5. starred contacts always notify, whatever the global posture says;
+  6. quick reply from the notification.
+
+done when: JVM unit tests drive the notification path and FAIL if any of these
+regress — a test asserts the posted notification's visible text is the sender
+name and never the body; a test asserts no bubble metadata is attached; a test
+asserts a per-contact override beats the global posture and that a starred
+contact notifies when the global posture is silent; a test asserts quick reply
+reaches the send path. A manifest test asserts no overlay permission is
+declared and that the two activities carry FLAG_SECURE.
+`./gradlew :app:testDebugUnitTest --offline` passes. Compilation is NOT
+evidence: WS8 compiled green while posting nothing at all.
+
 ### WS9 — Blocking service wiring
 
 goal: Write the `block/` package that applies the WS3 filters to inbound
