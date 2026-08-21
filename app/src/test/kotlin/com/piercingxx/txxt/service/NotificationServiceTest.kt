@@ -1,11 +1,13 @@
 package com.piercingxx.txxt.service
 
 import androidx.core.app.NotificationCompat
+import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 
 /**
@@ -24,30 +26,44 @@ import org.junit.Test
 class NotificationServiceTest {
 
     private var capturedId: Int = -1
-    private var capturedBuilder: NotificationCompat.Builder? = null
     private var postCalled = false
-    private var builderChained: MutableList<String> = mutableListOf()
+    private var mockBuilder: NotificationCompat.Builder? = null
+
+    private fun resetCaptures() {
+        capturedId = -1
+        postCalled = false
+        mockBuilder = null
+    }
 
     private fun makeService(): NotificationService {
-        // Create a mock builder that records chained method calls.
-        // mockk with relaxed=true on a class — we use a spy-like approach.
-        val mockBuilder = mockk<NotificationCompat.Builder>(relaxed = true)
+        // Relaxed mock builder that returns itself on chained calls so
+        // verify() sees the calls on the same instance.
+        val builder = mockk<NotificationCompat.Builder>(relaxed = true)
+        mockBuilder = builder
 
-        // Use a stub context — the makeBuilder lambda short-circuits the real
-        // NotificationCompat.Builder(context, ...) constructor.
-        val stubContext = mockk<android.content.Context>(relaxed = true)
+        // Configure all builder methods to return the same mock so chaining works.
+        io.mockk.every { builder.setSmallIcon(any<Int>()) } answers { builder }
+        io.mockk.every { builder.setContentTitle(any()) } answers { builder }
+        io.mockk.every { builder.setContentText(any()) } answers { builder }
+        io.mockk.every { builder.setContentIntent(any()) } answers { builder }
+        io.mockk.every { builder.setAutoCancel(any()) } answers { builder }
+        io.mockk.every { builder.addAction(any()) } answers { builder }
 
         return NotificationService(
-            context = stubContext,
-            contentIntent = { _, _ -> mockk<android.app.PendingIntent>(relaxed = true) },
-            quickReplyAction = { _, _ -> mockk<NotificationCompat.Action>(relaxed = true) },
-            makeBuilder = { _ -> mockBuilder },
-            postNotification = { id, builder ->
+            context = mockk(relaxed = true),
+            contentIntent = { _, _ -> mockk(relaxed = true) },
+            quickReplyAction = { _, _ -> mockk(relaxed = true) },
+            makeBuilder = { _ -> builder },
+            postNotification = { id, _ ->
                 postCalled = true
                 capturedId = id
-                capturedBuilder = builder
             },
         )
+    }
+
+    @Before
+    fun setUp() {
+        resetCaptures()
     }
 
     @Test
@@ -60,6 +76,9 @@ class NotificationServiceTest {
         )
         assertTrue("should return true", result)
         assertTrue("postNotification should be called", postCalled)
+        // Verify notification content — title and text come from policy
+        verify { mockBuilder!!.setContentTitle("Alice") }
+        verify { mockBuilder!!.setContentText("Alice") }
     }
 
     @Test
@@ -72,6 +91,8 @@ class NotificationServiceTest {
         )
         assertTrue("should return true", result)
         assertTrue("postNotification should be called", postCalled)
+        verify { mockBuilder!!.setContentTitle("Alice") }
+        verify { mockBuilder!!.setContentText("Alice") }
     }
 
     @Test
@@ -121,10 +142,32 @@ class NotificationServiceTest {
     }
 
     @Test
-    fun `notification builder is passed to postNotification`() {
+    fun `notification includes quick-reply action`() {
         val svc = makeService()
         svc.postMessageNotification(sender = "Alice", body = "Hi")
-        assertNotNull("builder should be passed to postNotification", capturedBuilder)
+        // Verify addAction was called (the quick-reply action)
+        verify { mockBuilder!!.addAction(any()) }
+    }
+
+    @Test
+    fun `notification has content intent set`() {
+        val svc = makeService()
+        svc.postMessageNotification(sender = "Alice", body = "Hi")
+        verify { mockBuilder!!.setContentIntent(any()) }
+    }
+
+    @Test
+    fun `notification is auto-cancel`() {
+        val svc = makeService()
+        svc.postMessageNotification(sender = "Alice", body = "Hi")
+        verify { mockBuilder!!.setAutoCancel(true) }
+    }
+
+    @Test
+    fun `notification has small icon set`() {
+        val svc = makeService()
+        svc.postMessageNotification(sender = "Alice", body = "Hi")
+        verify { mockBuilder!!.setSmallIcon(android.R.drawable.sym_action_email) }
     }
 
     @Test
