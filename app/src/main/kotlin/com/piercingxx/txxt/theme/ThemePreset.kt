@@ -115,10 +115,10 @@ fun deriveTokens(preset: ThemePreset): ThemeTokens {
 }
 
 /** Mix [color] toward white by [fraction] (0..1), preserving alpha. */
-private fun lighten(color: Long, fraction: Float): Long = mix(color, 0xFFL, fraction)
+private fun lighten(color: Long, fraction: Float): Long = mix(color, 0xFFFFFFFFL, fraction)
 
 /** Mix [color] toward black by [fraction] (0..1), preserving alpha. */
-private fun darken(color: Long, fraction: Float): Long = mix(color, 0x00L, fraction)
+private fun darken(color: Long, fraction: Float): Long = mix(color, 0xFF000000L, fraction)
 
 /** Linearly interpolate [color] toward [target] by [fraction] (0..1). */
 private fun mix(color: Long, target: Long, fraction: Float): Long {
@@ -137,4 +137,4 @@ private fun mix(color: Long, target: Long, fraction: Float): Long {
 
 /** Build an ARGB color from a foreground base (0xFF or 0x00) and an alpha stop. */
 private fun withAlpha(base: Long, alpha: Int): Long =
-    ((alpha.toLong() shl 24) or ((base ushr 16) and 0xFF) shl 16 or ((base ushr 8) and 0xFF) shl 8 or (base and 0xFF))
+    ((alpha.toLong() shl 24) or (base shl 16) or (base shl 8) or base)
