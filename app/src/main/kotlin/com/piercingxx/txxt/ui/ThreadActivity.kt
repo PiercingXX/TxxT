@@ -9,7 +9,6 @@ import android.widget.EditText
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.piercingxx.txxt.R
-import com.piercingxx.txxt.data.Mappers.toMessage
 import com.piercingxx.txxt.data.TxxTDatabase
 import com.piercingxx.txxt.service.SendPipeline
 import kotlinx.coroutines.CoroutineScope
@@ -73,9 +72,10 @@ class ThreadActivity : Activity() {
     /** Loads this conversation's messages from Room and submits them to the adapter. */
     private fun observeMessages() {
         scope.launch(Dispatchers.Main) {
-            database.messageDao().observeForConversation(conversationId)
-                .collect { entities ->
-                    adapter.submit(entities.map { it.toMessage() })
+            ThreadMessageLoader(database.messageDao(), conversationId)
+                .messages()
+                .collect { messages ->
+                    adapter.submit(messages)
                 }
         }
     }
