@@ -21,6 +21,11 @@
     <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.WRITE_SMS" />
 
+    <!-- Boot-time reconcile (T2). Lets the BootReceiver run the reboot reconcile
+         (rebuild unread counts, re-drive pending sends) when the device finishes
+         booting. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <!-- Deliberately NO INTERNET permission. TxxT never talks to a network;
          keeping this absent makes that claim verifiable. -->
 
@@ -83,6 +88,17 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="xx.launcher.THEME_CHANGED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Boot-time reconcile (T2). Runs RebootReconcile when the device
+             finishes booting so unread counts and pending sends survive a
+             reboot. -->
+        <receiver
+            android:name=".service.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
 

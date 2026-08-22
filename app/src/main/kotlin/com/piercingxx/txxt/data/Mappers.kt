@@ -35,6 +35,7 @@ object Mappers {
         timestampMillis = timestampMillis,
         senderAddress = senderAddress,
         isRead = isRead,
+        isSent = sent,
     )
 
     /** Converts a pure [Message] into a storable [MessageEntity]. */
@@ -47,6 +48,7 @@ object Mappers {
         timestampMillis = timestampMillis,
         senderAddress = senderAddress,
         isRead = isRead,
+        sent = isSent,
     )
 
     // ---- Conversation (messages are stored separately, in the messages table) ----
