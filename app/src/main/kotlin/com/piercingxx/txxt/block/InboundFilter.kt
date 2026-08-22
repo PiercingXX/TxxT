@@ -21,6 +21,11 @@ import com.piercingxx.txxt.core.UnknownSenderRule
  * Starred contacts bypass every suppression: when a rule would match a
  * starred sender the disposition is [MessageDisposition.DELIVER] and the
  * [BlockReason] has [BlockReason.canOverride] set to true.
+ *
+ * A sender with a persisted [BlockOverrideStore] override bypasses every
+ * suppression too: the override is the user's explicit "allow this sender"
+ * decision, so it wins over the block list, content filter, and unknown-sender
+ * rule. When [blockOverrideStore] is null (the default) no overrides apply.
  */
 class InboundFilter(
     knownContacts: Set<String> = emptySet(),
@@ -28,6 +33,7 @@ class InboundFilter(
     starredContacts: Set<String> = emptySet(),
     contentKeywords: Set<String> = emptySet(),
     contentPhrases: Set<String> = emptySet(),
+    private val blockOverrideStore: BlockOverrideStore? = null,
 ) {
 
     private val unknownSenderRule = UnknownSenderRule(knownContacts = knownContacts)
@@ -48,6 +54,11 @@ class InboundFilter(
      * the sender is starred).
      */
     fun evaluate(sender: String, body: String): Pair<MessageDisposition, BlockReason?> {
+        // A user override allows the sender through every suppression.
+        if (blockOverrideStore?.hasOverride(sender) == true) {
+            return MessageDisposition.DELIVER to null
+        }
+
         // Check blocked address list first
         if (isBlockedAddress(sender)) {
             return if (starredBypass.isStarred(sender)) {
