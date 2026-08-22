@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  TxxT theme layer (T2). Declares the themeable color attributes the running UI
+  reads, plus the base Theme.TxxT that binds each to its default (AMOLED Night)
+  value. The ThemeApplier (T6) re-binds these attributes at runtime for the
+  other six presets, so the whole UI retheme flows through this one seam.
+
+  Attributes live here (rather than a separate attrs.xml) so the theme and its
+  contract are defined in one place; the names mirror the ThemeTokens fields
+  (T1): background, surface, text, muted, line, accent, accentOn.
+-->
+<resources>
+
+    <!-- Themeable color attributes — the applier's runtime seam. -->
+    <attr name="txxtBackground" format="color" />
+    <attr name="txxtSurface" format="color" />
+    <attr name="txxtText" format="color" />
+    <attr name="txxtMuted" format="color" />
+    <attr name="txxtLine" format="color" />
+    <attr name="txxtAccent" format="color" />
+    <attr name="txxtAccentOn" format="color" />
+
+    <!--
+      Base theme. No ActionBar / AppCompat chrome — TxxT is text-first lines on
+      a bare ground (DESIGN.md §2). The parent is Theme.Material3.DayNight.NoActionBar
+      from the material dependency (build.gradle); the themeable attributes are
+      bound to the default AMOLED Night token set from colors.xml.
+    -->
+    <style name="Theme.TxxT" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="txxtBackground">@color/theme_background</item>
+        <item name="txxtSurface">@color/theme_surface</item>
+        <item name="txxtText">@color/theme_text</item>
+        <item name="txxtMuted">@color/theme_muted</item>
+        <item name="txxtLine">@color/theme_line</item>
+        <item name="txxtAccent">@color/theme_accent</item>
+        <item name="txxtAccentOn">@color/theme_accent_on</item>
+
+        <!-- Bind the platform surfaces to the brand ground so the window and
+             system bars start on Ink, not an unthemed default. -->
+        <item name="android:colorBackground">@color/theme_background</item>
+        <item name="android:windowBackground">@color/theme_background</item>
+        <item name="android:statusBarColor">@color/theme_background</item>
+        <item name="android:navigationBarColor">@color/theme_background</item>
+    </style>
+
+</resources>
