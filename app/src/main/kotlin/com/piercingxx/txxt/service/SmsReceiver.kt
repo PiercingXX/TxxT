@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.provider.Telephony
 import com.piercingxx.txxt.block.InboundFilter
+import com.piercingxx.txxt.block.LiveInboundFilter
 import com.piercingxx.txxt.block.MessageDisposition
 
 /**
@@ -26,7 +27,7 @@ class SmsReceiver(
      * content filters, and unknown-sender rules. Messages that are [BLOCK] or
      * [QUARANTINE] do not reach the auto-reply gate.
      */
-    private val inboundFilter: InboundFilter = InboundFilter(),
+    private val inboundFilter: InboundFilter = LiveInboundFilter.current,
     /**
      * Whether the auto-reply SMS is enabled. Off by default (`docs/PRIVACY.md:96`);
      * the flag is drivable so the reply can be turned on (and per-contact

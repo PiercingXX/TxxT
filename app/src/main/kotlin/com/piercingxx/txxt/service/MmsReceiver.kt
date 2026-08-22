@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import com.piercingxx.txxt.block.InboundFilter
+import com.piercingxx.txxt.block.LiveInboundFilter
 import com.piercingxx.txxt.block.MessageDisposition
 
 /**
@@ -24,7 +25,7 @@ class MmsReceiver(
      * content filters, and unknown-sender rules. Messages that are [BLOCK] or
      * [QUARANTINE] do not reach the attachment policy gate.
      */
-    private val inboundFilter: InboundFilter = InboundFilter(),
+    private val inboundFilter: InboundFilter = LiveInboundFilter.current,
     /**
      * Extracts the sender address of the inbound MMS from [Intent]. Defaults to
      * reading the intent's extras; injectable so a JVM unit test can drive
