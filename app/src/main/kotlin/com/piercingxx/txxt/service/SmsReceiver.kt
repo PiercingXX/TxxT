@@ -63,7 +63,9 @@ class SmsReceiver(
      * so a JVM unit test can observe the send decision without mocking the
      * object.
      */
-    private val sendReply: (Context, String, String) -> Unit = SendPipeline::sendSms,
+    private val sendReply: (Context, String, String) -> Unit = { context, destination, body ->
+        SendPipeline.sendSms(context, destination, body)
+    },
     /**
      * Action string to match against the inbound [Intent]. Defaults to the
      * platform constant; injectable so a JVM unit test can drive [onReceive]
