@@ -40,4 +40,11 @@ data class MessageEntity(
     val senderAddress: String? = null,
     /** Whether the local user has read this message. */
     val isRead: Boolean = false,
+    /**
+     * Whether an outgoing message has been transmitted. `false` marks a pending
+     * send — an outgoing message queued but not yet sent (e.g. interrupted by a
+     * reboot) that T2's [com.piercingxx.txxt.service.RebootReconcile] re-drives
+     * through the send pipeline. Always `true` for incoming messages.
+     */
+    val sent: Boolean = true,
 )

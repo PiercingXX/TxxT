@@ -48,6 +48,15 @@ class MmsReceiver(
      * without the Android stub returning null for the constant.
      */
     private val mmsAction: String = "android.provider.Telephony.WAP_PUSH_RECEIVED",
+    /**
+     * The T4 retry tracker for tap-initiated MMS downloads. Defaults to a real
+     * [MmsDownloadRetry] whose download seam is a no-op (the actual carrier
+     * fetch lands with the WS6 data layer); injectable so a JVM unit test can
+     * drive the receiver's registration of stored MMS messages.
+     */
+    private val downloadRetry: MmsDownloadRetry = MmsDownloadRetry(
+        performDownload = { false },
+    ),
 ) : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -71,6 +80,12 @@ class MmsReceiver(
             return
         }
         // STORE (non-audio) persists through the data layer (WS6), a separate
-        // workstream; until it lands, no write is attempted here.
+        // workstream; until it lands, no write is attempted here. The message is
+        // still registered with the T4 retry tracker so a later tap-initiated
+        // download that fails is retried with backoff and its failed state is
+        // surfaced — the running receiver reaches MmsDownloadRetry here.
+        intent.getStringExtra("messageId")?.toLongOrNull()?.let { messageId ->
+            downloadRetry.state(messageId)
+        }
     }
 }

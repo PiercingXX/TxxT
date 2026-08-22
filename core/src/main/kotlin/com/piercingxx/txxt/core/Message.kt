@@ -36,6 +36,13 @@ data class Message(
     val senderAddress: String? = null,
     /** Whether the local user has read this message. */
     val isRead: Boolean = false,
+    /**
+     * Whether an outgoing message has been transmitted. `false` marks a pending
+     * send — an outgoing message queued but not yet sent (e.g. interrupted by a
+     * reboot) that the T2 reboot reconcile re-drives through the send pipeline.
+     * Always `true` for incoming messages.
+     */
+    val isSent: Boolean = true,
 ) {
     /** True when this is an incoming message the user has not yet read. */
     val isUnread: Boolean

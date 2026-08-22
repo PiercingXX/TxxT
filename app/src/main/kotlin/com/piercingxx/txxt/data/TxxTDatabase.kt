@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 /**
  * The app's Room database.
@@ -15,7 +17,7 @@ import androidx.room.RoomDatabase
  */
 @Database(
     entities = [ConversationEntity::class, MessageEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class TxxTDatabase : RoomDatabase() {
@@ -33,6 +35,18 @@ abstract class TxxTDatabase : RoomDatabase() {
          */
         fun build(context: Context): TxxTDatabase =
             Room.databaseBuilder(context, TxxTDatabase::class.java, NAME)
+                .addMigrations(MIGRATION_1_2)
                 .build()
+
+        /**
+         * v1 -> v2: adds the `sent` column to `messages` (T2 pending-send flag).
+         * Existing rows are treated as already sent (`1`); new outgoing messages
+         * persist `0` until transmitted.
+         */
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE messages ADD COLUMN sent INTEGER NOT NULL DEFAULT 1")
+            }
+        }
     }
 }
