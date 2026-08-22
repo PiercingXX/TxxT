@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.WindowManager
 import com.piercingxx.txxt.theme.SharedPreferencesThemeKeyValueStore
+import com.piercingxx.txxt.theme.ThemeController
 import com.piercingxx.txxt.theme.ThemeStore
 import com.piercingxx.txxt.ui.ThreadActivity
 
@@ -30,6 +31,16 @@ class MainActivity : Activity() {
     lateinit var themeStore: ThemeStore
         private set
 
+    /**
+     * The app's theme controller, built over [themeStore]. Wired here (the
+     * launcher) so the running application reaches the manual-wins precedence
+     * rule on every launch: the settings screen (WS12) and the launcher-sync
+     * receiver (T5) report their intent through it, and T6's applier reads the
+     * effective theme from it. Held on the instance alongside the store.
+     */
+    lateinit var themeController: ThemeController
+        private set
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // FLAG_SECURE in code (docs/PRIVACY.md §3): no recents preview, no screenshots.
@@ -44,6 +55,8 @@ class MainActivity : Activity() {
                 getSharedPreferences("txxt_theme", MODE_PRIVATE)
             )
         )
+        // The controller carries the manual-wins precedence over that store.
+        themeController = ThemeController(themeStore)
         startActivity(
             Intent(this, ThreadActivity::class.java)
                 .putExtra("extra_conversation_id", 1L)
