@@ -100,6 +100,11 @@ class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
 
+        // T6: warn loudly if the default-SMS-handler role was revoked — if the
+        // app is no longer the default SMS app, the receivers won't see inbound
+        // messages, so the revocation must not be silent.
+        DefaultHandlerMonitor().warnIfRevoked(context)
+
         val database = TxxTDatabase.build(context)
         val reconcile = RebootReconcile(
             loadMessages = { database.messageDao().getAll() },
