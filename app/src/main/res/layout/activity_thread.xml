@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  TxxT conversation thread (T2).
+
+  Text-first message lines on AMOLED black (docs/DESIGN.md §"Conversation
+  thread"). No chat bubbles, no rounded cards — the no-bubble constraint is
+  structural (docs/PRIVACY.md §2). The message list is a RecyclerView filled by
+  ThreadAdapter (T3); the compose bar sits at the bottom with a minimal
+  attachment affordance and NO voice-message affordance (docs/PRIVACY.md §5 —
+  voice messages are never sent or received).
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#000000">
+
+    <!-- Message list. Flat text-first rows, never bubbles. -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/message_list"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:padding="12dp"
+        android:clipToPadding="false" />
+
+    <!-- Compose bar: a plain text field plus a minimal send affordance.
+         Deliberately NO voice/record/mic element — voice is never sent. -->
+    <LinearLayout
+        android:id="@+id/compose_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="#09090B"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp">
+
+        <EditText
+            android:id="@+id/compose_input"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:hint="Message"
+            android:textColor="#E6FFFFFF"
+            android:textColorHint="#80FFFFFF"
+            android:fontFamily="monospace"
+            android:background="#18181B"
+            android:padding="10dp"
+            android:inputType="textShortMessage"
+            android:maxLines="4" />
+
+        <Button
+            android:id="@+id/send_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="Send"
+            android:textColor="#000000"
+            android:backgroundTint="#FFFFFF" />
+    </LinearLayout>
+
+</LinearLayout>
