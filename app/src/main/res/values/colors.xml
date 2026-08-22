@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  TxxT theme color tokens (T2). These are the concrete ARGB values for the
+  default AMOLED Night preset — the brand's ground (INSPIRATION.md §1.1). The
+  values mirror the pure-Kotlin ThemePreset/ThemeTokens derivation (T1) so the
+  resource layer and the model agree on the shipped default.
+
+  The ThemeApplier (T6) overrides the themeable attributes in themes.xml at
+  runtime for the other six presets; these resources are the static default.
+
+  Naming follows the house brand tokens: ink (ground), ink_raised (surface),
+  text/muted/line (the white-opacity ramp), signal (the reserved accent).
+-->
+<resources>
+    <!-- Ground / background — brand Ink, AMOLED black. -->
+    <color name="theme_background">#FF000000</color>
+    <!-- Raised surfaces — ink nudged 4% toward white (matches deriveTokens). -->
+    <color name="theme_surface">#FF0A0A0A</color>
+    <!-- Body text — 90% white, the ceiling for type. -->
+    <color name="theme_text">#E6FFFFFF</color>
+    <!-- Secondary text — 50% white. -->
+    <color name="theme_muted">#80FFFFFF</color>
+    <!-- Hairline borders — 10% white. -->
+    <color name="theme_line">#1AFFFFFF</color>
+    <!-- The signal accent — reserved pure white. -->
+    <color name="theme_accent">#FFFFFFFF</color>
+    <!-- Text on a signal block — ink on signal (inverted emphasis). -->
+    <color name="theme_accent_on">#FF000000</color>
+</resources>

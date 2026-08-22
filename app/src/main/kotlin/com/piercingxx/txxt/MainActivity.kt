@@ -4,6 +4,9 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.view.WindowManager
+import com.piercingxx.txxt.theme.SharedPreferencesThemeKeyValueStore
+import com.piercingxx.txxt.theme.ThemeController
+import com.piercingxx.txxt.theme.ThemeStore
 import com.piercingxx.txxt.ui.ThreadActivity
 
 /**
@@ -18,6 +21,26 @@ import com.piercingxx.txxt.ui.ThreadActivity
  */
 class MainActivity : Activity() {
 
+    /**
+     * The app's theme store, backed by this activity's SharedPreferences. Wired
+     * here (the launcher) so the running application reaches the store on every
+     * launch: the settings screen (WS12) reads/writes it and T6's applier drives
+     * the UI from its effective theme. Held on the instance so the store is
+     * reachable for the lifetime of the launcher.
+     */
+    lateinit var themeStore: ThemeStore
+        private set
+
+    /**
+     * The app's theme controller, built over [themeStore]. Wired here (the
+     * launcher) so the running application reaches the manual-wins precedence
+     * rule on every launch: the settings screen (WS12) and the launcher-sync
+     * receiver (T5) report their intent through it, and T6's applier reads the
+     * effective theme from it. Held on the instance alongside the store.
+     */
+    lateinit var themeController: ThemeController
+        private set
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // FLAG_SECURE in code (docs/PRIVACY.md §3): no recents preview, no screenshots.
@@ -25,6 +48,15 @@ class MainActivity : Activity() {
             WindowManager.LayoutParams.FLAG_SECURE,
             WindowManager.LayoutParams.FLAG_SECURE,
         )
+        // The real store over this app's preferences; the settings screen and
+        // theme applier (T6) read the persisted manual theme / auto-sync toggle.
+        themeStore = ThemeStore(
+            SharedPreferencesThemeKeyValueStore(
+                getSharedPreferences("txxt_theme", MODE_PRIVATE)
+            )
+        )
+        // The controller carries the manual-wins precedence over that store.
+        themeController = ThemeController(themeStore)
         startActivity(
             Intent(this, ThreadActivity::class.java)
                 .putExtra("extra_conversation_id", 1L)

@@ -74,6 +74,18 @@
             </intent-filter>
         </receiver>
 
+        <!-- Theme auto-sync (T5). Exported so the xx-launcher (a separate app)
+             can send its theme-change broadcast; the receiver routes the carried
+             preset name through the manual-wins precedence rule and T6's applier
+             re-applies the theme. Local only — no INTERNET permission. -->
+        <receiver
+            android:name=".theme.ThemeSyncReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="xx.launcher.THEME_CHANGED" />
+            </intent-filter>
+        </receiver>
+
     </application>
 
 </manifest>
