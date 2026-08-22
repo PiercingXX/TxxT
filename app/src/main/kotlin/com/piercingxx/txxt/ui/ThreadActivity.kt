@@ -11,6 +11,10 @@ import androidx.recyclerview.widget.RecyclerView
 import com.piercingxx.txxt.R
 import com.piercingxx.txxt.data.TxxTDatabase
 import com.piercingxx.txxt.service.SendPipeline
+import com.piercingxx.txxt.theme.SharedPreferencesThemeKeyValueStore
+import com.piercingxx.txxt.theme.ThemeApplier
+import com.piercingxx.txxt.theme.ThemeController
+import com.piercingxx.txxt.theme.ThemeStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
@@ -41,6 +45,22 @@ class ThreadActivity : Activity() {
 
     private val database: TxxTDatabase by lazy { TxxTDatabase.build(this) }
 
+    /**
+     * The theme controller over the same `txxt_theme` SharedPreferences the
+     * launcher (MainActivity) wires, so this screen reads the same persisted
+     * manual theme / auto-sync toggle. T6's applier reads [ThemeController.effectiveTheme]
+     * from it and paints the thread screen's chrome.
+     */
+    private val themeController: ThemeController by lazy {
+        ThemeController(
+            ThemeStore(
+                SharedPreferencesThemeKeyValueStore(
+                    getSharedPreferences("txxt_theme", MODE_PRIVATE)
+                )
+            )
+        )
+    }
+
     private val scope: CoroutineScope = MainScope()
 
     private var conversationId: Long = 0L
@@ -67,6 +87,39 @@ class ThreadActivity : Activity() {
 
         sendButton.setOnClickListener { sendComposed() }
         observeMessages()
+
+        // T6 wire-in: the running thread screen reaches the theme applier, which
+        // reads the effective theme from the controller and paints this screen's
+        // chrome from the chosen tokens. Without this call the applier is dead
+        // code and a theme change never reaches the UI.
+        applyTheme()
+    }
+
+    /**
+     * Paints this screen's chrome from the current effective theme (T6). Builds
+     * a [ThemeApplier] over [themeController] whose seam applies the derived
+     * tokens to the thread screen's views: the ground, the compose bar, the
+     * compose input's text/hint/field, and the send button's text/tint.
+     */
+    private fun applyTheme() {
+        val root = findViewById<android.view.View>(R.id.thread_root)
+        val composeBar = findViewById<android.view.View>(R.id.compose_bar)
+        ThemeApplier(themeController) { tokens ->
+            val bg = tokens.background.toInt()
+            val surface = tokens.surface.toInt()
+            val text = tokens.text.toInt()
+            val muted = tokens.muted.toInt()
+            val accent = tokens.accent.toInt()
+            val accentOn = tokens.accentOn.toInt()
+
+            root.setBackgroundColor(bg)
+            composeBar.setBackgroundColor(surface)
+            composeInput.setTextColor(text)
+            composeInput.setHintTextColor(muted)
+            composeInput.setBackgroundColor(surface)
+            sendButton.setTextColor(accentOn)
+            sendButton.backgroundTintList = android.content.res.ColorStateList.valueOf(accent)
+        }.apply()
     }
 
     /** Loads this conversation's messages from Room and submits them to the adapter. */

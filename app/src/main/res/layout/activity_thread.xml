@@ -10,6 +10,7 @@
   voice messages are never sent or received).
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/thread_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
