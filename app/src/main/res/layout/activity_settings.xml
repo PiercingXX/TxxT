@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  TxxT settings screen (WS12 T5).
+
+  Exposes the persisted SettingsStore: lock-screen privacy, the global
+  notification posture, the theme auto-sync toggle, the theme preset, and the
+  font mode. Views + viewBinding (docs/DESIGN.md §Stack). The actual rendering
+  of the seven presets and the theme auto-sync receiver are WS14's scope —
+  this screen persists the selections through SharedPreferences
+  (docs/PRIVACY.md §7); whether the preset visibly re-themes on-device is WS14's
+  on-device check.
+
+  AMOLED-black chrome consistent with activity_thread.xml (no chat bubbles,
+  no network — docs/PRIVACY.md §2).
+-->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Settings"
+            android:textColor="#FFFFFF"
+            android:textSize="22sp"
+            android:fontFamily="monospace"
+            android:paddingBottom="12dp" />
+
+        <!-- Lock-screen privacy: sender-only / content / nothing. -->
+        <TextView
+            android:id="@+id/lock_screen_privacy_label"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Lock-screen privacy"
+            android:textColor="#E6FFFFFF"
+            android:textSize="14sp"
+            android:fontFamily="monospace" />
+
+        <Spinner
+            android:id="@+id/lock_screen_privacy_spinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Global notification posture: silent / vibrate / sound. -->
+        <TextView
+            android:id="@+id/notification_posture_label"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Notification posture"
+            android:textColor="#E6FFFFFF"
+            android:textSize="14sp"
+            android:fontFamily="monospace" />
+
+        <Spinner
+            android:id="@+id/notification_posture_spinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Theme auto-sync with the xx-launcher. -->
+        <Switch
+            android:id="@+id/auto_sync_theme_switch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Auto-sync theme with launcher"
+            android:textColor="#E6FFFFFF"
+            android:fontFamily="monospace"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Theme preset (rendering is WS14's scope). -->
+        <TextView
+            android:id="@+id/theme_preset_label"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Theme preset"
+            android:textColor="#E6FFFFFF"
+            android:textSize="14sp"
+            android:fontFamily="monospace" />
+
+        <Spinner
+            android:id="@+id/theme_preset_spinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Font mode: Space Mono / JetBrains Mono. -->
+        <TextView
+            android:id="@+id/font_mode_label"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Font"
+            android:textColor="#E6FFFFFF"
+            android:textSize="14sp"
+            android:fontFamily="monospace" />
+
+        <Spinner
+            android:id="@+id/font_mode_spinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Backup / restore (WS12 T4). -->
+        <Button
+            android:id="@+id/backup_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Backup settings"
+            android:textColor="#000000"
+            android:backgroundTint="#FFFFFF"
+            android:layout_marginBottom="8dp" />
+
+        <Button
+            android:id="@+id/restore_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Restore settings"
+            android:textColor="#000000"
+            android:backgroundTint="#FFFFFF"
+            android:layout_marginBottom="8dp" />
+
+        <!-- Blocking management and starred contacts (WS12 T3). -->
+        <Button
+            android:id="@+id/blocking_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Blocking &amp; starred contacts"
+            android:textColor="#000000"
+            android:backgroundTint="#FFFFFF"
+            android:layout_marginBottom="8dp" />
+
+    </LinearLayout>
+
+</ScrollView>

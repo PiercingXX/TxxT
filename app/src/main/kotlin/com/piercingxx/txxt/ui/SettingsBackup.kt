@@ -39,6 +39,15 @@ object SettingsBackup {
     /** Backup settings-map key for [SettingsStore.fontMode]. */
     const val KEY_FONT_MODE = "fontMode"
 
+    /** All backup settings-map keys, in [SettingsStore] constructor order. */
+    val KEY_NAMES: List<String> = listOf(
+        KEY_LOCK_SCREEN_PRIVACY,
+        KEY_NOTIFICATION_POSTURE,
+        KEY_AUTO_SYNC_THEME,
+        KEY_THEME_PRESET,
+        KEY_FONT_MODE,
+    )
+
     /**
      * Renders [store] into the backup's settings map, one string entry per
      * field. Feed the result into [com.piercingxx.txxt.core.BackupData.settings]
