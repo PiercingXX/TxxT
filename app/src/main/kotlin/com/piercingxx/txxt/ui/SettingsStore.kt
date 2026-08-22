@@ -43,7 +43,8 @@ enum class NotificationPosture {
  * Pure Kotlin with zero `android.*` imports so the model is JVM-testable
  * without a device, mirroring [ThreadMessagePresenter]. Holds the settings the
  * screen exposes and persists: lock-screen privacy, the global notification
- * posture, and the theme auto-sync toggle.
+ * posture, the theme auto-sync toggle, the chosen theme preset, and the font
+ * mode.
  *
  * Defaults follow PRIVACY.md: lock-screen privacy defaults to sender-only
  * (§3), and theme auto-sync is on — TxxT's background theme follows the
@@ -55,6 +56,8 @@ data class SettingsStore(
     val lockScreenPrivacy: LockScreenPrivacy = LockScreenPrivacy.SENDER_ONLY,
     val notificationPosture: NotificationPosture = NotificationPosture.SOUND,
     val autoSyncTheme: Boolean = true,
+    val themePreset: ThemePreset = ThemePreset.defaults(),
+    val fontMode: FontMode = FontMode.defaults(),
 ) {
     companion object {
         /** The factory defaults for a fresh install. */

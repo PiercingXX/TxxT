@@ -28,15 +28,27 @@ class SettingsStoreTest {
     }
 
     @Test
+    fun `defaults use the AMOLED Night preset and Space Mono font`() {
+        // DESIGN.md:27 AMOLED black is the brand default; DESIGN.md:29 Space
+        // Mono is the lead chrome font. WS12 T2 exposes and persists both.
+        assertEquals(ThemePreset.AMOLED_NIGHT, SettingsStore.defaults().themePreset)
+        assertEquals(FontMode.SPACE_MONO, SettingsStore.defaults().fontMode)
+    }
+
+    @Test
     fun `store holds the chosen settings`() {
         val store = SettingsStore(
             lockScreenPrivacy = LockScreenPrivacy.CONTENT,
             notificationPosture = NotificationPosture.SILENT,
             autoSyncTheme = false,
+            themePreset = ThemePreset.BURGUNDY,
+            fontMode = FontMode.JETBRAINS_MONO,
         )
         assertEquals(LockScreenPrivacy.CONTENT, store.lockScreenPrivacy)
         assertEquals(NotificationPosture.SILENT, store.notificationPosture)
         assertFalse(store.autoSyncTheme)
+        assertEquals(ThemePreset.BURGUNDY, store.themePreset)
+        assertEquals(FontMode.JETBRAINS_MONO, store.fontMode)
     }
 
     @Test
@@ -48,7 +60,18 @@ class SettingsStoreTest {
             lockScreenPrivacy = LockScreenPrivacy.NOTHING,
             notificationPosture = NotificationPosture.VIBRATE,
             autoSyncTheme = false,
+            themePreset = ThemePreset.PAPER,
+            fontMode = FontMode.JETBRAINS_MONO,
         )
-        assertEquals(store, SettingsStore(store.lockScreenPrivacy, store.notificationPosture, store.autoSyncTheme))
+        assertEquals(
+            store,
+            SettingsStore(
+                store.lockScreenPrivacy,
+                store.notificationPosture,
+                store.autoSyncTheme,
+                store.themePreset,
+                store.fontMode,
+            ),
+        )
     }
 }
