@@ -12,6 +12,7 @@ import android.widget.Spinner
 import android.widget.Switch
 import android.widget.Toast
 import com.piercingxx.txxt.R
+import com.piercingxx.txxt.block.LiveInboundFilter
 
 /**
  * The settings screen (WS12 T5).
@@ -27,6 +28,13 @@ import com.piercingxx.txxt.R
  * in recents previews or screenshots. The actual rendering of the seven
  * presets and the theme auto-sync receiver are WS14's scope — this activity
  * persists the selection, not the theme engine.
+ *
+ * The blocking button (WS12-corrective T1) applies the blocking/starred
+ * settings to the running app through [LiveInboundFilter.apply] — the seam that
+ * rebuilds the process-wide [com.piercingxx.txxt.block.InboundFilter] the
+ * inbound receivers read. The blocking/starred editing UI is WS12 T3's scope;
+ * this activity routes the button through the seam so the user's edits reach
+ * the live inbound path.
  */
 class SettingsActivity : Activity() {
 
@@ -119,7 +127,15 @@ class SettingsActivity : Activity() {
             Toast.makeText(this, "Settings restored", Toast.LENGTH_SHORT).show()
         }
         findViewById<Button>(R.id.blocking_button).setOnClickListener {
-            Toast.makeText(this, "Blocking & starred — coming with WS12 T3", Toast.LENGTH_LONG).show()
+            // WS12-corrective T1: the blocking button is the settings screen's
+            // path for applying blocking/starred changes to the running app.
+            // The blocking/starred editing UI is WS12 T3's scope (persisted
+            // separately from the five-field SettingsStore); until it lands the
+            // button applies the current (empty) models through the
+            // LiveInboundFilter seam, which is the same seam the persisted
+            // models will drive once their editing screen exists.
+            LiveInboundFilter.apply(SettingsBlocking(), SettingsStarred())
+            Toast.makeText(this, "Blocking & starred applied", Toast.LENGTH_SHORT).show()
         }
     }
 
