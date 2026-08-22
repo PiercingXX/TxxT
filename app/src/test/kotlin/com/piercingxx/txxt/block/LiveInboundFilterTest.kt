@@ -81,11 +81,11 @@ class LiveInboundFilterTest {
         ).first { it.exists() }.readText()
 
     @Test
-    fun `SettingsActivity blocking button routes through LiveInboundFilter apply`() {
+    fun `SettingsActivity blocking button routes through the load-and-apply seam`() {
         val settingsActivity = sourceText("ui/SettingsActivity.kt")
         assertTrue(
-            "SettingsActivity must call LiveInboundFilter.apply from the blocking button",
-            settingsActivity.contains("LiveInboundFilter.apply"),
+            "SettingsActivity must load-and-apply the persisted store from the blocking button",
+            settingsActivity.contains("loadBlockingStore().loadAndApply()"),
         )
         assertTrue(
             "SettingsActivity must no longer show the placeholder blocking Toast",

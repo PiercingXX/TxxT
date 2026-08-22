@@ -12,7 +12,6 @@ import android.widget.Spinner
 import android.widget.Switch
 import android.widget.Toast
 import com.piercingxx.txxt.R
-import com.piercingxx.txxt.block.LiveInboundFilter
 
 /**
  * The settings screen (WS12 T5).
@@ -29,12 +28,13 @@ import com.piercingxx.txxt.block.LiveInboundFilter
  * presets and the theme auto-sync receiver are WS14's scope — this activity
  * persists the selection, not the theme engine.
  *
- * The blocking button (WS12-corrective T1) applies the blocking/starred
- * settings to the running app through [LiveInboundFilter.apply] — the seam that
- * rebuilds the process-wide [com.piercingxx.txxt.block.InboundFilter] the
- * inbound receivers read. The blocking/starred editing UI is WS12 T3's scope;
- * this activity routes the button through the seam so the user's edits reach
- * the live inbound path.
+ * The blocking button (WS12-corrective T2) load-and-applies the *persisted*
+ * blocking/starred settings to the running app through the
+ * [SettingsBlockingStore] seam — [SettingsBlockingStore.loadAndApply] rebuilds
+ * the process-wide [com.piercingxx.txxt.block.InboundFilter] the inbound
+ * receivers read. The blocking/starred editing UI is WS12 T3's scope; this
+ * activity routes the button through the seam so the user's edits reach the
+ * live inbound path.
  */
 class SettingsActivity : Activity() {
 
@@ -127,14 +127,17 @@ class SettingsActivity : Activity() {
             Toast.makeText(this, "Settings restored", Toast.LENGTH_SHORT).show()
         }
         findViewById<Button>(R.id.blocking_button).setOnClickListener {
-            // WS12-corrective T1: the blocking button is the settings screen's
-            // path for applying blocking/starred changes to the running app.
-            // The blocking/starred editing UI is WS12 T3's scope (persisted
-            // separately from the five-field SettingsStore); until it lands the
-            // button applies the current (empty) models through the
-            // LiveInboundFilter seam, which is the same seam the persisted
+            // WS12-corrective T2: the blocking button load-and-applies the
+            // *persisted* blocking/starred settings through the
+            // SettingsBlockingStore seam. The store is rebuilt from
+            // SharedPreferences (the same backup string-map shape SettingsBackup
+            // uses) and loadAndApply() drives the LiveInboundFilter seam that
+            // rebuilds the process-wide InboundFilter the inbound receivers read.
+            // The blocking/starred editing UI is WS12 T3's scope; until it lands
+            // the button applies whatever blocking/starred settings are persisted
+            // (defaults on a fresh install), which is the same seam the persisted
             // models will drive once their editing screen exists.
-            LiveInboundFilter.apply(SettingsBlocking(), SettingsStarred())
+            loadBlockingStore().loadAndApply()
             Toast.makeText(this, "Blocking & starred applied", Toast.LENGTH_SHORT).show()
         }
     }
@@ -171,5 +174,19 @@ class SettingsActivity : Activity() {
             .mapNotNull { key -> prefs.getString(key, null)?.let { key to it } }
             .toMap()
         return SettingsBackup.fromSettingsMap(map)
+    }
+
+    /**
+     * Reads the persisted [SettingsBlockingStore] back from [SharedPreferences],
+     * defaulting to empty sets on a fresh install. The blocking/starred sets are
+     * persisted under the same backup string-map keys [SettingsBlockingStore]
+     * round-trips through, so the button's load-and-apply path rebuilds the live
+     * filter from exactly what was persisted.
+     */
+    private fun loadBlockingStore(): SettingsBlockingStore {
+        val map = SettingsBlockingStore.KEY_NAMES
+            .mapNotNull { key -> prefs.getString(key, null)?.let { key to it } }
+            .toMap()
+        return SettingsBlockingStore.fromMap(map)
     }
 }
