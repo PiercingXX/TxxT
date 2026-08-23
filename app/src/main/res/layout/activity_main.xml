@@ -15,6 +15,14 @@
     android:orientation="vertical"
     android:background="#000000">
 
+    <!-- Conversation search (T3). The SearchView widget whose query listener
+         MainActivity wires into applySearchQuery → filterConversations. -->
+    <androidx.appcompat.widget.SearchView
+        android:id="@+id/searchView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:queryHint="Search conversations" />
+
     <!-- Conversation list. The runtime view ID MainActivity resolves and the
          swipe helper (T1) attaches to. -->
     <androidx.recyclerview.widget.RecyclerView
