@@ -26,6 +26,12 @@
          booting. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!-- Mic permission (WS13 dictation). Required by SpeechRecognizer so the
+         compose bar's mic affordance can run on-device speech-to-text. Dictation
+         writes recognized text into the compose field only — no audio is ever
+         sent or received (docs/PRIVACY.md §5). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
     <!-- Deliberately NO INTERNET permission. TxxT never talks to a network;
          keeping this absent makes that claim verifiable. -->
 

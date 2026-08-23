@@ -3,6 +3,9 @@ package com.piercingxx.txxt.ui
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
@@ -43,6 +46,7 @@ class ThreadActivity : Activity() {
     private lateinit var composeInput: EditText
     private lateinit var sendButton: Button
     private lateinit var settingsButton: Button
+    private lateinit var dictationButton: Button
 
     private val database: TxxTDatabase by lazy { TxxTDatabase.build(this) }
 
@@ -82,6 +86,7 @@ class ThreadActivity : Activity() {
         composeInput = findViewById(R.id.compose_input)
         sendButton = findViewById(R.id.send_button)
         settingsButton = findViewById(R.id.settings_button)
+        dictationButton = findViewById(R.id.dictation_button)
 
         adapter = ThreadAdapter()
         messageList.layoutManager = LinearLayoutManager(this)
@@ -89,6 +94,7 @@ class ThreadActivity : Activity() {
 
         sendButton.setOnClickListener { sendComposed() }
         settingsButton.setOnClickListener { openSettings() }
+        dictationButton.setOnClickListener { startDictation() }
         observeMessages()
 
         // T6 wire-in: the running thread screen reaches the theme applier, which
@@ -128,6 +134,54 @@ class ThreadActivity : Activity() {
     /** Opens the settings screen (WS12 T5) from the thread's settings affordance. */
     private fun openSettings() {
         startActivity(Intent(this, SettingsActivity::class.java))
+    }
+
+    /**
+     * Starts on-device speech recognition (dictation, WS13).
+     *
+     * The last hop — `SpeechRecognizer` capturing audio and returning recognized
+     * text — needs a mic and cannot run on the box; what this does is route the
+     * recognition result through [DictationInsert.insert] into the compose
+     * field. No audio is ever sent or received — dictation only writes text into
+     * the local compose field (docs/PRIVACY.md §5).
+     */
+    private fun startDictation() {
+        val recognizer = SpeechRecognizer.createSpeechRecognizer(this)
+        recognizer.setRecognitionListener(object : RecognitionListener {
+            override fun onResults(results: android.os.Bundle) {
+                val recognized = results
+                    .getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    ?.firstOrNull()
+                    ?: return
+                applyDictation(recognized)
+            }
+
+            override fun onBeginningOfSpeech() {}
+            override fun onBufferReceived(buffer: ByteArray?) {}
+            override fun onEndOfSpeech() {}
+            override fun onError(error: Int) {}
+            override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
+            override fun onPartialResults(partialResults: android.os.Bundle?) {}
+            override fun onReadyForSpeech(params: android.os.Bundle?) {}
+            override fun onRmsChanged(rmsdB: Float) {}
+        })
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+        }
+        recognizer.startListening(intent)
+    }
+
+    /**
+     * Applies recognized speech text to the compose field via [DictationInsert].
+     *
+     * This is the deterministic dictation step the box can verify: the field's
+     * current text plus the recognized text become the field's new text through
+     * [DictationInsert.insert]. The on-device recognition hop is upstream.
+     */
+    private fun applyDictation(recognized: String) {
+        val current = composeInput.text?.toString().orEmpty()
+        composeInput.setText(DictationInsert.insert(current, recognized))
     }
 
     /** Loads this conversation's messages from Room and submits them to the adapter. */

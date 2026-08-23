@@ -25,8 +25,12 @@
         android:padding="12dp"
         android:clipToPadding="false" />
 
-    <!-- Compose bar: a plain text field plus a minimal send affordance.
-         Deliberately NO voice/record/mic element — voice is never sent. -->
+    <!-- Compose bar: a dictation (mic) affordance, the text field, and minimal
+         send/settings affordances. The mic is dictation only — it runs
+         SpeechRecognizer and inserts recognized text into the compose field via
+         DictationInsert; no audio is ever sent or received (docs/PRIVACY.md §5 —
+         voice messages are never sent or received, and dictation does not send
+         anything). -->
     <LinearLayout
         android:id="@+id/compose_bar"
         android:layout_width="match_parent"
@@ -37,6 +41,15 @@
         android:paddingEnd="12dp"
         android:paddingTop="8dp"
         android:paddingBottom="8dp">
+
+        <Button
+            android:id="@+id/dictation_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:text="Mic"
+            android:textColor="#000000"
+            android:backgroundTint="#FFFFFF" />
 
         <EditText
             android:id="@+id/compose_input"
