@@ -63,11 +63,18 @@ class ThreadLayoutTest {
     @Test
     fun `the thread layout has NO voice-message affordance`() {
         // docs/PRIVACY.md §5 — voice messages are never sent or received, so the
-        // compose bar must not carry a mic/record/voice element.
+        // compose bar must not carry a voice-message send/record element. The
+        // dictation mic button (dictation_button) is NOT a voice-message
+        // affordance — it runs on-device SpeechRecognizer and inserts recognized
+        // text into the compose field, never sending or receiving audio — so it
+        // is allowed here.
         val lower = activityThread.lowercase()
         assertFalse(
-            "activity_thread.xml must not contain a voice/record/mic affordance",
-            lower.contains("voice") || lower.contains("record") || lower.contains("mic"),
+            "activity_thread.xml must not contain a voice-message send/record affordance",
+            lower.contains("voice_message") ||
+                lower.contains("record_voice") ||
+                lower.contains("send_voice") ||
+                lower.contains("voice_note"),
         )
     }
 

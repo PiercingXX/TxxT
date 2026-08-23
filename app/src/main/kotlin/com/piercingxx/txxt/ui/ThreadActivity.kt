@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.speech.tts.TextToSpeech
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
@@ -48,6 +49,14 @@ class ThreadActivity : Activity() {
     private lateinit var settingsButton: Button
     private lateinit var dictationButton: Button
 
+    /**
+     * The on-device text-to-speech engine (WS13 read-aloud). Created in
+     * [onCreate] and shut down in [onDestroy]. The spoken text always comes
+     * from [MessageReadAloud.speakable] — the seam is the only source of what
+     * is read aloud (docs/FEATURES.md §Accessibility).
+     */
+    private var tts: TextToSpeech? = null
+
     private val database: TxxTDatabase by lazy { TxxTDatabase.build(this) }
 
     /**
@@ -88,9 +97,13 @@ class ThreadActivity : Activity() {
         settingsButton = findViewById(R.id.settings_button)
         dictationButton = findViewById(R.id.dictation_button)
 
-        adapter = ThreadAdapter()
+        adapter = ThreadAdapter(onMessageTap = ::readMessageAloud)
         messageList.layoutManager = LinearLayoutManager(this)
         messageList.adapter = adapter
+
+        // WS13 read-aloud: the on-device TTS engine whose spoken text always
+        // comes from MessageReadAloud.speakable (see readMessageAloud).
+        tts = TextToSpeech(this) { _ -> }
 
         sendButton.setOnClickListener { sendComposed() }
         settingsButton.setOnClickListener { openSettings() }
@@ -182,6 +195,27 @@ class ThreadActivity : Activity() {
     private fun applyDictation(recognized: String) {
         val current = composeInput.text?.toString().orEmpty()
         composeInput.setText(DictationInsert.insert(current, recognized))
+    }
+
+    /**
+     * Reads a message aloud via the on-device [TextToSpeech] engine (WS13).
+     *
+     * The spoken text comes exclusively from [MessageReadAloud.speakable] — the
+     * seam is the only source of what is read, and when it returns an empty
+     * string (a blank body) the `speak` call is skipped so nothing is read
+     * aloud. This is read-only TTS of existing text: no voice is ever sent or
+     * received (docs/PRIVACY.md §5).
+     */
+    private fun readMessageAloud(message: com.piercingxx.txxt.core.Message) {
+        val text = MessageReadAloud.speakable(message)
+        if (text.isEmpty()) return
+        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "tts-message-${message.id}")
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        tts?.shutdown()
+        tts = null
     }
 
     /** Loads this conversation's messages from Room and submits them to the adapter. */
