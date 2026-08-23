@@ -97,7 +97,11 @@ class ThreadWiringTest {
     fun `ThreadActivity drives the ThreadAdapter and routes sends through SendPipeline`() {
         assertTrue(
             "ThreadActivity must instantiate a ThreadAdapter",
-            threadActivity.contains("ThreadAdapter()"),
+            threadActivity.contains("ThreadAdapter("),
+        )
+        assertTrue(
+            "ThreadActivity must wire the adapter's message tap to read-aloud",
+            threadActivity.contains("onMessageTap"),
         )
         assertTrue(
             "ThreadActivity must submit loaded messages to the adapter",

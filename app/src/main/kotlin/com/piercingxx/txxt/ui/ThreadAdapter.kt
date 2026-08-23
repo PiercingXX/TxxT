@@ -27,6 +27,8 @@ import com.piercingxx.txxt.core.Message
  */
 class ThreadAdapter(
     private val bindRow: (View, ThreadRow) -> Unit = ::defaultBindRow,
+    /** Invoked when a message row is tapped, so the activity can read it aloud. */
+    private val onMessageTap: (Message) -> Unit = {},
 ) : RecyclerView.Adapter<ThreadAdapter.RowHolder>() {
 
     private val messages = mutableListOf<Message>()
@@ -65,6 +67,7 @@ class ThreadAdapter(
         // The wire-in: every rendered row goes through the presenter, so the
         // direction → alignment/emphasis mapping is the single source of truth.
         val row = ThreadMessagePresenter.present(message)
+        holder.itemView.setOnClickListener { onMessageTap(message) }
         bindRow(holder.itemView, row)
     }
 
