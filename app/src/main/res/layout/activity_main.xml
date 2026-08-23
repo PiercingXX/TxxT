@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  TxxT launcher conversation list (WS10 corrective-corrective T2).
+
+  The launcher's conversation-list host. The list is a RecyclerView identified
+  as recyclerView — the runtime ID MainActivity resolves via
+  findViewById<RecyclerView>(R.id.recyclerView) and drives the swipe helper
+  (T1) once the WS10 conversation list lands. Text-first on AMOLED black
+  (docs/DESIGN.md §"Conversation thread").
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/main_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#000000">
+
+    <!-- Conversation list. The runtime view ID MainActivity resolves and the
+         swipe helper (T1) attaches to. -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recyclerView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:padding="12dp"
+        android:clipToPadding="false" />
+
+</LinearLayout>

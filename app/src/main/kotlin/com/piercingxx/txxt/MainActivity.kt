@@ -60,6 +60,11 @@ class MainActivity : Activity(), SwipeActionCallback {
         )
         // The controller carries the manual-wins precedence over that store.
         themeController = ThemeController(themeStore)
+        // The launcher's conversation-list host (activity_main.xml). The
+        // RecyclerView is resolved by its runtime ID and hosts the swipe helper
+        // (T1) — the wiring the WS10 conversation list drives when it lands.
+        setContentView(R.layout.activity_main)
+        attachSwipeHelper(findViewById<RecyclerView>(R.id.recyclerView))
         startActivity(
             Intent(this, ThreadActivity::class.java)
                 .putExtra("extra_conversation_id", 1L)
