@@ -4,9 +4,15 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.view.WindowManager
+import android.widget.SearchView
+import androidx.recyclerview.widget.RecyclerView
+import com.piercingxx.txxt.core.Conversation
 import com.piercingxx.txxt.theme.SharedPreferencesThemeKeyValueStore
 import com.piercingxx.txxt.theme.ThemeController
 import com.piercingxx.txxt.theme.ThemeStore
+import com.piercingxx.txxt.ui.ConversationSearchFilter
+import com.piercingxx.txxt.ui.ConversationSwipeHelper
+import com.piercingxx.txxt.ui.SwipeActionCallback
 import com.piercingxx.txxt.ui.ThreadActivity
 
 /**
@@ -19,7 +25,7 @@ import com.piercingxx.txxt.ui.ThreadActivity
  * opens the thread screen directly — the conversation list will pass the real
  * conversation id when it arrives.
  */
-class MainActivity : Activity() {
+class MainActivity : Activity(), SwipeActionCallback {
 
     /**
      * The app's theme store, backed by this activity's SharedPreferences. Wired
@@ -41,6 +47,16 @@ class MainActivity : Activity() {
     lateinit var themeController: ThemeController
         private set
 
+    /**
+     * The conversation-search filter (T3). Filters the conversation list by query
+     * and submits the filtered list to the conversation-list adapter. Held on the
+     * instance so the SearchView listener reaches the same filter on every query.
+     */
+    private val searchFilter = ConversationSearchFilter()
+
+    /** The conversation list the launcher filters and displays. */
+    private var conversations: List<Conversation> = emptyList()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // FLAG_SECURE in code (docs/PRIVACY.md §3): no recents preview, no screenshots.
@@ -57,9 +73,80 @@ class MainActivity : Activity() {
         )
         // The controller carries the manual-wins precedence over that store.
         themeController = ThemeController(themeStore)
+        // The launcher's conversation-list host (activity_main.xml). The
+        // RecyclerView is resolved by its runtime ID and hosts the swipe helper
+        // (T1) — the wiring the WS10 conversation list drives when it lands.
+        setContentView(R.layout.activity_main)
+        attachSwipeHelper(findViewById<RecyclerView>(R.id.recyclerView))
+        // Search wiring (T3): the SearchView widget's query listener routes every
+        // keystroke and submit through applySearchQuery, which filters the
+        // conversation list and submits the result to the adapter.
+        val searchView = findViewById<SearchView>(R.id.searchView)
+        searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
+            override fun onQueryTextSubmit(query: String?): Boolean {
+                applySearchQuery(query ?: "")
+                return true
+            }
+
+            override fun onQueryTextChange(newText: String?): Boolean {
+                applySearchQuery(newText ?: "")
+                return true
+            }
+        })
         startActivity(
             Intent(this, ThreadActivity::class.java)
                 .putExtra("extra_conversation_id", 1L)
         )
+    }
+
+    /**
+     * The conversation-list swipe seam (WS10 corrective-corrective T1). The
+     * launcher is the reachable call site for the swipe helper: it constructs a
+     * [ConversationSwipeHelper] over this activity (the [SwipeActionCallback])
+     * and attaches it to the conversation-list RecyclerView. With the WS10 list
+     * not yet landed the launcher opens the thread screen directly; this seam is
+     * the wiring the conversation list will drive when it arrives, and it is what
+     * `MainActivityWiringTest` verifies reaches the helper.
+     */
+    fun attachSwipeHelper(recyclerView: RecyclerView) {
+        ConversationSwipeHelper(this).attachTo(recyclerView)
+    }
+
+    /**
+     * The conversation-search seam (T3). Filters the conversation list by [query]
+     * through [ConversationSearchFilter] and submits the filtered list to the
+     * conversation-list adapter. The SearchView listener calls this on every query
+     * change and submit — the reachable path the running app drives when the user
+     * types in the launcher's search box.
+     */
+    fun applySearchQuery(query: String) {
+        val filtered = searchFilter.filterConversations(conversations, query)
+        // Submit the filtered list to the conversation-list adapter. The adapter
+        // is the WS10 conversation-list surface; the seam is what the box verifies.
+        adapter.submit(filtered)
+    }
+
+    // The four swipe actions are deferred (DAO/intent operations are out of
+    // scope for this corrective) — implemented as no-ops so the wiring seam is
+    // what the box verifies, not the deferred operations.
+    override fun onArchive(conversationId: Long) {}
+    override fun onDelete(conversationId: Long) {}
+    override fun onCall(conversationId: Long) {}
+    override fun onSchedule(conversationId: Long) {}
+
+    /**
+     * The conversation-list adapter. The WS10 conversation-list adapter is out of
+     * scope for this corrective; the submit seam is what T3's box verifies.
+     */
+    private val adapter = ConversationListAdapter()
+}
+
+/**
+ * Placeholder conversation-list adapter (WS10). The real adapter is out of scope
+ * for this corrective; [submit] is the seam `MainActivity.applySearchQuery` drives.
+ */
+private class ConversationListAdapter {
+    fun submit(conversations: List<Conversation>) {
+        // No-op until the WS10 conversation-list adapter lands.
     }
 }
