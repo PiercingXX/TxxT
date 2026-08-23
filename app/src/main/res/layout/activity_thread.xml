@@ -60,6 +60,16 @@
             android:text="Send"
             android:textColor="#000000"
             android:backgroundTint="#FFFFFF" />
+
+        <!-- Settings affordance: opens the settings screen (WS12 T5). -->
+        <Button
+            android:id="@+id/settings_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="⚙"
+            android:textColor="#000000"
+            android:backgroundTint="#FFFFFF" />
     </LinearLayout>
 
 </LinearLayout>

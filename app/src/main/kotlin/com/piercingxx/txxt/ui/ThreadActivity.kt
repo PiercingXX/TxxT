@@ -42,6 +42,7 @@ class ThreadActivity : Activity() {
     private lateinit var messageList: RecyclerView
     private lateinit var composeInput: EditText
     private lateinit var sendButton: Button
+    private lateinit var settingsButton: Button
 
     private val database: TxxTDatabase by lazy { TxxTDatabase.build(this) }
 
@@ -80,12 +81,14 @@ class ThreadActivity : Activity() {
         messageList = findViewById(R.id.message_list)
         composeInput = findViewById(R.id.compose_input)
         sendButton = findViewById(R.id.send_button)
+        settingsButton = findViewById(R.id.settings_button)
 
         adapter = ThreadAdapter()
         messageList.layoutManager = LinearLayoutManager(this)
         messageList.adapter = adapter
 
         sendButton.setOnClickListener { sendComposed() }
+        settingsButton.setOnClickListener { openSettings() }
         observeMessages()
 
         // T6 wire-in: the running thread screen reaches the theme applier, which
@@ -120,6 +123,11 @@ class ThreadActivity : Activity() {
             sendButton.setTextColor(accentOn)
             sendButton.backgroundTintList = android.content.res.ColorStateList.valueOf(accent)
         }.apply()
+    }
+
+    /** Opens the settings screen (WS12 T5) from the thread's settings affordance. */
+    private fun openSettings() {
+        startActivity(Intent(this, SettingsActivity::class.java))
     }
 
     /** Loads this conversation's messages from Room and submits them to the adapter. */
