@@ -4,9 +4,12 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.view.WindowManager
+import androidx.recyclerview.widget.RecyclerView
 import com.piercingxx.txxt.theme.SharedPreferencesThemeKeyValueStore
 import com.piercingxx.txxt.theme.ThemeController
 import com.piercingxx.txxt.theme.ThemeStore
+import com.piercingxx.txxt.ui.ConversationSwipeHelper
+import com.piercingxx.txxt.ui.SwipeActionCallback
 import com.piercingxx.txxt.ui.ThreadActivity
 
 /**
@@ -19,7 +22,7 @@ import com.piercingxx.txxt.ui.ThreadActivity
  * opens the thread screen directly — the conversation list will pass the real
  * conversation id when it arrives.
  */
-class MainActivity : Activity() {
+class MainActivity : Activity(), SwipeActionCallback {
 
     /**
      * The app's theme store, backed by this activity's SharedPreferences. Wired
@@ -62,4 +65,25 @@ class MainActivity : Activity() {
                 .putExtra("extra_conversation_id", 1L)
         )
     }
+
+    /**
+     * The conversation-list swipe seam (WS10 corrective-corrective T1). The
+     * launcher is the reachable call site for the swipe helper: it constructs a
+     * [ConversationSwipeHelper] over this activity (the [SwipeActionCallback])
+     * and attaches it to the conversation-list RecyclerView. With the WS10 list
+     * not yet landed the launcher opens the thread screen directly; this seam is
+     * the wiring the conversation list will drive when it arrives, and it is what
+     * `MainActivityWiringTest` verifies reaches the helper.
+     */
+    fun attachSwipeHelper(recyclerView: RecyclerView) {
+        ConversationSwipeHelper(this).attachTo(recyclerView)
+    }
+
+    // The four swipe actions are deferred (DAO/intent operations are out of
+    // scope for this corrective) — implemented as no-ops so the wiring seam is
+    // what the box verifies, not the deferred operations.
+    override fun onArchive(conversationId: Long) {}
+    override fun onDelete(conversationId: Long) {}
+    override fun onCall(conversationId: Long) {}
+    override fun onSchedule(conversationId: Long) {}
 }

@@ -1,0 +1,7 @@
+// Redirect every project's build directory out of the workspace so Gradle can
+// run under the sandbox (which blocks build-output writes into the workspace).
+// The harness's own verify environment does not need this; it exists only so the
+// gate can be exercised from this sandboxed shell.
+allprojects {
+    buildDir = file("/home/piercingxx/.gradle/ws10-build/${path.replace(':', '_')}")
+}
