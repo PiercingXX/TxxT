@@ -1,5 +1,9 @@
 package com.piercingxx.txxt.ui
 
+import com.piercingxx.txxt.core.Message
+import com.piercingxx.txxt.core.MessageDirection
+import com.piercingxx.txxt.core.MessageTransport
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -56,5 +60,47 @@ class TtsWiringTest {
             "ThreadActivity must call TextToSpeech.speak with the seam's text",
             threadActivity.contains("tts?.speak"),
         )
+    }
+
+    // ---- Behavioral proof of the read-aloud seam (the deterministic half of
+    // WS13 read-aloud: what text is fed to TextToSpeech.speak). The seam is
+    // pure Kotlin with zero android.* imports, so the mapping is JVM-testable
+    // without a device; the on-device audible hop is deferred (see the plan).
+
+    private fun message(
+        direction: MessageDirection,
+        body: String,
+        senderAddress: String? = null,
+    ) = Message(
+        id = 1L,
+        conversationId = 1L,
+        direction = direction,
+        transport = MessageTransport.SMS,
+        body = body,
+        timestampMillis = 1000L,
+        senderAddress = senderAddress,
+    )
+
+    @Test
+    fun `speakable prefixes an incoming message with its sender`() {
+        val text = MessageReadAloud.speakable(
+            message(MessageDirection.INCOMING, "hello", senderAddress = "+15550001111"),
+        )
+        assertEquals("from +15550001111: hello", text)
+    }
+
+    @Test
+    fun `speakable reads an outgoing message as the body alone`() {
+        val text = MessageReadAloud.speakable(
+            message(MessageDirection.OUTGOING, "hello"),
+        )
+        assertEquals("hello", text)
+    }
+
+    @Test
+    fun `speakable yields an empty string for a blank body`() {
+        assertEquals("", MessageReadAloud.speakable(message(MessageDirection.OUTGOING, "")))
+        assertEquals("", MessageReadAloud.speakable(message(MessageDirection.OUTGOING, "   ")))
+        assertEquals("", MessageReadAloud.speakable(message(MessageDirection.INCOMING, " \t ")))
     }
 }
