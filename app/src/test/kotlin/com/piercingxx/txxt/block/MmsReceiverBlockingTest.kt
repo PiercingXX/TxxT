@@ -29,7 +29,7 @@ class MmsReceiverBlockingTest {
             contentType
         }
         val rcv = MmsReceiver(
-            inboundFilter = inboundFilter,
+            inboundFilterProvider = { inboundFilter },
             extractSender = { sender },
             extractContentType = extractCt,
             mmsAction = "android.provider.Telephony.WAP_PUSH_RECEIVED",
@@ -73,7 +73,10 @@ class MmsReceiverBlockingTest {
 
     @Test
     fun `unknown sender is quarantined and does not reach attachment policy`() {
-        val filter = InboundFilter(knownContacts = setOf("+1 555 2000"))
+        val filter = InboundFilter(
+            knownContacts = setOf("+1 555 2000"),
+            quarantineUnknownSenders = true,
+        )
         val (rcv, contentTypesSeen) = receiver(
             inboundFilter = filter,
             sender = "+1 555 9999",

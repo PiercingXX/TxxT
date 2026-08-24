@@ -100,11 +100,19 @@ class ThreadAdapter(
         }
 
         /**
+         * Shared row timestamp formatter. Hoisted out of [defaultBindRow] so
+         * rows stop constructing a new SimpleDateFormat per bind. SimpleDateFormat
+         * is not thread-safe, but binding is confined to the main thread, so one
+         * shared instance is safe.
+         */
+        private val timestampFormat =
+            java.text.SimpleDateFormat("HH:mm", java.util.Locale.ROOT)
+
+        /**
          * Formats an epoch-millisecond timestamp for the row. Kept as a small
          * pure function so the row's display logic stays JVM-testable.
          */
         fun formatTimestamp(epochMillis: Long): String =
-            java.text.SimpleDateFormat("HH:mm", java.util.Locale.ROOT)
-                .format(java.util.Date(epochMillis))
+            timestampFormat.format(java.util.Date(epochMillis))
     }
 }

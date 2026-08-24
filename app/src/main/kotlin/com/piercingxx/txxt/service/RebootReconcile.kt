@@ -11,7 +11,13 @@ import com.piercingxx.txxt.data.MessageEntity
 import com.piercingxx.txxt.data.Mappers.toConversation
 import com.piercingxx.txxt.data.Mappers.toMessage
 import com.piercingxx.txxt.data.TxxTDatabase
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+
+/** Delimiter joining participant addresses in a [ConversationEntity] (see [Mappers]). */
+private const val ADDRESS_DELIMITER = "\u0001"
 
 /**
  * Reconciles app state across a device reboot (T2).
@@ -28,18 +34,31 @@ import kotlinx.coroutines.runBlocking
  *  2. **Pending sends survive** — any outgoing message persisted as not-yet-sent
  *     (`MessageEntity.sent == false`) is re-driven through the send pipeline so
  *     a message interrupted mid-send by the reboot is not silently dropped.
+ *     Its destination comes from its conversation's participant addresses (an
+ *     outgoing message carries no `senderAddress` by model contract), and once
+ *     it has been re-sent the row is marked sent ([markSent]) so the next boot
+ *     never re-drives an already-transmitted message.
  *
- * The component is pure over its three seams — [loadMessages], [loadConversations]
- * and [resendPending] — so the reconcile logic is JVM-testable without a device;
- * the running call site ([BootReceiver]) supplies the real DAOs and send pipeline.
+ * The component is pure over its four seams — [loadMessages], [loadConversations],
+ * [resendPending] and [markSent] — so the reconcile logic is JVM-testable without
+ * a device; the running call site ([BootReceiver]) supplies the real DAOs and
+ * send pipeline.
  */
 class RebootReconcile(
     /** Loads every persisted message. Defaults to the real Room message DAO. */
     private val loadMessages: suspend () -> List<MessageEntity>,
     /** Loads every persisted conversation. Defaults to the real Room conversation DAO. */
     private val loadConversations: suspend () -> List<ConversationEntity>,
-    /** Re-drives a pending outgoing message through the send pipeline. */
-    private val resendPending: suspend (Message) -> Unit,
+    /**
+     * Re-drives a pending outgoing [Message] through the send pipeline to the
+     * given recipient address (resolved from the conversation's participants).
+     */
+    private val resendPending: suspend (Message, String) -> Unit,
+    /**
+     * Marks a message (by id) as sent after [resendPending] returned without
+     * throwing, so the row is not re-driven on the next boot.
+     */
+    private val markSent: suspend (Long) -> Unit,
 ) {
 
     /** The outcome of a [reconcile] pass. */
@@ -48,6 +67,10 @@ class RebootReconcile(
         val unreadByConversation: Map<Long, Int>,
         /** Number of pending outgoing messages re-driven through the send pipeline. */
         val pendingResent: Int,
+        /** Pending outgoing messages skipped because their thread had no participant address. */
+        val pendingSkipped: Int = 0,
+        /** Pending outgoing messages whose resend threw; the rows stay pending for the next boot. */
+        val pendingFailed: Int = 0,
     )
 
     /**
@@ -56,11 +79,12 @@ class RebootReconcile(
      * Loads all messages and conversations, recomputes the per-conversation
      * unread counts from the persisted `isRead` flags (so they survive the
      * reboot), and re-drives every outgoing message that was persisted as
-     * not-yet-sent through [resendPending].
+     * not-yet-sent through [resendPending], marking each one sent afterwards.
      */
     suspend fun reconcile(): ReconcileResult {
+        val conversationEntities = loadConversations()
         val messages = loadMessages().map { it.toMessage() }
-        val conversations = loadConversations().map { it.toConversation() }
+        val conversations = conversationEntities.map { it.toConversation() }
 
         // 1. Unread counts survive: recompute per-conversation counts from the
         //    persisted isRead flags. Messages are grouped onto their conversation
@@ -73,15 +97,52 @@ class RebootReconcile(
 
         // 2. Pending sends survive: re-drive outgoing messages persisted as
         //    not-yet-sent. A send interrupted by the reboot is retried, never
-        //    silently dropped.
+        //    silently dropped. The destination cannot come from the message
+        //    itself (an outgoing message's senderAddress is null by contract);
+        //    it comes from the conversation's participant addresses.
+        val conversationById = conversationEntities.associateBy { it.id }
         val pending = messages.filter {
             it.direction == MessageDirection.OUTGOING && !it.isSent
         }
-        pending.forEach { resendPending(it) }
+        var pendingResent = 0
+        var pendingSkipped = 0
+        var pendingFailed = 0
+        pending.forEach { message ->
+            val recipient = conversationById[message.conversationId]
+                ?.participantAddresses
+                ?.split(ADDRESS_DELIMITER)
+                ?.firstOrNull { it.isNotBlank() }
+            if (recipient == null) {
+                // Nowhere to send: skip rather than drop the row or crash.
+                pendingSkipped += 1
+                return@forEach
+            }
+            // A single platform throw (malformed address, permission race, …)
+            // must not abort the whole pass: one bad row would otherwise crash
+            // every boot until app data is cleared. Contain the failure to the
+            // row — it stays pending (not marked sent) and the loop continues.
+            val attempted = try {
+                resendPending(message, recipient)
+                true
+            } catch (_: Exception) {
+                false
+            }
+            if (!attempted) {
+                pendingFailed += 1
+                return@forEach
+            }
+            // Mark sent only after a resend that completed without throwing, so
+            // a failed attempt stays pending for the next boot instead of being
+            // lost — and a successful one is never re-sent on every reboot.
+            markSent(message.id)
+            pendingResent += 1
+        }
 
         return ReconcileResult(
             unreadByConversation = unreadByConversation,
-            pendingResent = pending.size,
+            pendingResent = pendingResent,
+            pendingSkipped = pendingSkipped,
+            pendingFailed = pendingFailed,
         )
     }
 }
@@ -94,6 +155,11 @@ class RebootReconcile(
  * `android.intent.action.BOOT_COMPLETED` intent-filter and the
  * `RECEIVE_BOOT_COMPLETED` permission. On boot it builds the Room database and
  * runs the reconcile so unread counts and pending sends survive the reboot.
+ *
+ * The reconcile loads full tables and drives synchronous SMS sends, so running
+ * it inline on the main thread would blow the receiver's ~10 s ANR budget (H5):
+ * [goAsync] extends the receiver's lifetime past `onReceive` and the work runs
+ * on `Dispatchers.IO`, with `pendingResult.finish()` guaranteed afterwards.
  */
 class BootReceiver : BroadcastReceiver() {
 
@@ -102,17 +168,32 @@ class BootReceiver : BroadcastReceiver() {
 
         // T6: warn loudly if the default-SMS-handler role was revoked — if the
         // app is no longer the default SMS app, the receivers won't see inbound
-        // messages, so the revocation must not be silent.
+        // messages, so the revocation must not be silent. This is quick and
+        // stays on the main path before the heavy work moves off-thread.
         DefaultHandlerMonitor().warnIfRevoked(context)
 
-        val database = TxxTDatabase.build(context)
-        val reconcile = RebootReconcile(
-            loadMessages = { database.messageDao().getAll() },
-            loadConversations = { database.conversationDao().getAll() },
-            resendPending = { message ->
-                message.senderAddress?.let { SendPipeline.sendSms(context, it, message.body) }
-            },
-        )
-        runBlocking { reconcile.reconcile() }
+        val pendingResult = goAsync()
+        // Backstop: an unexpected throw outside the per-row containment must
+        // never crash the boot process — the receiver finishes quietly instead.
+        val exceptionHandler = CoroutineExceptionHandler { _, _ -> }
+        CoroutineScope(Dispatchers.IO + exceptionHandler).launch {
+            try {
+                val database = TxxTDatabase.build(context)
+                val reconcile = RebootReconcile(
+                    loadMessages = { database.messageDao().getAll() },
+                    loadConversations = { database.conversationDao().getAll() },
+                    resendPending = { message, recipient ->
+                        // The destination is the conversation participant resolved
+                        // by the reconcile — never message.senderAddress, which is
+                        // null for an outgoing message by model contract.
+                        SendPipeline.sendSms(context, recipient, message.body)
+                    },
+                    markSent = { id -> database.messageDao().markSent(id) },
+                )
+                reconcile.reconcile()
+            } finally {
+                pendingResult.finish()
+            }
+        }
     }
 }

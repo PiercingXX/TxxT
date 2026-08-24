@@ -1,5 +1,7 @@
 package com.piercingxx.txxt.ui
 
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -85,5 +87,82 @@ class SettingsWiringTest {
             "SettingsActivity must round-trip the store through SettingsBackup",
             settingsActivity.contains("SettingsBackup"),
         )
+    }
+
+    // ---- Theme render-path wiring (H4): the picker drives the real renderer ----
+
+    @Test
+    fun `the preset spinner shows display names and maps back through the render enum`() {
+        assertTrue(
+            "The preset spinner must show each preset's displayName",
+            settingsActivity.contains("ThemePreset.entries.map { it.displayName }"),
+        )
+        assertTrue(
+            "Selections must map positions back through ThemePreset.entries",
+            settingsActivity.contains("ThemePreset.entries[themePreset.selectedItemPosition]"),
+        )
+    }
+
+    @Test
+    fun `persist drives the real theme controller over txxt_theme`() {
+        // The render path reads txxt_theme; a pick that only wrote
+        // txxt_settings would be decorative.
+        assertTrue(
+            "SettingsActivity must build its ThemeController over txxt_theme",
+            settingsActivity.contains("THEME_PREFS_NAME = \"txxt_theme\""),
+        )
+        assertTrue(
+            "SettingsActivity must report the picked preset to the render controller",
+            settingsActivity.contains("themeController.setManualTheme(store.themePreset)"),
+        )
+        assertTrue(
+            "SettingsActivity must report the auto-sync toggle to the render controller",
+            settingsActivity.contains("themeController.setAutoSync(store.autoSyncTheme)"),
+        )
+    }
+
+    @Test
+    fun `initial selection events do not persist a partially-loaded store`() {
+        assertTrue(
+            "Listeners must be gated on the init guard",
+            settingsActivity.contains("controlsReady = false") &&
+                settingsActivity.contains("controlsReady = true"),
+        )
+        val guard = Regex("""if \(!controlsReady\) return""")
+        assertEquals(2, guard.findAll(settingsActivity).count())
+    }
+
+    @Test
+    fun `backup and restore are honest file-backed operations`() {
+        assertTrue(
+            "Backup must write through an injectable seam",
+            settingsActivity.contains("internal var writeBackupText"),
+        )
+        assertTrue(
+            "Restore must read through an injectable seam",
+            settingsActivity.contains("internal var readBackupText"),
+        )
+        assertTrue(
+            "Backup must serialise both stores through SettingsBackupFile",
+            settingsActivity.contains("SettingsBackupFile.encode"),
+        )
+        assertTrue(
+            "Restore must apply parsed keys into prefs",
+            settingsActivity.contains("putString(key, value)"),
+        )
+        assertFalse(
+            "Restore must not fake success without reading a backup",
+            settingsActivity.contains("\"Settings backed up\"") ||
+                settingsActivity.contains("\"Settings restored\""),
+        )
+    }
+
+    @Test
+    fun `persist writes asynchronously`() {
+        assertFalse(
+            "persist() must use apply(), not commit(), on the main thread",
+            settingsActivity.contains("}.commit()"),
+        )
+        assertTrue(settingsActivity.contains(".apply()"))
     }
 }

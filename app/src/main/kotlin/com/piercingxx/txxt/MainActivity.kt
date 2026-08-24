@@ -1,12 +1,18 @@
 package com.piercingxx.txxt
 
+import android.Manifest
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import android.widget.SearchView
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.piercingxx.txxt.core.Conversation
+import com.piercingxx.txxt.service.DefaultHandlerMonitor
 import com.piercingxx.txxt.theme.SharedPreferencesThemeKeyValueStore
 import com.piercingxx.txxt.theme.ThemeController
 import com.piercingxx.txxt.theme.ThemeStore
@@ -97,6 +103,42 @@ class MainActivity : Activity(), SwipeActionCallback {
             Intent(this, ThreadActivity::class.java)
                 .putExtra("extra_conversation_id", 1L)
         )
+        requestDefaultHandlerGrants()
+    }
+
+    /**
+     * Asks for the two grants the manifest cannot self-grant (the manifest
+     * comment at `app/src/main/AndroidManifest.xml:14-16` promises both):
+     * the default-SMS-handler role and the API 33+ POST_NOTIFICATIONS runtime
+     * permission.
+     *
+     * The SMS role goes through [DefaultHandlerMonitor.roleRequest], which is
+     * honest about the platform: on API 29+ it returns the system
+     * `RoleManager` request intent only while the role is available and not
+     * already held; on API <29 there is no RoleManager path, so it returns
+     * null and the user must grant the default-handler role manually through
+     * system settings. Because the "not held" check lives inside the monitor,
+     * this fires on every [onCreate] while the role stays unheld —
+     * re-prompting after a denial is accepted for a sideloaded single-user
+     * app. POST_NOTIFICATIONS below API 33 is auto-granted, so the prompt is
+     * skipped there.
+     */
+    private fun requestDefaultHandlerGrants() {
+        val roleIntent = DefaultHandlerMonitor().roleRequest(this)
+        if (shouldRequestRole(roleIntent)) {
+            startActivityForResult(roleIntent!!, REQUEST_ROLE_SMS)
+        }
+        val notificationsGranted = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.POST_NOTIFICATIONS
+        ) == PackageManager.PERMISSION_GRANTED
+        if (needsNotificationPermission(Build.VERSION.SDK_INT, notificationsGranted)) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                REQUEST_POST_NOTIFICATIONS,
+            )
+        }
     }
 
     /**
@@ -139,6 +181,31 @@ class MainActivity : Activity(), SwipeActionCallback {
      * scope for this corrective; the submit seam is what T3's box verifies.
      */
     private val adapter = ConversationListAdapter()
+
+    companion object {
+        /** Request code for the default-SMS-handler role request. */
+        const val REQUEST_ROLE_SMS = 4_001
+
+        /** Request code for the POST_NOTIFICATIONS runtime-permission prompt. */
+        const val REQUEST_POST_NOTIFICATIONS = 4_002
+
+        /**
+         * Whether the launcher should start a default-SMS-role request. Pure
+         * over its input — JVM-testable: exactly when [roleRequest] produced
+         * an intent (a null means nothing to ask for — already held,
+         * unavailable, or API <29 with no RoleManager path).
+         */
+        fun shouldRequestRole(roleRequest: Intent?): Boolean = roleRequest != null
+
+        /**
+         * Whether the launcher should raise the POST_NOTIFICATIONS prompt.
+         * Pure over its inputs — JVM-testable: only on API 33+ where the
+         * permission exists as a runtime grant ([granted] reports the current
+         * check); below 33 it is auto-granted, so never prompt.
+         */
+        fun needsNotificationPermission(sdkInt: Int, granted: Boolean): Boolean =
+            sdkInt >= Build.VERSION_CODES.TIRAMISU && !granted
+    }
 }
 
 /**
@@ -146,6 +213,7 @@ class MainActivity : Activity(), SwipeActionCallback {
  * for this corrective; [submit] is the seam `MainActivity.applySearchQuery` drives.
  */
 private class ConversationListAdapter {
+    @Suppress("UNUSED_PARAMETER") // placeholder until the WS10 adapter lands
     fun submit(conversations: List<Conversation>) {
         // No-op until the WS10 conversation-list adapter lands.
     }

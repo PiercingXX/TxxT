@@ -36,8 +36,8 @@ class SharedPreferencesThemeKeyValueStore(
 /**
  * Persists the user's theme choices across launches.
  *
- * Two independent settings, exactly the two the settings screen (WS12) exposes
- * and the theme controller (T4) reads:
+ * Three independent settings, exactly the ones the settings screen (WS12) and
+ * the theme controller (T4) read:
  *
  *  - [manualTheme] — the theme the user picked in-app. Defaults to
  *    [ThemePreset.DEFAULT] (AMOLED Night). When the user picks one, a manual
@@ -47,6 +47,9 @@ class SharedPreferencesThemeKeyValueStore(
  *    the broadcast receiver (T5). Defaults to **off** (privacy by default,
  *    PRIVACY.md §7), so the app never starts following the launcher until the
  *    user opts in.
+ *  - [lastLauncherTheme] — the launcher's most recently broadcast theme,
+ *    persisted so a receiver's report survives process death and is visible
+ *    to controllers constructed later (e.g. the thread screen's).
  *
  * Values are stored under stable keys (the preset's [ThemePreset.key], the
  * toggle as a boolean) so a stored setting survives an app update and the
@@ -62,8 +65,20 @@ class ThemeStore(
 
     /** Whether TxxT follows the launcher's active theme. Off by default. */
     var autoSyncEnabled: Boolean
-        get() = kv.getBoolean(KEY_AUTO_SYNC, false)
+        get() = kv.getBoolean(KEY_AUTO_SYNC, default = false)
         set(value) = kv.putBoolean(KEY_AUTO_SYNC, value)
+
+    /**
+     * The launcher's most recently reported theme, or null when none has been
+     * received (or the stored name no longer resolves). Null-safe: assigning
+     * null leaves the last persisted value untouched — a launcher broadcast
+     * always carries a real preset, so there is nothing legitimate to erase.
+     */
+    var lastLauncherTheme: ThemePreset?
+        get() = ThemePreset.fromKey(kv.getString(KEY_LAST_LAUNCHER_THEME))
+        set(value) {
+            if (value != null) kv.putString(KEY_LAST_LAUNCHER_THEME, value.key)
+        }
 
     /**
      * The theme that should actually drive the UI, applying the manual-wins
@@ -73,7 +88,9 @@ class ThemeStore(
      * default.
      *
      * @param launcherTheme the launcher's active theme (from T5's receiver), or
-     *   null when none is known.
+     *   null when none is known in memory. Callers that want the durable
+     *   fallback should pass `inMemory ?: store.lastLauncherTheme` — as
+     *   ThemeController does.
      */
     fun effectiveTheme(launcherTheme: ThemePreset?): ThemePreset {
         val manual = manualTheme
@@ -85,5 +102,6 @@ class ThemeStore(
     companion object {
         const val KEY_MANUAL_THEME = "theme_manual"
         const val KEY_AUTO_SYNC = "theme_auto_sync"
+        const val KEY_LAST_LAUNCHER_THEME = "theme_last_launcher"
     }
 }

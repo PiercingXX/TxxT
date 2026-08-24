@@ -21,11 +21,15 @@ import com.piercingxx.txxt.block.MessageDisposition
  */
 class MmsReceiver(
     /**
-     * Inbound message filter — evaluates sender against block lists,
-     * content filters, and unknown-sender rules. Messages that are [BLOCK] or
-     * [QUARANTINE] do not reach the attachment policy gate.
+     * Resolves the inbound message filter at receive time — evaluates sender
+     * against block lists, content filters, and unknown-sender rules. Messages
+     * that are [BLOCK] or [QUARANTINE] do not reach the attachment policy gate.
+     * A lazy provider (resolved inside `onReceive`, after
+     * `LiveInboundFilter.ensureLoaded`) rather than a constructor-time capture,
+     * so the filter always reflects the freshest loaded rules instead of a
+     * snapshot taken when this receiver was instantiated.
      */
-    private val inboundFilter: InboundFilter = LiveInboundFilter.current,
+    private val inboundFilterProvider: () -> InboundFilter = { LiveInboundFilter.current },
     /**
      * Extracts the sender address of the inbound MMS from [Intent]. Defaults to
      * reading the intent's extras; injectable so a JVM unit test can drive
@@ -61,13 +65,18 @@ class MmsReceiver(
 ) : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
+        // Hydrate the persisted blocking rules once per process (M5): without
+        // this the filter stays empty after process death/reboot until Settings
+        // is reopened. Resolved before any evaluation.
+        LiveInboundFilter.ensureLoaded(context)
+
         if (intent.action != mmsAction) return
 
         val sender = extractSender(intent) ?: return
 
         // Apply InboundFilter first — blocked/quarantined senders do not
         // reach the attachment policy gate.
-        val (disposition, _) = inboundFilter.evaluate(sender, "")
+        val (disposition, _) = inboundFilterProvider().evaluate(sender, "")
         if (disposition != MessageDisposition.DELIVER) {
             abortBroadcast()
             return

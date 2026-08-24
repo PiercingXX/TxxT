@@ -28,7 +28,7 @@ class SmsReceiverBlockingTest {
         val contextsSeen = mutableListOf<String>()
 
         val rcv = SmsReceiver(
-            inboundFilter = inboundFilter,
+            inboundFilterProvider = { inboundFilter },
             autoReplyEnabled = autoReplyEnabled,
             autoReplyOverrides = autoReplyOverrides,
             extractSender = { intent ->
@@ -87,7 +87,10 @@ class SmsReceiverBlockingTest {
 
     @Test
     fun `unknown sender is quarantined and does not trigger auto-reply`() {
-        val filter = InboundFilter(knownContacts = setOf("+1 555 2000"))
+        val filter = InboundFilter(
+            knownContacts = setOf("+1 555 2000"),
+            quarantineUnknownSenders = true,
+        )
         val (rcv, _, replies) = receiver(
             inboundFilter = filter,
             autoReplyEnabled = true,

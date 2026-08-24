@@ -15,12 +15,14 @@ class InboundFilterTest {
         starredContacts: Set<String> = emptySet(),
         contentKeywords: Set<String> = emptySet(),
         contentPhrases: Set<String> = emptySet(),
+        quarantineUnknownSenders: Boolean = false,
     ) = InboundFilter(
         knownContacts = knownContacts,
         blockedAddresses = blockedAddresses,
         starredContacts = starredContacts,
         contentKeywords = contentKeywords,
         contentPhrases = contentPhrases,
+        quarantineUnknownSenders = quarantineUnknownSenders,
     )
 
     // ---- DELIVER: known sender, no rules match ----
@@ -40,11 +42,14 @@ class InboundFilterTest {
         assertEquals(MessageDisposition.DELIVER, disposition)
     }
 
-    // ---- QUARANTINE: unknown sender ----
+    // ---- QUARANTINE: unknown sender (explicit opt-in; see the F6 test below) ----
 
     @Test
-    fun `unknown sender is quarantined`() {
-        val f = filter(knownContacts = setOf("+1 555 1000"))
+    fun `unknown sender is quarantined when quarantine is opted in`() {
+        val f = filter(
+            knownContacts = setOf("+1 555 1000"),
+            quarantineUnknownSenders = true,
+        )
         val (disposition, reason) = f.evaluate("+1 555 9999", "Hello")
         assertEquals(MessageDisposition.QUARANTINE, disposition)
         assertNotNull(reason)
@@ -53,7 +58,10 @@ class InboundFilterTest {
 
     @Test
     fun `unknown sender reason has correct message`() {
-        val f = filter(knownContacts = setOf("+1 555 1000"))
+        val f = filter(
+            knownContacts = setOf("+1 555 1000"),
+            quarantineUnknownSenders = true,
+        )
         val (_, reason) = f.evaluate("+1 555 9999", "Hello")
         assertEquals("Sender is not in your contacts", reason!!.message)
         assertFalse(reason.canOverride)
@@ -131,6 +139,7 @@ class InboundFilterTest {
         val f = filter(
             knownContacts = setOf("+1 555 1000"),
             starredContacts = setOf("+1 555 2000"),
+            quarantineUnknownSenders = true,
         )
         val (disposition, reason) = f.evaluate("+1 555 2000", "Hello")
         assertEquals(MessageDisposition.DELIVER, disposition)
@@ -165,6 +174,15 @@ class InboundFilterTest {
         assertEquals(MessageDisposition.DELIVER, disposition)
     }
 
+    @Test
+    fun `blocked address matching survives formatting variance`() {
+        val f = filter(blockedAddresses = setOf("+1 555 8888"))
+        for (variant in listOf("+15558888", "555-8888", "(555) 8888", "+1 (555) 8888")) {
+            val (disposition, _) = f.evaluate(variant, "Hello")
+            assertEquals(variant, MessageDisposition.BLOCK, disposition)
+        }
+    }
+
     // ---- Decision priority: blocked address before unknown sender ----
 
     @Test
@@ -181,12 +199,27 @@ class InboundFilterTest {
     // ---- Empty filter defaults ----
 
     @Test
-    fun `empty filter quarantines unknown sender`() {
-        val f = filter()
+    fun `empty filter quarantines unknown sender when quarantine is opted in`() {
+        val f = filter(quarantineUnknownSenders = true)
         val (disposition, reason) = f.evaluate("+1 555 0000", "Hello")
         assertEquals(MessageDisposition.QUARANTINE, disposition)
         assertNotNull(reason)
         assertEquals(BlockReason.Type.UNKNOWN_SENDER, reason!!.type)
+    }
+
+    // ---- F6 regression lock: factory default is fail-open delivery ----
+    // docs/PRIVACY.md §8.7 ("block unknown senders by default") is PROPOSED,
+    // not adopted, and quarantine has no persistence behind it — a quarantined
+    // message would be dropped silently. So default construction must DELIVER
+    // unknown senders, never QUARANTINE.
+
+    @Test
+    fun `default construction delivers an unknown sender - factory default is fail-open`() {
+        val f = InboundFilter()
+        assertFalse(f.quarantineUnknownSenders)
+        val (disposition, reason) = f.evaluate("+1 555 0000", "Hello")
+        assertEquals(MessageDisposition.DELIVER, disposition)
+        assertNull(reason)
     }
 
     @Test

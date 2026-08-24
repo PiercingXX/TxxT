@@ -69,6 +69,18 @@ class UnknownSenderRuleTest {
         assertFalse(r.isUnknown("+1 555 1000"))
     }
 
+    // --- format tolerance (F5): formatting variance cannot make a known
+    // contact look unknown ---
+
+    @Test
+    fun `formatting variance still matches a known contact`() {
+        val r = rule(knownContacts = setOf("+15551234567"))
+        assertFalse(r.isUnknown("555-123-4567"))
+        assertFalse(r.isUnknown("(555) 123 4567"))
+        assertFalse(r.isUnknown("+1 555 1234567"))
+        assertTrue(r.isKnown("+1 (555) 123-4567"))
+    }
+
     // --- reason surfacing ---
 
     @Test

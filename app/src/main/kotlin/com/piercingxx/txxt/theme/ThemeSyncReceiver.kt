@@ -11,10 +11,12 @@ import android.content.Intent
  * Completes the theme auto-sync contract (`docs/PRIVACY.md §7`): the launcher
  * publishes its active theme; TxxT subscribes. On a broadcast the receiver reads
  * the carried preset name, resolves it to a [ThemePreset], and reports it to a
- * [ThemeController] via [ThemeController.onLauncherTheme] — the single place the
- * manual-wins precedence rule ("explicit beats ambient", `docs/PRIVACY.md §7`)
- * lives. T6's applier then reads [ThemeController.effectiveTheme] and re-applies
- * the theme to the running UI.
+ * [ThemeController] via [ThemeController.onLauncherTheme] — which persists the
+ * report into the `txxt_theme` store, so it survives process death and is read
+ * by any controller constructed later (the applier's included). The manual-wins
+ * precedence rule ("explicit beats ambient", `docs/PRIVACY.md §7`) lives in
+ * ThemeController; T6's applier reads [ThemeController.effectiveTheme] and
+ * re-applies the theme to the running UI.
  *
  * The default controller is built over the same SharedPreferences (`txxt_theme`)
  * the launcher activity wires in `MainActivity`, so a broadcast reaches the same

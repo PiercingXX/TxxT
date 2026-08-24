@@ -9,9 +9,11 @@ package com.piercingxx.txxt.core
  * surfaced with a [reason] instead of being applied silently
  * (`docs/PRIVACY.md:116`).
  *
- * Matching is case-insensitive and trims surrounding whitespace so that
- * `"  +1 555 1234 "` and `"+1 555 1234"` refer to the same sender, mirroring
- * [UnknownSenderRule].
+ * Matching goes through [PhoneNumbers.matches]: case-insensitive, whitespace-
+ * trimmed, digit-normalised (so `"  +1 555 1234 "`, `"+15551234"`, and
+ * `"(+1) 555-1234"` all refer to the same sender), with country-code suffix
+ * tolerance for phone numbers and exact equality for email-gateway addresses,
+ * mirroring [UnknownSenderRule].
  *
  * Zero `android.*` imports so the decision logic is JVM-testable without a
  * device.
@@ -20,8 +22,8 @@ class StarredBypass(
     private val starredContacts: Set<String> = emptySet(),
 ) {
 
-    /** True when [sender] is a starred contact (case-insensitive, trimmed). */
-    fun isStarred(sender: String): Boolean = normalize(sender) in starredNormalized()
+    /** True when [sender] is a starred contact (format-tolerant; see [PhoneNumbers.matches]). */
+    fun isStarred(sender: String): Boolean = starredContacts.any { PhoneNumbers.matches(sender, it) }
 
     /**
      * True when [sender]'s messages bypass every suppression. Equivalent to
@@ -36,8 +38,4 @@ class StarredBypass(
      */
     fun reason(sender: String): String? =
         if (isStarred(sender)) "Starred contacts bypass every suppression" else null
-
-    private fun starredNormalized(): Set<String> = starredContacts.mapTo(mutableSetOf()) { normalize(it) }
-
-    private fun normalize(address: String): String = address.trim().lowercase()
 }

@@ -2,8 +2,10 @@ package com.piercingxx.txxt.ui
 
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
+import com.piercingxx.txxt.MainActivity
 import io.mockk.mockk
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -15,15 +17,22 @@ import java.io.File
  * `MainActivity.attachSwipeHelper` constructs a [ConversationSwipeHelper] over
  * this activity (the [SwipeActionCallback]) and attaches it to the RecyclerView.
  *
+ * Also asserts the default-handler grant wiring: on create the launcher asks for
+ * the default-SMS-handler role (via `DefaultHandlerMonitor.roleRequest`, started
+ * with `startActivityForResult`) and for the API 33+ POST_NOTIFICATIONS runtime
+ * permission (`requestPermissions`), with the ask/no-ask decisions made by the
+ * pure companion functions `shouldRequestRole` / `needsNotificationPermission`.
+ *
  * The core verification is behavioural: a real [ConversationSwipeHelper] with an
  * injected recording attach is driven through its real `attachTo` path against a
  * mocked RecyclerView, and the test asserts the attach side effect fires with the
- * RecyclerView and a swipe callback carrying the four-action swipe flags. The
- * framework-bound `MainActivity` (an Activity) cannot be instantiated in a plain
- * JVM unit test (no Robolectric in the offline cache), so its call-site wiring is
- * locked by reading the source — the same pattern `ThreadWiringTest` uses for the
- * launcher. The deferred callback operations (archive/delete/call/schedule) are
- * NOT asserted to fire; they are empty in `MainActivity` by contract.
+ * RecyclerView and a swipe callback carrying the four-action swipe flags; the
+ * pure decision functions are driven directly. The framework-bound `MainActivity`
+ * (an Activity) cannot be instantiated in a plain JVM unit test (no Robolectric
+ * in the offline cache), so the onCreate call-site wiring is locked by reading
+ * the source — the same pattern `ThreadWiringTest` uses for the launcher. The
+ * deferred callback operations (archive/delete/call/schedule) are NOT asserted
+ * to fire; they are empty in `MainActivity` by contract.
  */
 class MainActivityWiringTest {
 
@@ -98,5 +107,55 @@ class MainActivityWiringTest {
             "MainActivity.attachSwipeHelper must attach the helper to the RecyclerView",
             mainActivity.contains(".attachTo(recyclerView)"),
         )
+    }
+
+    // ---- Default-handler grants: the launcher asks, it is never silent ----
+
+    @Test
+    fun `MainActivity requests the SMS role and POST_NOTIFICATIONS on create`() {
+        assertTrue(
+            "MainActivity must consult the monitor's roleRequest seam",
+            mainActivity.contains("roleRequest("),
+        )
+        assertTrue(
+            "MainActivity must start the role request with startActivityForResult",
+            mainActivity.contains("startActivityForResult"),
+        )
+        assertTrue(
+            "MainActivity must check and request POST_NOTIFICATIONS",
+            mainActivity.contains("POST_NOTIFICATIONS") &&
+                mainActivity.contains("requestPermissions"),
+        )
+        assertTrue(
+            "the ask/no-ask decision must go through shouldRequestRole",
+            mainActivity.contains("shouldRequestRole("),
+        )
+        assertTrue(
+            "the notification-prompt decision must go through needsNotificationPermission",
+            mainActivity.contains("needsNotificationPermission("),
+        )
+    }
+
+    @Test
+    fun `shouldRequestRole asks exactly when a role intent exists`() {
+        assertTrue(
+            "a non-null role intent means there is something to ask for",
+            MainActivity.shouldRequestRole(mockk()),
+        )
+        assertFalse(
+            "a null role intent means nothing to request (held / unavailable / API <29)",
+            MainActivity.shouldRequestRole(null),
+        )
+    }
+
+    @Test
+    fun `needsNotificationPermission prompts only on API 33+ when not granted`() {
+        // API 32 (< 33): the platform has no runtime notification permission,
+        // it is auto-granted — never prompt, whatever the check reports.
+        assertFalse("API 32 granted must not prompt", MainActivity.needsNotificationPermission(32, granted = true))
+        assertFalse("API 32 not granted must not prompt", MainActivity.needsNotificationPermission(32, granted = false))
+        // API 33+: prompt only when the current check says not granted.
+        assertFalse("API 33 already granted must not re-prompt", MainActivity.needsNotificationPermission(33, granted = true))
+        assertTrue("API 33 not granted must prompt", MainActivity.needsNotificationPermission(33, granted = false))
     }
 }

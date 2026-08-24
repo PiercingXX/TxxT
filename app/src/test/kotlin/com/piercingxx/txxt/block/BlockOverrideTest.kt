@@ -48,6 +48,27 @@ class BlockOverrideTest {
         assertTrue(BlockOverrideStore(kv).hasOverride("+1 555 1000"))
     }
 
+    @Test
+    fun `override matching survives formatting variance`() {
+        // F5: the sender reaching the filter in another format of the same
+        // number must still hit the stored override.
+        val kv = InMemoryOverrideKeyValueStore()
+        BlockOverrideStore(kv).addOverride("+15551234567")
+        val store = BlockOverrideStore(kv)
+        assertTrue(store.hasOverride("555-123-4567"))
+        assertTrue(store.hasOverride("(555) 123 4567"))
+        assertTrue(store.hasOverride("+1 555 1234567"))
+        assertFalse(store.hasOverride("+1 555 9999"))
+    }
+
+    @Test
+    fun `remove override clears every format variant`() {
+        val kv = InMemoryOverrideKeyValueStore()
+        BlockOverrideStore(kv).addOverride("+15551234567")
+        BlockOverrideStore(kv).removeOverride("555-123-4567")
+        assertFalse(BlockOverrideStore(kv).hasOverride("+15551234567"))
+    }
+
     // ---- InboundFilter integration: an override delivers the sender ----
     // These exercise the real call path: InboundFilter consults the store before
     // applying any suppression, so an overridden sender is delivered even when a

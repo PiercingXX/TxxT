@@ -12,7 +12,9 @@ import org.junit.Test
 
 /**
  * Behaviour-verifies [NotificationService] (T2):
- *  - Posts sender-name-only notifications (title = sender, text = redacted);
+ *  - REDACTED (default) notifications show title = sender, text = redacted
+ *    content (sender name, never the body);
+ *  - NOTIFY (opt-in) notifications additionally reveal the message body;
  *  - Includes a quick-reply action;
  *  - Never attaches bubble metadata;
  *  - Respects the [NotificationPosture] decision (suppress, redact, notify).
@@ -82,6 +84,20 @@ class NotificationServiceTest {
     }
 
     @Test
+    fun `REDACTED notification text never contains the message body`() {
+        val svc = makeService()
+        svc.postMessageNotification(
+            sender = "Alice",
+            body = "Hello",
+            globalPosture = NotificationPosture.Posture.REDACTED,
+        )
+        verify { mockBuilder!!.setContentText(withArg { text ->
+            assertFalse("redacted text must never contain the body", text.contains("Hello"))
+            assertEquals("redacted text must be the redacted content", "Alice", text)
+        }) }
+    }
+
+    @Test
     fun `notification is posted for NOTIFY posture`() {
         val svc = makeService()
         val result = svc.postMessageNotification(
@@ -92,7 +108,8 @@ class NotificationServiceTest {
         assertTrue("should return true", result)
         assertTrue("postNotification should be called", postCalled)
         verify { mockBuilder!!.setContentTitle("Alice") }
-        verify { mockBuilder!!.setContentText("Alice") }
+        // Opt-in posture: the message body is revealed as the visible text.
+        verify { mockBuilder!!.setContentText("Hello") }
     }
 
     @Test

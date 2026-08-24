@@ -1,5 +1,8 @@
 package com.piercingxx.txxt.service
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -135,6 +138,33 @@ class MmsDownloadRetryTest {
         val r = retry(performDownload = { true })
 
         assertEquals(MmsDownloadState.NOT_ATTEMPTED, r.state(7L))
+    }
+
+    // ---- Concurrency: a double tap must never double-download (M9) ----
+
+    @Test
+    fun `a concurrent second tap does not start a second download`() = runBlocking {
+        // The first tap parks inside performDownload while holding the state
+        // machine; the second tap arrives mid-flight. Without the download
+        // lock the two callers interleave and calls reaches 2 — with it, the
+        // second tap is a no-op.
+        val releaseFirstTap = CompletableDeferred<Unit>()
+        var calls = 0
+        val r = retry(maxAttempts = 5, performDownload = {
+            calls++
+            releaseFirstTap.await()
+            true
+        })
+
+        val firstTap = async(start = CoroutineStart.UNDISPATCHED) { r.download(7L) }
+        // The first tap is now parked in performDownload with DOWNLOADING set.
+        val secondTap = async { r.download(7L) }
+
+        releaseFirstTap.complete(Unit)
+
+        assertEquals(MmsDownloadState.DOWNLOADED, firstTap.await())
+        assertEquals(MmsDownloadState.DOWNLOADED, secondTap.await())
+        assertEquals("a concurrent double-tap must perform exactly one download", 1, calls)
     }
 
     // ---- Wire-in: the running receiver reaches MmsDownloadRetry ----

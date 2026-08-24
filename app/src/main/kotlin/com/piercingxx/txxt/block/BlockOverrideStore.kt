@@ -1,6 +1,7 @@
 package com.piercingxx.txxt.block
 
 import android.content.SharedPreferences
+import com.piercingxx.txxt.core.PhoneNumbers
 
 /**
  * Key-value persistence backing [BlockOverrideStore].
@@ -31,9 +32,12 @@ class SharedPreferencesBlockOverrideKeyValueStore(
  * Persists the user's per-sender override decisions: a sender the user has
  * explicitly allowed through the block/quarantine rules.
  *
- * Overrides are matched like the core rules (case-insensitive, trimmed) so
- * `"  +1 555 1234 "` and `"+1 555 1234"` refer to the same sender. Values are
- * stored under a stable key so an override survives an app update.
+ * Overrides are matched like the core rules, through `PhoneNumbers.matches`
+ * (core): case-insensitive, whitespace-trimmed, digit-normalised with
+ * country-code suffix tolerance — `"  +1 555 1234 "`, `"+15551234"`, and
+ * `"(+1) 555-1234"` refer to the same sender; email-gateway addresses compare
+ * by exact normalized equality. Values are stored under a stable key so an
+ * override survives an app update.
  *
  * [InboundFilter] consults this store before applying any suppression: a sender
  * with an override is delivered even when a block rule or the unknown-sender
@@ -42,24 +46,24 @@ class SharedPreferencesBlockOverrideKeyValueStore(
 class BlockOverrideStore(
     private val kv: BlockOverrideKeyValueStore,
 ) {
-    /** True when [sender] has an explicit override (case-insensitive, trimmed). */
-    fun hasOverride(sender: String): Boolean = normalize(sender) in kv.getStringSet(KEY_OVERRIDES)
+    /** True when [sender] has an explicit override (format-tolerant matching). */
+    fun hasOverride(sender: String): Boolean =
+        kv.getStringSet(KEY_OVERRIDES).any { PhoneNumbers.matches(sender, it) }
 
     /** Records an override for [sender]; idempotent. */
     fun addOverride(sender: String) {
         val overrides = kv.getStringSet(KEY_OVERRIDES).toMutableSet()
-        overrides.add(normalize(sender))
+        overrides.add(PhoneNumbers.normalize(sender))
         kv.putStringSet(KEY_OVERRIDES, overrides)
     }
 
     /** Removes any override for [sender]; idempotent. */
     fun removeOverride(sender: String) {
-        val overrides = kv.getStringSet(KEY_OVERRIDES).toMutableSet()
-        overrides.remove(normalize(sender))
+        // Drop every stored variant that matches the sender, not just one
+        // normalized spelling of it.
+        val overrides = kv.getStringSet(KEY_OVERRIDES).filterNot { PhoneNumbers.matches(sender, it) }.toSet()
         kv.putStringSet(KEY_OVERRIDES, overrides)
     }
-
-    private fun normalize(address: String): String = address.trim().lowercase()
 
     companion object {
         const val KEY_OVERRIDES = "block_overrides"

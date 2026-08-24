@@ -1,5 +1,6 @@
 package com.piercingxx.txxt.service
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -8,6 +9,13 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.RemoteInput
+import com.piercingxx.txxt.MainActivity
+import com.piercingxx.txxt.data.OutboundStore
+import com.piercingxx.txxt.data.TxxTDatabase
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /** Intent extra: sender address for the quick-reply receiver. */
 const val EXTRA_SENDER = "extra_sender"
@@ -23,8 +31,9 @@ const val CHANNEL_ID = "txxt_messages"
  * [NotificationPolicy] and [NotificationPosture].
  *
  * Behaviour (docs/PRIVACY.md §3):
- *  - **Sender-name-only** — title is the sender name, text is the redacted
- *    content (sender name, never the message body);
+ *  - **Privacy postures** — REDACTED (the default) shows title = sender name
+ *    and text = the redacted content (sender name, never the message body);
+ *    NOTIFY (opt-in) additionally reveals the message body as the visible text;
  *  - **No bubbles** — never attaches bubble metadata or flags;
  *  - **Quick reply** — attaches an inline-reply action whose target reaches
  *    [SendPipeline.sendSms].
@@ -40,7 +49,7 @@ class NotificationService(
      * Defaults to a pending intent that launches [MainActivity].
      */
     private val contentIntent: (Context, String) -> PendingIntent = { ctx, sender ->
-        val intent = Intent(ctx, Class.forName("com.piercingxx.txxt.MainActivity")).apply {
+        val intent = Intent(ctx, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(EXTRA_SENDER, sender)
         }
@@ -85,7 +94,7 @@ class NotificationService(
             val channel = NotificationChannel(
                 CHANNEL_ID, "Messages", NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
-                lockscreenVisibility = 2 /* NotificationManager.VISIBILITY_SECRET */
+                lockscreenVisibility = Notification.VISIBILITY_SECRET
             }
             manager.createNotificationChannel(channel)
         }
@@ -102,7 +111,9 @@ class NotificationService(
      * Post a notification for a message from [sender] with [body].
      *
      * Uses [NotificationPosture.decide] to determine whether to notify, redact,
-     * or suppress. The [NotificationPolicy] provides the title and redacted content.
+     * or suppress. [NotificationPolicy.notificationTitle] provides the title;
+     * the visible text is the message body under NOTIFY (opt-in) and the
+     * redacted content under REDACTED (the default).
      *
      * Returns `true` if a notification was posted, `false` if suppressed.
      */
@@ -125,7 +136,13 @@ class NotificationService(
             NotificationPosture.Posture.REDACTED,
             NotificationPosture.Posture.NOTIFY -> {
                 val title = NotificationPolicy.notificationTitle(sender)
-                val text = NotificationPolicy.redactedContent(sender)
+                // NOTIFY (opt-in) reveals the message body; REDACTED (default)
+                // shows only the redacted content — never the body.
+                val text = if (posture == NotificationPosture.Posture.NOTIFY) {
+                    body
+                } else {
+                    NotificationPolicy.redactedContent(sender)
+                }
 
                 val builder = makeBuilder(CHANNEL_ID)
                     .setSmallIcon(android.R.drawable.sym_action_email)
@@ -148,14 +165,104 @@ class NotificationService(
 
 /**
  * Broadcast receiver that handles the quick-reply action from the notification.
- * Extracts the reply text from the RemoteInput and sends it via [SendPipeline.sendSms].
+ *
+ * **Persist-then-send contract** (mirrors the compose path,
+ * `ThreadActivity.sendComposed`): the reply is persisted FIRST through
+ * [OutboundStore.persistOutgoingSms] as an outgoing row with `sent = false` —
+ * so it is visible in thread history and, if the process dies before the
+ * platform send, `RebootReconcile` re-drives it on next boot — then handed to
+ * [SendPipeline.sendSms], and only a successful send marks the row sent
+ * (`MessageDao.markSent`). A gate-denied send leaves the row pending, never
+ * marked. A reply that never reaches Room would be invisible in its own
+ * thread — this receiver exists to close exactly that gap.
+ *
+ * Persistence plus a synchronous SMS send would not fit the ~10 s receiver
+ * ANR budget: [goAsync] extends the receiver's lifetime, the work runs on
+ * [Dispatchers.IO] with `pendingResult.finish()` guaranteed in `finally`, and
+ * a [CoroutineExceptionHandler] backstop keeps an unexpected throw from
+ * crashing the process (the deliver receivers' precedent). The guard reads
+ * (sender / reply text) run BEFORE [goAsync] — nothing async starts for a
+ * malformed intent.
+ *
+ * Injectable seams (ComposeActivity / deliver-receiver precedent): the system
+ * instantiates this receiver through the no-arg constructor, so every seam
+ * defaults either to the real behaviour ([extractReply], [send]) or to `null`
+ * meaning "resolve the real implementation inside [onReceive]" ([persist],
+ * [markSent]) — which keeps the class JVM-testable without Robolectric and
+ * without mocking the static `RemoteInput.getResultsFromIntent`.
  */
-class NotificationReplyReceiver : android.content.BroadcastReceiver() {
+class NotificationReplyReceiver(
+    /**
+     * Extracts `(sender, replyText)` from the received [Intent]. Defaults to
+     * the platform read — `RemoteInput.getResultsFromIntent` for the reply
+     * text plus the [EXTRA_SENDER] string extra; `null` when the bundle or
+     * either field is missing. Injectable so a JVM unit test can drive
+     * [onReceive] without mocking the platform static call.
+     */
+    private val extractReply: (Intent) -> Pair<String, String>? = { intent ->
+        val bundle = RemoteInput.getResultsFromIntent(intent)
+        val replyText = bundle?.getCharSequence(KEY_REPLY_TEXT)?.toString()
+        val sender = intent.getStringExtra(EXTRA_SENDER)
+        if (bundle == null || replyText == null || sender == null) null else sender to replyText
+    },
+    /**
+     * Sends the reply SMS as `(context, recipient, body) -> send attempted?`.
+     * Defaults to [SendPipeline.sendSms]; injectable so a JVM unit test can
+     * observe the send decision (and force a gate denial) without touching
+     * the telephony stack.
+     */
+    private val send: (Context, String, String) -> Boolean =
+        { ctx, recipient, text -> SendPipeline.sendSms(ctx, recipient, text) },
+    /**
+     * Persists the outgoing reply as `(address, body) -> messageId`. Defaults
+     * to `null`, meaning the real [OutboundStore.persistOutgoingSms] runs over
+     * a lazily built Room database inside [onReceive] (the database is never
+     * touched when a test supplies its own seam).
+     */
+    private val persist: (suspend (String, String) -> Long)? = null,
+    /**
+     * Marks a persisted message transmitted as `(messageId) -> Unit`.
+     * Defaults to `null`, meaning the real `MessageDao.markSent` runs over the
+     * same lazily built Room database as [persist].
+     */
+    private val markSent: (suspend (Long) -> Unit)? = null,
+) : android.content.BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
-        val bundle = RemoteInput.getResultsFromIntent(intent) ?: return
-        val replyText = bundle.getCharSequence(KEY_REPLY_TEXT)?.toString() ?: return
-        val sender = intent.getStringExtra("extra_sender") ?: return
-        SendPipeline.sendSms(context, sender, replyText)
+        // Guards BEFORE goAsync: a malformed quick-reply intent never starts
+        // async work (deliver receivers' precedent).
+        val extracted = extractReply(intent) ?: return
+        val sender = extracted.first
+        val replyText = extracted.second
+        if (sender.isBlank() || replyText.isBlank()) return
+
+        val pendingResult = goAsync()
+        // Backstop: an unexpected throw must never crash the process — the
+        // receiver finishes quietly instead (BootReceiver precedent).
+        val exceptionHandler = CoroutineExceptionHandler { _, _ -> }
+        CoroutineScope(Dispatchers.IO + exceptionHandler).launch {
+            try {
+                val database by lazy { TxxTDatabase.build(context) }
+                val persistStep = persist ?: { address, text ->
+                    OutboundStore.persistOutgoingSms(
+                        database.conversationDao(),
+                        database.messageDao(),
+                        address,
+                        text,
+                    )
+                }
+                val markSentStep = markSent ?: { id -> database.messageDao().markSent(id) }
+
+                // Persist FIRST (sent=false), send SECOND, mark sent LAST —
+                // never mark a message whose send was denied (see class KDoc).
+                val messageId = persistStep(sender, replyText)
+                val ok = send(context, sender, replyText)
+                if (ok) {
+                    markSentStep(messageId)
+                }
+            } finally {
+                pendingResult.finish()
+            }
+        }
     }
 }

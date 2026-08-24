@@ -76,6 +76,17 @@ class StarredBypassTest {
         assertTrue(b.isStarred("+1 555 1000"))
     }
 
+    // --- format tolerance (F5): the carrier delivering another formatting of
+    // a starred number must not cost the contact their bypass ---
+
+    @Test
+    fun `formatting variance still matches a starred contact`() {
+        val b = bypass(starredContacts = setOf("+15551234567"))
+        assertTrue(b.isStarred("555-123-4567"))
+        assertTrue(b.isStarred("(555) 123 4567"))
+        assertTrue(b.bypasses("+1 555 1234567"))
+    }
+
     // --- reason surfacing ---
 
     @Test

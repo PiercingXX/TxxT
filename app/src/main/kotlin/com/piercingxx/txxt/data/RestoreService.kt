@@ -3,6 +3,7 @@ package com.piercingxx.txxt.data
 import com.piercingxx.txxt.core.BackupData
 import com.piercingxx.txxt.core.MessageDirection
 import com.piercingxx.txxt.core.MessageTransport
+import com.piercingxx.txxt.core.PhoneNumbers
 
 /**
  * Restores a backup payload into the app's storage idempotently (T5).
@@ -50,11 +51,16 @@ class RestoreService(
         val byThread = data.messages.groupBy { it.threadId }
 
         val conversations = byThread.map { (threadId, messages) ->
-            // The conversation's participant address is the address of its first
-            // message; the backup groups a thread's messages under one address.
+            // The conversation's participant KEY is the first message's address
+            // run through the same normalization inbound delivery uses
+            // (PhoneNumbers.normalize): a restored thread and a later live
+            // delivery from the same sender must land on ONE conversation, not
+            // fork into two because the backup carried "+1555…" and the
+            // carrier delivers "1555…". Deterministic, so idempotency holds.
+            // The message rows keep the raw backup address for display.
             ConversationEntity(
                 id = threadId,
-                participantAddresses = messages.first().address,
+                participantAddresses = PhoneNumbers.normalize(messages.first().address),
             )
         }
 
@@ -96,7 +102,10 @@ class RestoreService(
  * restore overwrite existing rows instead of duplicating them.
  *
  * A restore is triggered by calling [restore] on [service] with a [BackupData]
- * parsed from the backup JSON (e.g. via [BackupJson.deserialize]).
+ * parsed from the backup JSON via [BackupJson.deserialize], which delegates to
+ * the validating core [com.piercingxx.txxt.core.BackupSerializer]: only payloads
+ * passing its version gate and range gate reach this REPLACE-based restore, so
+ * an untrusted or hand-edited backup cannot inject attacker-chosen ids here.
  */
 class RoomRestoreService(private val database: TxxTDatabase) {
 

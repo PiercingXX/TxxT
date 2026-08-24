@@ -1,6 +1,9 @@
 package com.piercingxx.txxt.service
 
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Lifecycle of an MMS attachment download as tracked by [MmsDownloadRetry].
@@ -53,8 +56,17 @@ class MmsDownloadRetry(
     private val performDownload: suspend (Long) -> Boolean,
 ) {
 
-    private val states = mutableMapOf<Long, MmsDownloadState>()
-    private val attempts = mutableMapOf<Long, Int>()
+    /**
+     * Serializes the per-message state machine (check → attempt loop → terminal
+     * write) so concurrent suspend callers — a double tap, the UI and the
+     * receiver racing — can never interleave [states]/[attempts] mutations. The
+     * maps themselves are concurrent views so the synchronous [state] read from
+     * the UI thread sees writes safely.
+     */
+    private val mutex = Mutex()
+
+    private val states = ConcurrentHashMap<Long, MmsDownloadState>()
+    private val attempts = ConcurrentHashMap<Long, Int>()
 
     /**
      * The current download state for [messageId], defaulting to [MmsDownloadState.NOT_ATTEMPTED].
@@ -79,15 +91,20 @@ class MmsDownloadRetry(
      * exponential backoff, and returns the terminal state.
      *
      * Terminal states are respected: once [MmsDownloadState.DOWNLOADED] or
-     * [MmsDownloadState.FAILED], a subsequent call is a no-op returning the same
-     * state (a failed download stays visible as failed until the user retries
-     * explicitly). On success the state is [MmsDownloadState.DOWNLOADED]; when
-     * [maxAttempts] consecutive attempts fail, the state is [MmsDownloadState.FAILED].
+     * [MmsDownloadState.FAILED] — or already in flight ([MmsDownloadState.DOWNLOADING],
+     * i.e. a no-op second tap) — the call makes no download attempt and returns
+     * the current state. On success the state is [MmsDownloadState.DOWNLOADED];
+     * when [maxAttempts] consecutive attempts fail, the state is
+     * [MmsDownloadState.FAILED].
      */
-    suspend fun download(messageId: Long): MmsDownloadState {
+    suspend fun download(messageId: Long): MmsDownloadState = mutex.withLock {
         val current = state(messageId)
-        if (current == MmsDownloadState.DOWNLOADED || current == MmsDownloadState.FAILED) {
-            return current
+        if (
+            current == MmsDownloadState.DOWNLOADING ||
+            current == MmsDownloadState.DOWNLOADED ||
+            current == MmsDownloadState.FAILED
+        ) {
+            return@withLock current
         }
         setState(messageId, MmsDownloadState.DOWNLOADING)
 
@@ -97,14 +114,14 @@ class MmsDownloadRetry(
             attempts[messageId] = attempt
             if (performDownload(messageId)) {
                 setState(messageId, MmsDownloadState.DOWNLOADED)
-                return MmsDownloadState.DOWNLOADED
+                return@withLock MmsDownloadState.DOWNLOADED
             }
             if (attempt < maxAttempts) {
                 wait(retryDelayMillis(attempt))
             }
         }
         setState(messageId, MmsDownloadState.FAILED)
-        return MmsDownloadState.FAILED
+        MmsDownloadState.FAILED
     }
 
     private fun setState(messageId: Long, state: MmsDownloadState) {

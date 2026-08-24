@@ -2,6 +2,7 @@ package com.piercingxx.txxt.theme
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -66,6 +67,37 @@ class ThemeStoreTest {
         val kv = InMemoryKeyValueStore()
         ThemeStore(kv).autoSyncEnabled = true
         assertTrue(kv.getBoolean(ThemeStore.KEY_AUTO_SYNC, false))
+    }
+
+    // ---- Last launcher theme: the durable record of the receiver's report ----
+
+    @Test
+    fun `last launcher theme defaults to null`() {
+        val store = ThemeStore(InMemoryKeyValueStore())
+        assertNull(store.lastLauncherTheme)
+    }
+
+    @Test
+    fun `last launcher theme persists across store instances`() {
+        val kv = InMemoryKeyValueStore()
+        ThemeStore(kv).lastLauncherTheme = ThemePreset.GRAPHITE
+        // A fresh store over the same backing reads the persisted value.
+        assertEquals(ThemePreset.GRAPHITE, ThemeStore(kv).lastLauncherTheme)
+    }
+
+    @Test
+    fun `last launcher theme is stored under the preset's stable key`() {
+        val kv = InMemoryKeyValueStore()
+        ThemeStore(kv).lastLauncherTheme = ThemePreset.OCEAN_DRIFT
+        assertEquals(ThemePreset.OCEAN_DRIFT.key, kv.getString(ThemeStore.KEY_LAST_LAUNCHER_THEME))
+    }
+
+    @Test
+    fun `assigning null to last launcher theme leaves the persisted value untouched`() {
+        val kv = InMemoryKeyValueStore()
+        ThemeStore(kv).lastLauncherTheme = ThemePreset.MIST
+        ThemeStore(kv).lastLauncherTheme = null
+        assertEquals(ThemePreset.MIST, ThemeStore(kv).lastLauncherTheme)
     }
 
     // ---- Effective theme: manual wins over auto-sync ----

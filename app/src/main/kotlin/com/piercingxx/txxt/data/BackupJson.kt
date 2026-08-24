@@ -1,35 +1,35 @@
 package com.piercingxx.txxt.data
 
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import com.piercingxx.txxt.core.BackupData
+import com.piercingxx.txxt.core.BackupSerializer
 
 /**
- * Gson-backed adapter for the backup JSON (WS6 T3).
+ * Adapter for the backup JSON (WS6 T3).
  *
- * This is the "wired to Gson for the backup JSON" slice of the data layer: it
- * hands the pure `core` backup model ([BackupData]) to Gson 2.10.1 for the
- * on-disk JSON, matching the Room + Gson stack at `docs/DESIGN.md:86` and the
- * `BackupJson` package entry at `docs/INSPIRATION.md:146`.
+ * Delegates entirely to the validating [BackupSerializer] in `core`, so there
+ * is exactly one backup format and one parser for it: every payload that enters
+ * the app through [deserialize] passes the serializer's **version gate** (only
+ * [com.piercingxx.txxt.core.BACKUP_VERSION] is accepted) and its **range gate**
+ * (message ids, thread ids and dates must be non-negative numbers), and strict
+ * parsing rejects malformed or trailing input instead of applying lenient
+ * defaults. No reflection-based parser sits in this path, so an untrusted or
+ * hand-edited backup cannot smuggle attacker-chosen ids past validation into
+ * the REPLACE-upsert restore seams.
  *
- * The adapter is a thin, `TypeToken`-driven wrapper over a shared [Gson]
- * instance so the data layer can serialize and deserialize the backup payload
- * without leaking Gson into the rest of the app. Round-tripping a [BackupData]
- * is lossless for the messages/settings/blocklist/starred sections (verified by
- * [BackupJsonTest]).
+ * On invalid input [deserialize] throws [com.piercingxx.txxt.core.BackupException]
+ * (an [IllegalArgumentException] subtype) describing the violated gate; it never
+ * returns a partially defaulted model. Round-tripping a [BackupData] through
+ * serialize/deserialize is lossless (verified by [BackupJsonTest]).
  */
 object BackupJson {
 
-    /** Shared Gson instance configured for the backup payload. */
-    private val gson: Gson by lazy { Gson() }
+    /** Renders [data] to the canonical local-JSON backup string. */
+    fun serialize(data: BackupData): String = BackupSerializer.serialize(data)
 
-    /** The [BackupData] type token, so Gson can reflect the generic payload. */
-    private val backupDataType: TypeToken<BackupData> = object : TypeToken<BackupData>() {}
-
-    /** Renders [data] to the backup JSON string. */
-    fun serialize(data: BackupData): String = gson.toJson(data, backupDataType.type)
-
-    /** Parses a backup JSON string back into its [BackupData] model. */
-    fun deserialize(json: String): BackupData =
-        gson.fromJson(json, backupDataType.type)
+    /**
+     * Parses and validates a backup JSON string back into its [BackupData]
+     * model, throwing [com.piercingxx.txxt.core.BackupException] when the
+     * version gate, range gate or JSON syntax rejects it.
+     */
+    fun deserialize(json: String): BackupData = BackupSerializer.deserialize(json)
 }

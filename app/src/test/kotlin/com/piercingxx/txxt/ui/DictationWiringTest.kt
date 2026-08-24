@@ -1,5 +1,7 @@
 package com.piercingxx.txxt.ui
 
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -90,6 +92,95 @@ class DictationWiringTest {
         assertTrue(
             "ThreadActivity must route recognized text through DictationInsert.insert",
             threadActivity.contains("DictationInsert.insert"),
+        )
+    }
+
+    @Test
+    fun `ThreadActivity hoists a single recognizer destroyed on teardown`() {
+        val creations = Regex("""createSpeechRecognizer\(""").findAll(threadActivity).count()
+        assertEquals(
+            "dictation must reuse one hoisted SpeechRecognizer, not create a leaked one per tap",
+            1,
+            creations,
+        )
+        assertTrue(
+            "the recognizer must live in a single nullable activity field",
+            threadActivity.contains("private var recognizer: SpeechRecognizer? = null"),
+        )
+        assertTrue(
+            "the recognizer must be created lazily into that single field",
+            threadActivity.contains("recognizer ?: run {") &&
+                threadActivity.contains(".also { recognizer = it }"),
+        )
+        assertTrue(
+            "the recognizer must be guarded by isRecognitionAvailable before creation",
+            threadActivity.contains("SpeechRecognizer.isRecognitionAvailable(this)"),
+        )
+        assertTrue(
+            "the created recognizer must be destroyed exactly once, in onDestroy",
+            threadActivity.contains("recognizer?.destroy()"),
+        )
+    }
+
+    @Test
+    fun `ThreadActivity requests RECORD_AUDIO at runtime before listening`() {
+        assertTrue(
+            "dictation must consult the PermissionGate.canRecord seam before listening",
+            threadActivity.contains("canRecord(this)"),
+        )
+        val canRecordIndex = threadActivity.indexOf("canRecord(this)")
+        val requestIndex = threadActivity.indexOf("ActivityCompat.requestPermissions")
+        assertTrue(
+            "a denied mic permission must trigger a runtime request instead of silent listening",
+            requestIndex >= 0,
+        )
+        assertTrue(
+            "the permission check must gate the request and both must precede any listening",
+            canRecordIndex >= 0 && canRecordIndex < requestIndex,
+        )
+        assertTrue(
+            "the runtime request must ask for RECORD_AUDIO",
+            threadActivity.contains("Manifest.permission.RECORD_AUDIO"),
+        )
+        assertTrue(
+            "the request needs a request code the activity owns",
+            threadActivity.contains("REQUEST_RECORD_AUDIO"),
+        )
+    }
+
+    // ---- Behavioural proof of the error mapping (pure companion function; the
+    // on-device Toast hop is deferred like the recognition itself).
+
+    @Test
+    fun `dictation errors map to short human-readable lines`() {
+        assertFalse(
+            ThreadActivity.errorMessage(android.speech.SpeechRecognizer.ERROR_NO_MATCH)
+                .isBlank(),
+        )
+        assertFalse(
+            ThreadActivity.errorMessage(android.speech.SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS)
+                .isBlank(),
+        )
+        assertFalse(
+            ThreadActivity.errorMessage(android.speech.SpeechRecognizer.ERROR_SPEECH_TIMEOUT)
+                .isBlank(),
+        )
+    }
+
+    @Test
+    fun `a permission failure names the mic permission`() {
+        val message = ThreadActivity.errorMessage(android.speech.SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS)
+        assertTrue(
+            "an insufficient-permissions error must point at the mic permission",
+            message.contains("permission", ignoreCase = true),
+        )
+    }
+
+    @Test
+    fun `unknown dictation errors fall back to a generic line`() {
+        assertEquals(
+            ThreadActivity.errorMessage(-999),
+            ThreadActivity.errorMessage(Int.MIN_VALUE),
         )
     }
 }

@@ -6,8 +6,10 @@ package com.piercingxx.txxt.core
  * the main thread list.
  *
  * A sender is **unknown** when their address is not among the known contacts.
- * Matching is case-insensitive and trims surrounding whitespace so that
- * `"  +1 555 1234 "` and `"+1 555 1234"` refer to the same sender.
+ * Matching goes through [PhoneNumbers.matches]: case-insensitive, whitespace-
+ * trimmed, digit-normalised (so `"  +1 555 1234 "`, `"+15551234"`, and
+ * `"(+1) 555-1234"` all refer to the same sender), with country-code suffix
+ * tolerance for phone numbers and exact equality for email-gateway addresses.
  *
  * Zero `android.*` imports so the decision logic is JVM-testable without a
  * device.
@@ -19,8 +21,8 @@ class UnknownSenderRule(
     /** True when [sender] is not a known contact. */
     fun isUnknown(sender: String): Boolean = !isKnown(sender)
 
-    /** True when [sender] is a known contact (case-insensitive, trimmed). */
-    fun isKnown(sender: String): Boolean = normalize(sender) in knownNormalized()
+    /** True when [sender] is a known contact (format-tolerant; see [PhoneNumbers.matches]). */
+    fun isKnown(sender: String): Boolean = knownContacts.any { PhoneNumbers.matches(sender, it) }
 
     /**
      * The reason a sender is treated as unknown, or null when they are known.
@@ -28,8 +30,4 @@ class UnknownSenderRule(
      */
     fun reason(sender: String): String? =
         if (isUnknown(sender)) "Sender is not a known contact" else null
-
-    private fun knownNormalized(): Set<String> = knownContacts.mapTo(mutableSetOf()) { normalize(it) }
-
-    private fun normalize(address: String): String = address.trim().lowercase()
 }

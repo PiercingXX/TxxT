@@ -1,24 +1,32 @@
 package com.piercingxx.txxt.service
 
 import android.content.Context
+import android.content.Intent
 import io.mockk.mockk
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
 /**
- * Behaviour-verifies the T6 default-SMS-handler revocation warning.
+ * Behaviour-verifies the T6 default-SMS-handler revocation warning and the
+ * runtime role-request seam.
  *
  * `DefaultHandlerMonitor.warnIfRevoked` (DefaultHandlerMonitor.kt) is the decision
  * seam the running app consumes at boot: when this app is no longer the platform's
  * default SMS handler (the user switched the default SMS app, or a factory reset /
  * app update dropped the grant), the monitor reports it loudly (so the revocation
- * is never silent) and returns `false`. The platform default-SMS lookup /
- * `Toast` dispatch is not JVM-testable without Robolectric (not in the offline
- * cache), so the monitor's seams are driven directly and the `BootReceiver`
- * wire-in is locked by a source-reading assertion (the established
- * `PermissionGateTest` / `RebootReconcileTest` pattern).
+ * is never silent) and returns `false`. `roleRequest` is the companion seam the
+ * launcher consumes on create: it hands back the system intent that asks for the
+ * role (API 29+ RoleManager) or null when there is nothing to request — held,
+ * unavailable, or API <29 where no RoleManager exists and the user grants the
+ * role manually through system settings. The platform default-SMS lookup /
+ * `Toast` dispatch / RoleManager construction is not JVM-testable without
+ * Robolectric (not in the offline cache), so the monitor's seams are driven
+ * directly and the `BootReceiver` wire-in is locked by a source-reading assertion
+ * (the established `PermissionGateTest` / `RebootReconcileTest` pattern).
  */
 class DefaultHandlerWarningTest {
 
@@ -68,6 +76,27 @@ class DefaultHandlerWarningTest {
 
         assertTrue("an intact role must report the app is still the default", result)
         assertFalse("an intact role must not warn", warned)
+    }
+
+    // ---- DefaultHandlerMonitor role-request seam ----
+
+    @Test
+    fun `roleRequest returns the intent when the seam supplies one`() {
+        // API 29+ with the role available and not held: the monitor surfaces
+        // the system request intent for the caller to start.
+        val intent = mockk<Intent>()
+        val monitor = DefaultHandlerMonitor(roleRequestIntent = { _ -> intent })
+
+        assertEquals(intent, monitor.roleRequest(context))
+    }
+
+    @Test
+    fun `roleRequest returns null when the seam supplies nothing`() {
+        // Role already held, unavailable, or API <29 (no RoleManager — manual
+        // grant): nothing to request, so the caller must not start anything.
+        val monitor = DefaultHandlerMonitor(roleRequestIntent = { _ -> null })
+
+        assertNull(monitor.roleRequest(context))
     }
 
     // ---- Wire-in (rule: a test that constructs the monitor directly proves only

@@ -45,6 +45,10 @@ interface MessageDao {
     @Query("DELETE FROM messages WHERE id = :id")
     suspend fun deleteById(id: Long)
 
+    /** Marks an outgoing message transmitted, clearing its pending-send state. */
+    @Query("UPDATE messages SET sent = 1 WHERE id = :id")
+    suspend fun markSent(id: Long)
+
     @Query("DELETE FROM messages WHERE conversationId = :conversationId")
     suspend fun deleteForConversation(conversationId: Long)
 }

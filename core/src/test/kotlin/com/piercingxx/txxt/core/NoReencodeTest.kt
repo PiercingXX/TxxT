@@ -2,14 +2,15 @@ package com.piercingxx.txxt.core
 
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Test
 
 /**
  * Tests for the no-re-encode guarantee ([docs/PRIVACY.md] §"No re-encode by
  * default"): the scrubbers remove metadata **containers only** and never
- * re-encode the media itself. For both a synthetic JPEG and a synthetic
- * MP4/MOV, the media payload bytes (image scan data / `mdat` content) must be
- * byte-identical in the output while the metadata containers are gone —
+ * re-encode the media itself. For synthetic JPEG, PNG and MP4/MOV media, the
+ * media payload bytes (image scan data / PNG image chunks / `mdat` content)
+ * must be byte-identical in the output while the metadata containers are gone —
  * proving a strip, not a re-encode. Synthetic payloads are constructed in
  * Kotlin because no real media fixtures exist in the tree and no parsing
  * library is available offline (see .skippy/IMPLEMENTATION_PLAN.md,
@@ -62,7 +63,10 @@ class NoReencodeTest {
     private fun iptcPayload(): ByteArray =
         byteArrayOf('P'.code.toByte(), 'h'.code.toByte(), 'o'.code.toByte(), 't'.code.toByte(), 'o'.code.toByte(), 's'.code.toByte(), 'h'.code.toByte(), 'o'.code.toByte(), 'p'.code.toByte(), 0x00, 0x01, 0x02)
 
-    // --- MP4 atom construction helpers -----------------------------------
+    // --- PNG construction helpers ----------------------------------------
+
+    private val pngSignature =
+        byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
 
     private fun int32(v: Int): ByteArray = byteArrayOf(
         ((v shr 24) and 0xFF).toByte(),
@@ -70,6 +74,14 @@ class NoReencodeTest {
         ((v shr 8) and 0xFF).toByte(),
         (v and 0xFF).toByte(),
     )
+
+    /** A full chunk with a fixed placeholder CRC. */
+    private fun chunk(type: String, data: ByteArray): ByteArray {
+        val crc = byteArrayOf(0xDE.toByte(), 0xAD.toByte(), 0xBE.toByte(), 0xEF.toByte())
+        return int32(data.size) + type.toByteArray(Charsets.ISO_8859_1) + data + crc
+    }
+
+    // --- MP4 atom construction helpers -----------------------------------
 
     private fun atom(type: String, payload: ByteArray): ByteArray {
         val size = 8 + payload.size
@@ -105,7 +117,7 @@ class NoReencodeTest {
         return atom("moov", udta)
     }
 
-    // --- image: no re-encode ---------------------------------------------
+    // --- image (JPEG): no re-encode ----------------------------------------
 
     @Test
     fun `image scan data is byte-identical after stripping metadata`() {
@@ -116,8 +128,9 @@ class NoReencodeTest {
         )
         val out = ImageMetadataScrubber.scrub(input)
 
+        assertNotNull(out)
         // The scan region (SOS header + entropy-coded data) survives verbatim.
-        assertArrayEquals(scanRegion(), extractScan(out))
+        assertArrayEquals(scanRegion(), extractScan(out!!))
 
         // But the metadata containers are gone.
         assertFalse(contains(out, exifPayload()))
@@ -128,8 +141,38 @@ class NoReencodeTest {
     @Test
     fun `image with no metadata is byte-identical (no re-encode)`() {
         val input = jpeg()
-        val out = ImageMetadataScrubber.scrub(input)
-        assertArrayEquals(input, out)
+        assertArrayEquals(input, ImageMetadataScrubber.scrub(input))
+    }
+
+    // --- image (PNG): no re-encode -----------------------------------------
+
+    @Test
+    fun `png image chunks are byte-identical after stripping metadata`() {
+        val ihdr = chunk("IHDR", byteArrayOf(0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 0, 0))
+        val idat = chunk("IDAT", byteArrayOf(0x78, 0x9C.toByte(), 0x63, 0x60, 0x60, 0x60, 0x00, 0x00, 0x00, 0x04, 0x00, 0x01))
+        val iend = chunk("IEND", ByteArray(0))
+        val exif = chunk("eXIf", exifPayload())
+        val text = chunk("iTXt", "<GPS>home</GPS>".toByteArray())
+
+        val input = pngSignature + ihdr + exif + text + idat + iend
+        val out = PngMetadataScrubber.scrub(input)
+
+        assertNotNull(out)
+        // The image chunks survive verbatim, CRCs included.
+        assertArrayEquals(pngSignature + ihdr + idat + iend, out!!)
+
+        // But the metadata chunks are gone.
+        assertFalse(contains(out, exifPayload()))
+        assertFalse(contains(out, "<GPS>home</GPS>".toByteArray()))
+    }
+
+    @Test
+    fun `png with no metadata is byte-identical (no re-encode)`() {
+        val input = pngSignature +
+            chunk("IHDR", byteArrayOf(0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 0, 0)) +
+            chunk("IDAT", byteArrayOf(0x78, 0x9C.toByte())) +
+            chunk("IEND", ByteArray(0))
+        assertArrayEquals(input, PngMetadataScrubber.scrub(input))
     }
 
     // --- video: no re-encode ---------------------------------------------
@@ -144,8 +187,9 @@ class NoReencodeTest {
         )
         val out = VideoMetadataScrubber.scrub(input)
 
+        assertNotNull(out)
         // The mdat media payload survives verbatim.
-        assertArrayEquals(mdatPayload(), extractMdat(out))
+        assertArrayEquals(mdatPayload(), extractMdat(out!!))
 
         // But the metadata atoms are gone.
         assertFalse(contains(out, gpsPayload()))
@@ -155,8 +199,7 @@ class NoReencodeTest {
     @Test
     fun `video with no metadata is byte-identical (no re-encode)`() {
         val input = mp4(atom("moov", atom("udta", metaAtom(atom("ilst", ByteArray(0))))))
-        val out = VideoMetadataScrubber.scrub(input)
-        assertArrayEquals(input, out)
+        assertArrayEquals(input, VideoMetadataScrubber.scrub(input))
     }
 
     // --- helpers ---------------------------------------------------------

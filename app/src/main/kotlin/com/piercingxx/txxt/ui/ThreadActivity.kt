@@ -1,5 +1,6 @@
 package com.piercingxx.txxt.ui
 
+import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
@@ -10,10 +11,14 @@ import android.speech.tts.TextToSpeech
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
+import android.widget.Toast
+import androidx.core.app.ActivityCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.piercingxx.txxt.R
+import com.piercingxx.txxt.data.OutboundStore
 import com.piercingxx.txxt.data.TxxTDatabase
+import com.piercingxx.txxt.service.PermissionGate
 import com.piercingxx.txxt.service.SendPipeline
 import com.piercingxx.txxt.theme.SharedPreferencesThemeKeyValueStore
 import com.piercingxx.txxt.theme.ThemeApplier
@@ -21,7 +26,8 @@ import com.piercingxx.txxt.theme.ThemeController
 import com.piercingxx.txxt.theme.ThemeStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /** Intent extra: the conversation id the thread screen opens. */
@@ -57,6 +63,14 @@ class ThreadActivity : Activity() {
      */
     private var tts: TextToSpeech? = null
 
+    /**
+     * The single on-device speech recognizer used by [startDictation]. Created
+     * lazily on the first dictation tap (only when the platform reports
+     * recognition as available) and destroyed once in [onDestroy] — one shared
+     * engine for the activity's lifetime instead of a leaked recognizer per tap.
+     */
+    private var recognizer: SpeechRecognizer? = null
+
     private val database: TxxTDatabase by lazy { TxxTDatabase.build(this) }
 
     /**
@@ -75,7 +89,15 @@ class ThreadActivity : Activity() {
         )
     }
 
-    private val scope: CoroutineScope = MainScope()
+    /**
+     * The activity-scoped coroutine scope. A [SupervisorJob] keeps one failed
+     * child from cancelling the others; [Dispatchers.Main.immediate] keeps UI
+     * work on the main thread without an extra post when already there. The
+     * scope is cancelled in [onDestroy] so the Room Flow collection started by
+     * [observeMessages] cannot outlive the activity and leak it.
+     */
+    private val scope: CoroutineScope =
+        CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private var conversationId: Long = 0L
 
@@ -157,10 +179,29 @@ class ThreadActivity : Activity() {
      * recognition result through [DictationInsert.insert] into the compose
      * field. No audio is ever sent or received — dictation only writes text into
      * the local compose field (docs/PRIVACY.md §5).
+     *
+     * Before listening, the `RECORD_AUDIO` runtime permission is checked via
+     * [PermissionGate.canRecord]: a denial triggers the system permission
+     * prompt instead of silently dead recognition, and a platform without
+     * recognition support is reported rather than crashing on create.
      */
     private fun startDictation() {
-        val recognizer = SpeechRecognizer.createSpeechRecognizer(this)
-        recognizer.setRecognitionListener(object : RecognitionListener {
+        if (!PermissionGate().canRecord(this)) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.RECORD_AUDIO),
+                REQUEST_RECORD_AUDIO,
+            )
+            return
+        }
+        val speechRecognizer = recognizer ?: run {
+            if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+                Toast.makeText(this, errorMessage(SpeechRecognizer.ERROR_CLIENT), Toast.LENGTH_SHORT).show()
+                return
+            }
+            SpeechRecognizer.createSpeechRecognizer(this).also { recognizer = it }
+        }
+        speechRecognizer.setRecognitionListener(object : RecognitionListener {
             override fun onResults(results: android.os.Bundle) {
                 val recognized = results
                     .getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
@@ -172,7 +213,9 @@ class ThreadActivity : Activity() {
             override fun onBeginningOfSpeech() {}
             override fun onBufferReceived(buffer: ByteArray?) {}
             override fun onEndOfSpeech() {}
-            override fun onError(error: Int) {}
+            override fun onError(error: Int) {
+                Toast.makeText(this@ThreadActivity, errorMessage(error), Toast.LENGTH_SHORT).show()
+            }
             override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
             override fun onPartialResults(partialResults: android.os.Bundle?) {}
             override fun onReadyForSpeech(params: android.os.Bundle?) {}
@@ -182,7 +225,7 @@ class ThreadActivity : Activity() {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
         }
-        recognizer.startListening(intent)
+        speechRecognizer.startListening(intent)
     }
 
     /**
@@ -214,6 +257,13 @@ class ThreadActivity : Activity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        // Cancel the scope first so the Room Flow collection stops feeding a
+        // dead activity — without this, every open leaks the activity, its
+        // adapter and the DB observer forever.
+        scope.cancel()
+        // One recognizer for the activity's lifetime: destroyed only if created.
+        recognizer?.destroy()
+        recognizer = null
         tts?.shutdown()
         tts = null
     }
@@ -229,14 +279,50 @@ class ThreadActivity : Activity() {
         }
     }
 
-    /** Sends the composed text via [SendPipeline.sendSms] to the thread's participant. */
+    /**
+     * Sends the composed text to the thread's participant (H6b).
+     *
+     * The outgoing message is persisted **before** sending (`sent = false`, so
+     * an interrupted send is re-driven by the reboot reconcile) and marked sent
+     * only after [SendPipeline.sendSms] reports the platform send was attempted
+     * — which is also when the compose field clears. A denied gate or missing
+     * recipient never destroys the draft: the field keeps its text and a toast
+     * says why nothing was sent.
+     */
     private fun sendComposed() {
         val body = composeInput.text?.toString()?.trim().orEmpty()
         if (body.isEmpty()) return
         scope.launch(Dispatchers.Main) {
-            val destination = destinationAddress() ?: return@launch
-            SendPipeline.sendSms(this@ThreadActivity, destination, body)
-            composeInput.setText("")
+            val destination = destinationAddress()
+            if (destination == null) {
+                Toast.makeText(
+                    this@ThreadActivity,
+                    "No recipient for this thread",
+                    Toast.LENGTH_LONG,
+                ).show()
+                return@launch
+            }
+            // Persist through the shared OutboundStore path (collision-safe id
+            // allocation under the same lock inbound delivery uses) — NOT a
+            // bare wall-clock id, which could REPLACE-destroy a row the
+            // delivery path wrote in the same millisecond.
+            val messageId = OutboundStore.persistOutgoingSms(
+                conversations = database.conversationDao(),
+                messages = database.messageDao(),
+                address = destination,
+                body = body,
+            )
+            val ok = SendPipeline.sendSms(this@ThreadActivity, destination, body)
+            if (ok) {
+                database.messageDao().markSent(messageId)
+                composeInput.setText("")
+            } else {
+                Toast.makeText(
+                    this@ThreadActivity,
+                    "Message not sent",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
         }
     }
 
@@ -249,6 +335,27 @@ class ThreadActivity : Activity() {
     }
 
     companion object {
+        /** Request code for the `RECORD_AUDIO` runtime-permission prompt. */
+        const val REQUEST_RECORD_AUDIO = 4_001
+
+        /**
+         * A short human-readable line for a [SpeechRecognizer] error code, so a
+         * failed dictation says what happened instead of failing silently. Pure
+         * over its input — JVM-testable.
+         */
+        fun errorMessage(error: Int): String = when (error) {
+            SpeechRecognizer.ERROR_NO_MATCH -> "Didn't catch any speech — try again."
+            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Didn't hear anything — try again."
+            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS ->
+                "Mic permission is off — allow it to dictate."
+            SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Dictation is busy — try again."
+            SpeechRecognizer.ERROR_NETWORK_TIMEOUT,
+            SpeechRecognizer.ERROR_NETWORK,
+            SpeechRecognizer.ERROR_SERVER,
+            -> "Dictation is unavailable right now."
+            else -> "Dictation failed — try again."
+        }
+
         /** Builds a launch intent for [ThreadActivity] for the given conversation. */
         fun launchIntent(context: android.content.Context, conversationId: Long): Intent =
             Intent(context, ThreadActivity::class.java)

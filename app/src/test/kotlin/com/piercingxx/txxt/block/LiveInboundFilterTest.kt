@@ -1,7 +1,9 @@
 package com.piercingxx.txxt.block
 
 import com.piercingxx.txxt.ui.SettingsBlocking
+import com.piercingxx.txxt.ui.SettingsBlockingStore
 import com.piercingxx.txxt.ui.SettingsStarred
+import io.mockk.mockk
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -66,8 +68,55 @@ class LiveInboundFilterTest {
         )
         LiveInboundFilter.apply(SettingsBlocking(), SettingsStarred())
         val (disposition, _) = LiveInboundFilter.current.evaluate("+1 555 8888", "Hello")
-        // No longer blocked after a fresh (empty) apply.
-        assertEquals(MessageDisposition.QUARANTINE, disposition)
+        // No longer blocked after a fresh (empty) apply. The unknown sender now
+        // DELIVERs: factory default is fail-open (F6) — docs/PRIVACY.md §8.7 is
+        // proposed, not adopted, so quarantine is opt-in.
+        assertEquals(MessageDisposition.DELIVER, disposition)
+    }
+
+    // ---- Process-death hydration (M5): ensureLoaded ----
+
+    @Test
+    fun `ensureLoaded hydrates persisted rules into a fresh process state`() {
+        // Simulates process death: fresh object state, nothing applied yet.
+        LiveInboundFilter.resetForTest()
+        LiveInboundFilter.blockingStoreLoader = { _ ->
+            SettingsBlockingStore(blockedAddresses = setOf("+1 555 7000"))
+        }
+        try {
+            // The receivers call this with the real Context; the fake loader
+            // ignores it. After hydration the persisted block list is live.
+            LiveInboundFilter.ensureLoaded(mockk(relaxed = true))
+            val (disposition, reason) = LiveInboundFilter.current.evaluate("+1 555 7000", "Hello")
+            assertEquals(MessageDisposition.BLOCK, disposition)
+            assertEquals(BlockReason.Type.BLOCKED_LIST, reason!!.type)
+        } finally {
+            LiveInboundFilter.resetForTest()
+        }
+    }
+
+    @Test
+    fun `ensureLoaded is idempotent - a second load does not clobber the live filter`() {
+        LiveInboundFilter.resetForTest()
+        var loads = 0
+        LiveInboundFilter.blockingStoreLoader = { _ ->
+            loads += 1
+            SettingsBlockingStore(blockedAddresses = setOf("+1 555 7000"))
+        }
+        try {
+            LiveInboundFilter.ensureLoaded(mockk(relaxed = true))
+            // An explicit in-process apply supersedes persisted state...
+            LiveInboundFilter.apply(SettingsBlocking().blockAddress("+1 555 9000"), SettingsStarred())
+            // ...so a later broadcast's ensureLoaded must not reload prefs.
+            LiveInboundFilter.ensureLoaded(mockk(relaxed = true))
+            assertEquals(1, loads)
+            val (disposition, _) = LiveInboundFilter.current.evaluate("+1 555 7000", "Hello")
+            assertEquals(MessageDisposition.DELIVER, disposition)
+            val (blocked, _) = LiveInboundFilter.current.evaluate("+1 555 9000", "Hello")
+            assertEquals(MessageDisposition.BLOCK, blocked)
+        } finally {
+            LiveInboundFilter.resetForTest()
+        }
     }
 
     // ---- Wiring: the settings screen routes through the seam ----

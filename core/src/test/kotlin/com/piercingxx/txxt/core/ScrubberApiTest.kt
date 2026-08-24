@@ -1,6 +1,9 @@
 package com.piercingxx.txxt.core
 
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -11,12 +14,16 @@ import org.junit.Test
  * [MetadataScrubber.scrub] is a single, unconditional strip — there is no
  * `keepMetadata`, no `preserveMetadata`, and no boolean that skips the scrub.
  *
- * Synthetic JPEG and MP4/MOV payloads are constructed in Kotlin — minimal but
- * structurally valid containers with metadata embedded — because no real media
- * fixtures exist in the tree and no parsing library is available offline (see
- * .skippy/IMPLEMENTATION_PLAN.md, "Deferred verification"). This task owns the
- * API-surface / no-toggle guarantee only; the strip behaviour itself is T1's
- * and T2's.
+ * Also locks the fail-closed contract at the dispatch level: a recognized but
+ * malformed container returns `null` (the caller must not send), while an
+ * unrecognized format is returned unchanged.
+ *
+ * Synthetic JPEG, PNG and MP4/MOV payloads are constructed in Kotlin — minimal
+ * but structurally valid containers with metadata embedded — because no real
+ * media fixtures exist in the tree and no parsing library is available offline
+ * (see .skippy/IMPLEMENTATION_PLAN.md, "Deferred verification"). This task owns
+ * the API-surface / no-toggle guarantee only; the strip behaviour itself is
+ * T1's and T2's.
  */
 class ScrubberApiTest {
 
@@ -56,7 +63,10 @@ class ScrubberApiTest {
     private fun exifPayload(): ByteArray =
         byteArrayOf('E'.code.toByte(), 'x'.code.toByte(), 'i'.code.toByte(), 'f'.code.toByte(), 0x00, 0x00, 0x01, 0x02, 0x03)
 
-    // --- MP4 atom construction helpers -----------------------------------
+    // --- PNG construction helpers ----------------------------------------
+
+    private val pngSignature =
+        byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
 
     private fun int32(v: Int): ByteArray = byteArrayOf(
         ((v shr 24) and 0xFF).toByte(),
@@ -64,6 +74,14 @@ class ScrubberApiTest {
         ((v shr 8) and 0xFF).toByte(),
         (v and 0xFF).toByte(),
     )
+
+    /** A full chunk with a fixed placeholder CRC. */
+    private fun chunk(type: String, data: ByteArray): ByteArray {
+        val crc = byteArrayOf(0xDE.toByte(), 0xAD.toByte(), 0xBE.toByte(), 0xEF.toByte())
+        return int32(data.size) + type.toByteArray(Charsets.ISO_8859_1) + data + crc
+    }
+
+    // --- MP4 atom construction helpers -----------------------------------
 
     private fun atom(type: String, payload: ByteArray): ByteArray {
         val size = 8 + payload.size
@@ -115,7 +133,7 @@ class ScrubberApiTest {
     }
 
     @Test
-    fun `scrub takes no boolean parameter that could skip stripping`() {
+    fun `scrub takes exactly one byte array parameter`() {
         val scrub = MetadataScrubber::class.java.methods.single { it.name == "scrub" }
         val params = scrub.parameterTypes.map { it.name }
         assertTrue(
@@ -130,7 +148,8 @@ class ScrubberApiTest {
     fun `single entry point strips JPEG metadata unconditionally`() {
         val input = jpeg(appSegment(0xE1, exifPayload()))
         val out = MetadataScrubber.scrub(input)
-        assertFalse("JPEG EXIF must be stripped", contains(out, exifPayload()))
+        assertNotNull(out)
+        assertFalse("JPEG EXIF must be stripped", contains(out!!, exifPayload()))
         assertTrue("JPEG scan data must survive", contains(out, scanData()))
     }
 
@@ -138,8 +157,40 @@ class ScrubberApiTest {
     fun `single entry point strips MP4 metadata unconditionally`() {
         val input = mp4(moovWithMetadata(ilstItem("\u00A9xyz", gpsPayload())))
         val out = MetadataScrubber.scrub(input)
-        assertFalse("MP4 GPS must be stripped", contains(out, gpsPayload()))
+        assertNotNull(out)
+        assertFalse("MP4 GPS must be stripped", contains(out!!, gpsPayload()))
         assertTrue("MP4 mdat must survive", contains(out, mdatPayload()))
+    }
+
+    // --- fail-closed dispatch ----------------------------------------------
+
+    @Test
+    fun `corrupt JPEG fails closed`() {
+        // SOI followed by garbage that is not a marker byte.
+        val corrupt = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0x42, 0x13, 0x37)
+        assertNull(MetadataScrubber.scrub(corrupt))
+    }
+
+    @Test
+    fun `oversized MP4 atom fails closed`() {
+        val ftyp = atom("ftyp", "isom\u0000\u0000\u0000\u0000isom".toByteArray(Charsets.ISO_8859_1))
+        val overlong = int32(Int.MAX_VALUE) + "mdat".toByteArray(Charsets.ISO_8859_1)
+        assertNull(MetadataScrubber.scrub(ftyp + overlong))
+    }
+
+    @Test
+    fun `truncated PNG chunk fails closed`() {
+        val headerOnly = pngSignature +
+            int32(64) + "IDAT".toByteArray(Charsets.ISO_8859_1) + // claims 64 data bytes...
+            byteArrayOf(0x01, 0x02) // ...and carries none of them
+        assertNull(MetadataScrubber.scrub(headerOnly))
+    }
+
+    @Test
+    fun `unrecognized format passes through non-null and unchanged`() {
+        val gif = "GIF89a" + "\u00A9nothing-to-strip-here".repeat(2)
+        val bytes = gif.toByteArray(Charsets.ISO_8859_1)
+        assertArrayEquals(bytes, MetadataScrubber.scrub(bytes))
     }
 
     // --- helpers ---------------------------------------------------------

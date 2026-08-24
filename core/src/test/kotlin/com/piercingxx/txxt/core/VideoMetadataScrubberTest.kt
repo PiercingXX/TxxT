@@ -2,6 +2,7 @@ package com.piercingxx.txxt.core
 
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -11,6 +12,12 @@ import org.junit.Test
  * creation-time/encoder atoms embedded — because no real media fixtures exist
  * in the tree and no parsing library is available offline (see
  * .skippy/IMPLEMENTATION_PLAN.md, "Deferred verification").
+ *
+ * Covers both metadata shapes: the nested `udta` > `meta` > `ilst` layout and
+ * the flat QuickTime/MediaRecorder layout where ©-prefixed keys sit directly
+ * under `udta`. Also covers the fail-closed contract: recognized-but-malformed
+ * MP4/MOV input must return `null`, never partially-scrubbed or unscrubbed
+ * bytes.
  */
 class VideoMetadataScrubberTest {
 
@@ -66,12 +73,31 @@ class VideoMetadataScrubberTest {
         return atom("moov", udta)
     }
 
-    // --- tests -----------------------------------------------------------
+    /** A moov whose udta holds ©-prefixed keys directly (no meta/ilst nesting),
+     *  exactly the shape QuickTime .mov files and Android MediaRecorder produce.
+     *  [siblings] ride along under udta and must survive. */
+    private fun moovWithFlatUdtaMetadata(vararg siblings: Pair<String, ByteArray>): ByteArray {
+        var udtaPayload = ByteArray(0)
+        for ((type, data) in arrayOf(
+            "\u00A9xyz" to gpsPayload(),
+            "\u00A9mak" to makePayload(),
+            "\u00A9mod" to modelPayload(),
+            "\u00A9day" to datePayload(),
+        )) {
+            udtaPayload += atom(type, data)
+        }
+        for ((type, data) in siblings) {
+            udtaPayload += atom(type, data)
+        }
+        return atom("moov", atom("udta", udtaPayload))
+    }
+
+    // --- nested ilst shape -------------------------------------------------
 
     @Test
     fun `strips GPS atom`() {
         val input = mp4(moovWithMetadata(ilstItem("\u00A9xyz", gpsPayload())))
-        val out = VideoMetadataScrubber.scrub(input)
+        val out = VideoMetadataScrubber.scrub(input)!!
         assertFalse(contains(out, gpsPayload()))
         assertTrue(contains(out, mdatPayload()))
     }
@@ -79,7 +105,7 @@ class VideoMetadataScrubberTest {
     @Test
     fun `strips encoder atom`() {
         val input = mp4(moovWithMetadata(ilstItem("\u00A9too", encoderPayload())))
-        val out = VideoMetadataScrubber.scrub(input)
+        val out = VideoMetadataScrubber.scrub(input)!!
         assertFalse(contains(out, encoderPayload()))
         assertTrue(contains(out, mdatPayload()))
     }
@@ -87,7 +113,7 @@ class VideoMetadataScrubberTest {
     @Test
     fun `strips creation-time atom`() {
         val input = mp4(moovWithMetadata(ilstItem("\u00A9day", datePayload())))
-        val out = VideoMetadataScrubber.scrub(input)
+        val out = VideoMetadataScrubber.scrub(input)!!
         assertFalse(contains(out, datePayload()))
         assertTrue(contains(out, mdatPayload()))
     }
@@ -100,7 +126,7 @@ class VideoMetadataScrubberTest {
                 ilstItem("\u00A9mod", modelPayload()),
             ),
         )
-        val out = VideoMetadataScrubber.scrub(input)
+        val out = VideoMetadataScrubber.scrub(input)!!
         assertFalse(contains(out, makePayload()))
         assertFalse(contains(out, modelPayload()))
         assertTrue(contains(out, mdatPayload()))
@@ -117,7 +143,7 @@ class VideoMetadataScrubberTest {
                 ilstItem("\u00A9mod", modelPayload()),
             ),
         )
-        val out = VideoMetadataScrubber.scrub(input)
+        val out = VideoMetadataScrubber.scrub(input)!!
         assertFalse(contains(out, gpsPayload()))
         assertFalse(contains(out, encoderPayload()))
         assertFalse(contains(out, datePayload()))
@@ -127,25 +153,63 @@ class VideoMetadataScrubberTest {
     }
 
     @Test
-    fun `preserves mdat media payload byte-identically`() {
-        val input = mp4(
-            moovWithMetadata(
-                ilstItem("\u00A9xyz", gpsPayload()),
-                ilstItem("\u00A9too", encoderPayload()),
-            ),
-        )
-        val out = VideoMetadataScrubber.scrub(input)
+    fun `preserves non-metadata ilst items`() {
+        val title = ilstItem("\u00A9nam", "My Vacation".toByteArray(Charsets.ISO_8859_1))
+        val input = mp4(moovWithMetadata(title, ilstItem("\u00A9xyz", gpsPayload())))
+        val out = VideoMetadataScrubber.scrub(input)!!
+        assertTrue(contains(out, "My Vacation".toByteArray(Charsets.ISO_8859_1)))
+        assertFalse(contains(out, gpsPayload()))
+    }
+
+    // --- flat udta shape (QuickTime MOV / MediaRecorder MP4) ---------------
+
+    @Test
+    fun `drops copyright atoms placed directly under udta`() {
+        val siblingPayload = "some tag text".toByteArray(Charsets.ISO_8859_1)
+        val input = mp4(moovWithFlatUdtaMetadata("Xtra" to siblingPayload))
+        val out = VideoMetadataScrubber.scrub(input)!!
+
+        // All four ©-prefixed direct children of udta are gone...
+        assertFalse(contains(out, gpsPayload()))
+        assertFalse(contains(out, makePayload()))
+        assertFalse(contains(out, modelPayload()))
+        assertFalse(contains(out, datePayload()))
+
+        // ...while the non-metadata sibling, ftyp and mdat all survive intact.
+        assertTrue(contains(out, siblingPayload))
+        assertArrayEquals(ftypAtom(), extractFtyp(out))
         assertArrayEquals(mdatPayload(), extractMdat(out))
     }
 
     @Test
-    fun `preserves non-metadata ilst items`() {
-        val title = ilstItem("\u00A9nam", "My Vacation".toByteArray(Charsets.ISO_8859_1))
-        val input = mp4(moovWithMetadata(title, ilstItem("\u00A9xyz", gpsPayload())))
-        val out = VideoMetadataScrubber.scrub(input)
-        assertTrue(contains(out, "My Vacation".toByteArray(Charsets.ISO_8859_1)))
+    fun `nested ilst shape keeps being scrubbed alongside the flat shape`() {
+        // A file with BOTH shapes at once: nothing ©-prefixed survives anywhere
+        // under udta.
+        val nestedGps = ilstItem("\u00A9xyz", gpsPayload())
+        val ilst = atom("ilst", nestedGps)
+        val meta = metaAtom(ilst)
+        val flatMake = atom("\u00A9mak", makePayload())
+        val moov = atom("moov", atom("udta", meta + flatMake))
+        val input = mp4(moov)
+        val out = VideoMetadataScrubber.scrub(input)!!
         assertFalse(contains(out, gpsPayload()))
+        assertFalse(contains(out, makePayload()))
+        assertTrue(contains(out, mdatPayload()))
     }
+
+    @Test
+    fun `copyright-prefixed atoms outside udta are left alone`() {
+        // Only the udta subtree (and ilst lists) get the © sweep: a ©-typed atom
+        // elsewhere in an unknown container is copied verbatim rather than
+        // guessed at.
+        val odd = atom("\u00A9odd", "elsewhere".toByteArray(Charsets.ISO_8859_1))
+        val container = atom("skip", odd)
+        val input = mp4(atom("moov", container))
+        val out = VideoMetadataScrubber.scrub(input)!!
+        assertTrue(contains(out, "elsewhere".toByteArray(Charsets.ISO_8859_1)))
+    }
+
+    // --- passthrough -------------------------------------------------------
 
     @Test
     fun `returns non-MP4 input unchanged`() {
@@ -166,7 +230,55 @@ class VideoMetadataScrubberTest {
         assertArrayEquals(input, VideoMetadataScrubber.scrub(input))
     }
 
+    // --- fail-closed: malformed MP4/MOV input returns null ------------------
+
+    @Test
+    fun `atom size overflowing past end of stream fails closed`() {
+        val ftyp = ftypAtom()
+        // A top-level atom claiming ~2 GiB but carrying no payload bytes.
+        val overlong = int32(Int.MAX_VALUE) + "mdat".toByteArray(Charsets.ISO_8859_1)
+        assertNull(VideoMetadataScrubber.scrub(ftyp + overlong))
+    }
+
+    @Test
+    fun `trailing bytes that are not an atom fail closed`() {
+        // Previously this silently dropped the trailing bytes; now it must
+        // refuse the whole file rather than send possibly-unscrubbed tails.
+        val input = mp4(atom("moov", atom("udta", metaAtom(atom("ilst", ByteArray(0)))))) +
+            byteArrayOf(0x01, 0x02, 0x03, 0x04)
+        assertNull(VideoMetadataScrubber.scrub(input))
+    }
+
+    @Test
+    fun `truncated atom header fails closed`() {
+        val input = ftypAtom() + byteArrayOf(0x00, 0x00, 0x08) // 3 bytes: less than a header
+        assertNull(VideoMetadataScrubber.scrub(input))
+    }
+
+    @Test
+    fun `undersized atom fails closed`() {
+        val undersized = int32(4) + "mdat".toByteArray(Charsets.ISO_8859_1) // size < header
+        assertNull(VideoMetadataScrubber.scrub(ftypAtom() + undersized))
+    }
+
+    @Test
+    fun `truncated metadata-bearing mp4 never comes back as-is`() {
+        // Cut a metadata-carrying file mid-moov: even though the EXIF-like
+        // payload bytes may survive inside, the unparseable structure must
+        // yield null, not the original.
+        val input = mp4(
+            moovWithMetadata(
+                ilstItem("\u00A9xyz", gpsPayload()),
+                ilstItem("\u00A9mak", makePayload()),
+            ),
+        ).copyOfRange(0, 30)
+        assertNull(VideoMetadataScrubber.scrub(input))
+    }
+
     // --- helpers ---------------------------------------------------------
+
+    private fun ftypAtom(): ByteArray =
+        atom("ftyp", "isom\u0000\u0000\u0000\u0000isom".toByteArray(Charsets.ISO_8859_1))
 
     private fun mdatPayload(): ByteArray =
         byteArrayOf(0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07)
@@ -192,6 +304,12 @@ class VideoMetadataScrubberTest {
             i += size
         }
         error("no mdat atom in test MP4")
+    }
+
+    /** Extracts the whole top-level `ftyp` atom. */
+    private fun extractFtyp(mp4: ByteArray): ByteArray {
+        require(String(mp4, 4, 4, Charsets.ISO_8859_1) == "ftyp") { "test MP4 must start with ftyp" }
+        return mp4.copyOfRange(0, readInt32(mp4, 0))
     }
 
     private fun readInt32(b: ByteArray, i: Int): Int =

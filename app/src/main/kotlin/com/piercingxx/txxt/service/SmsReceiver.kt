@@ -23,11 +23,15 @@ import com.piercingxx.txxt.block.MessageDisposition
  */
 class SmsReceiver(
     /**
-     * Inbound message filter — evaluates sender and body against block lists,
-     * content filters, and unknown-sender rules. Messages that are [BLOCK] or
-     * [QUARANTINE] do not reach the auto-reply gate.
+     * Resolves the inbound message filter at receive time — evaluates sender
+     * and body against block lists, content filters, and unknown-sender rules.
+     * Messages that are [BLOCK] or [QUARANTINE] do not reach the auto-reply
+     * gate. A lazy provider (resolved inside `onReceive`, after
+     * `LiveInboundFilter.ensureLoaded`) rather than a constructor-time capture,
+     * so the filter always reflects the freshest loaded rules instead of a
+     * snapshot taken when this receiver was instantiated.
      */
-    private val inboundFilter: InboundFilter = LiveInboundFilter.current,
+    private val inboundFilterProvider: () -> InboundFilter = { LiveInboundFilter.current },
     /**
      * Whether the auto-reply SMS is enabled. Off by default (`docs/PRIVACY.md:96`);
      * the flag is drivable so the reply can be turned on (and per-contact
@@ -76,12 +80,17 @@ class SmsReceiver(
 ) : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
+        // Hydrate the persisted blocking rules once per process (M5): without
+        // this the filter stays empty after process death/reboot until Settings
+        // is reopened. Resolved before any evaluation.
+        LiveInboundFilter.ensureLoaded(context)
+
         if (intent.action != smsAction) return
 
         val sender = extractSender(intent) ?: return
         val body = extractBody(intent)
 
-        val (disposition, _) = inboundFilter.evaluate(sender, body)
+        val (disposition, _) = inboundFilterProvider().evaluate(sender, body)
         if (disposition != MessageDisposition.DELIVER) return
 
         if (ReceivePolicy.shouldAutoReply(

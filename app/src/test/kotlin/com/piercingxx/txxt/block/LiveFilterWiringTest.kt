@@ -38,9 +38,11 @@ class LiveFilterWiringTest {
         }
 
     /**
-     * Builds an [SmsReceiver] with the **default** `inboundFilter` (no explicit
-     * filter argument), so it reads [LiveInboundFilter.current] at construction.
-     * The caller must call [LiveInboundFilter.apply] before constructing.
+     * Builds an [SmsReceiver] with the **default** `inboundFilterProvider` (no
+     * explicit filter argument), so `onReceive` resolves
+     * [LiveInboundFilter.current] after `ensureLoaded`. The caller must call
+     * [LiveInboundFilter.apply] before driving `onReceive` (which also marks
+     * the store loaded, so hydration cannot clobber the applied filter).
      */
     private fun receiver(
         autoReplyEnabled: Boolean,

@@ -82,14 +82,20 @@ class SettingsBlocking(
      * Builds the [InboundFilter] the running application applies, from the
      * current rules, the [starred] contact list, and the caller's known-contact
      * set. This is the wiring that makes the settings the user edits reach the
-     * inbound message path.
+     * inbound message path. [quarantineUnknownSenders] passes through to
+     * [InboundFilter]: quarantine stays opt-in until a quarantine store exists.
      */
-    fun filter(starred: SettingsStarred, knownContacts: Set<String> = emptySet()): InboundFilter =
+    fun filter(
+        starred: SettingsStarred,
+        knownContacts: Set<String> = emptySet(),
+        quarantineUnknownSenders: Boolean = false,
+    ): InboundFilter =
         InboundFilter(
             knownContacts = knownContacts,
             blockedAddresses = blockedAddresses.toSet(),
             contentKeywords = keywordRules.toSet(),
             contentPhrases = phraseRules.toSet(),
             starredContacts = starred.contacts(),
+            quarantineUnknownSenders = quarantineUnknownSenders,
         )
 }

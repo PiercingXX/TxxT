@@ -4,14 +4,26 @@ package com.piercingxx.txxt.core
  * Strips metadata-bearing atoms from an MP4/MOV byte stream.
  *
  * An MP4/MOV file is a sequence of atoms (boxes). Each atom is a 4-byte
- * big-endian size (including the header) followed by a 4-byte type. Most
- * privacy metadata lives deep inside the `moov` movie atom under
- * `udta` > `meta` > `ilst` (the item list), where each item atom's type is the
- * metadata key (`©xyz` GPS, `©too` encoder, `©day` creation date, `©mak`/`©mod`
- * device make/model). This scrubber walks the atom tree, recurses into the
- * container atoms, drops those metadata item atoms, and copies everything else
- * byte-for-byte — including the `mdat` media payload, so no re-encode happens.
- * Non-MP4/MOV input is returned unchanged.
+ * big-endian size (including the header) followed by a 4-byte type. Privacy
+ * metadata lives inside the `moov` movie atom in two shapes:
+ *
+ *  - nested: `udta` > `meta` > `ilst` (the item list), where each item atom's
+ *    type is the metadata key (`©xyz` GPS, `©too` encoder, `©day` creation
+ *    date, `©mak`/`©mod` device make/model);
+ *  - flat: QuickTime `.mov` files and Android `MediaRecorder` MP4s place
+ *    ©-prefixed keys (`©xyz`, `©mak`, `©mod`, `©day`, …) as **direct children
+ *    of `udta`**, with no `meta`/`ilst` nesting at all.
+ *
+ * This scrubber walks the atom tree, recurses into the container atoms, and
+ * drops the known metadata item atoms inside `ilst` plus every ©-prefixed
+ * atom under the `udta` subtree — then copies everything else byte-for-byte,
+ * including the `mdat` media payload, so no re-encode happens.
+ *
+ * Fail-closed: MP4/MOV input whose structure cannot be parsed (a truncated or
+ * overlong atom header, trailing bytes that are not an atom) returns `null` —
+ * never partially-scrubbed bytes. Corrupt input must not leave the device with
+ * metadata intact. Input that is not an MP4/MOV (no recognizable leading atom)
+ * is returned unchanged.
  *
  * Pure-Kotlin with zero `android.*` imports so the scrub logic is JVM-testable
  * without a device (docs/PRIVACY.md §4).
@@ -38,30 +50,45 @@ object VideoMetadataScrubber {
     /**
      * Returns a copy of [mp4] with metadata atoms removed. The `mdat` media
      * payload is byte-identical to the input. Input that is not an MP4/MOV
-     * (no recognizable leading atom) is returned unchanged.
+     * (no recognizable leading atom) is returned unchanged; input whose atom
+     * structure cannot be parsed returns `null` — see the fail-closed note in
+     * the class KDoc.
      */
-    fun scrub(mp4: ByteArray): ByteArray {
+    fun scrub(mp4: ByteArray): ByteArray? {
         if (mp4.size < 8) return mp4
         if (atomTypeAt(mp4, 0, mp4.size) == null) return mp4
-        return scrubRange(mp4, 0, mp4.size, inIlst = false)
+        return scrubRange(mp4, 0, mp4.size, inIlst = false, inUdta = false)
     }
 
     /**
-     * Parses the atoms in [from, to) and returns the scrubbed bytes. When
-     * [inIlst] is true (we are inside an `ilst` item list) metadata-bearing
-     * item atoms are dropped.
+     * Parses the atoms in [from, to) and returns the scrubbed bytes, or `null`
+     * when the structure is unparseable. Two context flags drive dropping:
+     *  - [inIlst] — we are inside an `ilst` item list; its known metadata item
+     *    atoms ([METADATA_TYPES]) are dropped;
+     *  - [inUdta] — we are looking at a **direct child of `udta`**: QuickTime
+     *    `.mov` files and Android `MediaRecorder` MP4s place their ©-prefixed
+     *    keys (`©xyz`, `©mak`, `©mod`, `©day`, …) right there, with no
+     *    `meta`/`ilst` nesting at all, and every such © atom is metadata.
      */
-    private fun scrubRange(mp4: ByteArray, from: Int, to: Int, inIlst: Boolean): ByteArray {
+    private fun scrubRange(
+        mp4: ByteArray,
+        from: Int,
+        to: Int,
+        inIlst: Boolean,
+        inUdta: Boolean,
+    ): ByteArray? {
         val out = java.io.ByteArrayOutputStream(to - from)
         var i = from
         while (i < to) {
-            val header = atomHeader(mp4, i, to) ?: break
+            // An unparseable atom header means the structure is broken: fail
+            // closed rather than silently dropping trailing bytes.
+            val header = atomHeader(mp4, i, to) ?: return null
             val (size, type, headerLen) = header
             val payloadStart = i + headerLen
             val atomEnd = payloadStart + (size - headerLen)
 
-            if (inIlst && type in METADATA_TYPES) {
-                // Drop the metadata item atom (and its `data` payload).
+            if ((inIlst && type in METADATA_TYPES) || (inUdta && type.startsWith('\u00A9'))) {
+                // Drop the metadata item atom (and its payload).
                 i = atomEnd
                 continue
             }
@@ -69,10 +96,17 @@ object VideoMetadataScrubber {
             if (type in CONTAINER_TYPES) {
                 // `meta` is a fullbox: a 4-byte version/flags field precedes its
                 // child atoms. Recurse into the children and rebuild the atom
-                // with a recomputed size.
+                // with a recomputed size. The udta flag marks direct children
+                // only: inside deeper containers the ilst rule governs instead.
                 val versionFlags = if (type == "meta") readInt32(mp4, payloadStart) else null
                 val childStart = if (type == "meta") payloadStart + 4 else payloadStart
-                val scrubbed = scrubRange(mp4, childStart, atomEnd, inIlst = type == "ilst")
+                val scrubbed = scrubRange(
+                    mp4,
+                    childStart,
+                    atomEnd,
+                    inIlst = type == "ilst",
+                    inUdta = type == "udta",
+                ) ?: return null
                 out.write(containerHeader(type, versionFlags, scrubbed))
             } else {
                 out.write(mp4, i, atomEnd - i)
@@ -97,7 +131,9 @@ object VideoMetadataScrubber {
             // Size 0 means the atom extends to the end of the range.
             size = to - i
         }
-        if (size < headerLen || i + size > to) return null
+        // Overflow-safe bound check: an oversized size must fail closed here,
+        // before callers compute atomEnd from it.
+        if (size < headerLen || size > to - i) return null
         return Triple(size, type, headerLen)
     }
 
@@ -130,7 +166,7 @@ object VideoMetadataScrubber {
     private fun readInt64(b: ByteArray, i: Int): Int {
         val hi = readInt32(b, i)
         val lo = readInt32(b, i + 4)
-        if (hi != 0) return Int.MAX_VALUE // sizes beyond 2 GiB are out of scope
+        if (hi != 0) return Int.MAX_VALUE // sizes beyond 2 GiB fail closed on the range check
         return lo
     }
 

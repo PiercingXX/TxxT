@@ -1,5 +1,7 @@
 package com.piercingxx.txxt.ui
 
+import com.piercingxx.txxt.theme.ThemePreset
+
 /**
  * Lock-screen privacy posture for notifications.
  *
@@ -19,44 +21,57 @@ enum class LockScreenPrivacy {
 }
 
 /**
- * Global notification alert posture.
+ * Global notification alert style.
  *
  * PRIVACY.md §8: per-contact notification control defaults to the global
- * posture (silent / vibrate / sound). The default is [SOUND] — notifications
- * still announce; content redaction is governed separately by
+ * posture (silent / vibrate / sound). The default is [AlertStyle.SOUND] —
+ * notifications still announce; content redaction is governed separately by
  * [LockScreenPrivacy] (sender-only by default).
+ *
+ * Named `AlertStyle` (not `NotificationPosture`) so it cannot be confused by
+ * name with the service layer's `service.NotificationPosture`, which models a
+ * different dimension entirely (NOTIFY/REDACTED/SUPPRESS content posture).
  */
-enum class NotificationPosture {
+enum class AlertStyle {
     /** No sound and no vibration. */
     SILENT,
 
     /** Vibration only, no sound. */
     VIBRATE,
 
-    /** Sound (plus system vibration) — the default posture. */
+    /** Sound (plus system vibration) — the default alert style. */
     SOUND,
 }
 
 /**
  * The persisted settings model for the settings screen (WS12).
  *
- * Pure Kotlin with zero `android.*` imports so the model is JVM-testable
- * without a device, mirroring [ThreadMessagePresenter]. Holds the settings the
- * screen exposes and persists: lock-screen privacy, the global notification
- * posture, the theme auto-sync toggle, the chosen theme preset, and the font
- * mode.
+ * Pure Kotlin with zero `android.*` imports (the theme preset comes from the
+ * pure-Kotlin `theme` package) so the model is JVM-testable without a device,
+ * mirroring [ThreadMessagePresenter]. Holds the settings the screen exposes
+ * and persists: lock-screen privacy, the global notification alert style, the
+ * theme auto-sync toggle, the chosen theme preset, and the font mode.
  *
- * Defaults follow PRIVACY.md: lock-screen privacy defaults to sender-only
- * (§3), and theme auto-sync is on — TxxT's background theme follows the
- * xx-launcher by default, with a manual in-app theme winning (PRIVACY.md §7).
+ * The theme preset is [com.piercingxx.txxt.theme.ThemePreset] — the same enum
+ * the rendering path (ThemeStore/ThemeController) persists — so a pick made
+ * here drives the actual UI instead of writing to a shadow copy. The enum's
+ * member names are identical to the historical settings-local enum, so
+ * `.name` serialization in existing backups/prefs round-trips unchanged.
+ *
+ * Defaults follow PRIVACY.md's "defaults with a spine": lock-screen privacy
+ * defaults to sender-only (§3), and theme auto-sync defaults to **off** — the
+ * app never starts following the launcher until the user opts in, matching the
+ * rendering store's own default ([com.piercingxx.txxt.theme.ThemeStore
+ * .autoSyncEnabled]). A manual in-app theme always wins once set
+ * (PRIVACY.md §7 "explicit beats ambient").
  * The store is a plain data class so it round-trips through the backup format
  * (WS12 T4) unchanged.
  */
 data class SettingsStore(
     val lockScreenPrivacy: LockScreenPrivacy = LockScreenPrivacy.SENDER_ONLY,
-    val notificationPosture: NotificationPosture = NotificationPosture.SOUND,
-    val autoSyncTheme: Boolean = true,
-    val themePreset: ThemePreset = ThemePreset.defaults(),
+    val alertStyle: AlertStyle = AlertStyle.SOUND,
+    val autoSyncTheme: Boolean = false,
+    val themePreset: ThemePreset = ThemePreset.DEFAULT,
     val fontMode: FontMode = FontMode.defaults(),
 ) {
     companion object {

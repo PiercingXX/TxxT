@@ -2,15 +2,19 @@ package com.piercingxx.txxt.core
 
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
  * Tests for [ImageMetadataScrubber]. Synthetic JPEG payloads are constructed in
- * Kotlin — minimal but structurally valid containers with EXIF/XMP/IPTC
+ * Kotlin — minimal but structurally valid containers with EXIF/XMP/IPTC/COM
  * segments embedded — because no real media fixtures exist in the tree and no
  * parsing library is available offline (see .skippy/IMPLEMENTATION_PLAN.md,
  * "Deferred verification").
+ *
+ * Also covers the fail-closed contract: recognized-but-malformed JPEG input
+ * must return `null` (never the unscrubbed original).
  */
 class ImageMetadataScrubberTest {
 
@@ -59,12 +63,15 @@ class ImageMetadataScrubberTest {
     private fun iptcPayload(): ByteArray =
         byteArrayOf('P'.code.toByte(), 'h'.code.toByte(), 'o'.code.toByte(), 't'.code.toByte(), 'o'.code.toByte(), 's'.code.toByte(), 'h'.code.toByte(), 'o'.code.toByte(), 'p'.code.toByte(), 0x00, 0x01, 0x02)
 
+    private fun comPayload(): ByteArray =
+        "<GPS>40.7128,-74.0060</GPS> Shot on ACME-100".toByteArray()
+
     // --- tests -----------------------------------------------------------
 
     @Test
     fun `strips EXIF APP1 segment`() {
         val input = jpeg(appSegment(0xE1, exifPayload()))
-        val out = ImageMetadataScrubber.scrub(input)
+        val out = ImageMetadataScrubber.scrub(input)!!
         assertFalse(contains(out, exifPayload()))
         assertTrue(contains(out, scanData()))
     }
@@ -72,7 +79,7 @@ class ImageMetadataScrubberTest {
     @Test
     fun `strips XMP APP1 segment`() {
         val input = jpeg(appSegment(0xE1, xmpPayload()))
-        val out = ImageMetadataScrubber.scrub(input)
+        val out = ImageMetadataScrubber.scrub(input)!!
         assertFalse(contains(out, xmpPayload()))
         assertTrue(contains(out, scanData()))
     }
@@ -80,22 +87,32 @@ class ImageMetadataScrubberTest {
     @Test
     fun `strips IPTC APP13 segment`() {
         val input = jpeg(appSegment(0xED, iptcPayload()))
-        val out = ImageMetadataScrubber.scrub(input)
+        val out = ImageMetadataScrubber.scrub(input)!!
         assertFalse(contains(out, iptcPayload()))
         assertTrue(contains(out, scanData()))
     }
 
     @Test
-    fun `strips all three metadata segments together`() {
+    fun `strips GPS-like COM comment segment`() {
+        val input = jpeg(appSegment(0xFE, comPayload()))
+        val out = ImageMetadataScrubber.scrub(input)!!
+        assertFalse(contains(out, comPayload()))
+        assertTrue(contains(out, scanData()))
+    }
+
+    @Test
+    fun `strips all metadata segments together`() {
         val input = jpeg(
             appSegment(0xE1, exifPayload()),
             appSegment(0xE1, xmpPayload()),
             appSegment(0xED, iptcPayload()),
+            appSegment(0xFE, comPayload()),
         )
-        val out = ImageMetadataScrubber.scrub(input)
+        val out = ImageMetadataScrubber.scrub(input)!!
         assertFalse(contains(out, exifPayload()))
         assertFalse(contains(out, xmpPayload()))
         assertFalse(contains(out, iptcPayload()))
+        assertFalse(contains(out, comPayload()))
         assertTrue(contains(out, scanData()))
     }
 
@@ -105,7 +122,7 @@ class ImageMetadataScrubberTest {
             appSegment(0xE1, exifPayload()),
             appSegment(0xED, iptcPayload()),
         )
-        val out = ImageMetadataScrubber.scrub(input)
+        val out = ImageMetadataScrubber.scrub(input)!!
         assertTrue(contains(out, scanData()))
         // The scan region (SOS header + entropy-coded data) is untouched: the
         // exact byte sequence survives verbatim.
@@ -117,7 +134,7 @@ class ImageMetadataScrubberTest {
         val jfif = appSegment(0xE0, byteArrayOf('J'.code.toByte(), 'F'.code.toByte(), 'I'.code.toByte(), 'F'.code.toByte(), 0x00, 0x01))
         val icc = appSegment(0xE2, byteArrayOf('I'.code.toByte(), 'C'.code.toByte(), 'C'.code.toByte(), 0x00, 0x01))
         val input = jpeg(jfif, appSegment(0xE1, exifPayload()), icc)
-        val out = ImageMetadataScrubber.scrub(input)
+        val out = ImageMetadataScrubber.scrub(input)!!
         assertTrue(contains(out, jfif))
         assertTrue(contains(out, icc))
         assertFalse(contains(out, exifPayload()))
@@ -140,6 +157,55 @@ class ImageMetadataScrubberTest {
     fun `jpeg with no metadata is unchanged`() {
         val input = jpeg()
         assertArrayEquals(input, ImageMetadataScrubber.scrub(input))
+    }
+
+    // --- fail-closed: malformed JPEG input returns null -------------------
+
+    @Test
+    fun `soi followed by a garbage non-marker byte returns null`() {
+        val corrupt = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0x42, 0x00, 0x01, 0x02)
+        assertNull(ImageMetadataScrubber.scrub(corrupt))
+    }
+
+    @Test
+    fun `stream truncated mid-marker returns null`() {
+        val truncated = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte())
+        assertNull(ImageMetadataScrubber.scrub(truncated))
+    }
+
+    @Test
+    fun `segment length overflowing past end of stream returns null`() {
+        // An APP1 whose declared length (2 + 65535 bytes) far exceeds the data.
+        val overlong = byteArrayOf(
+            0xFF.toByte(), 0xD8.toByte(), // SOI
+            0xFF.toByte(), 0xE1.toByte(), 0xFF.toByte(), 0xF1.toByte(), // APP1, length claims 65521 bytes
+            0x01, 0x02, 0x03, // ...but only 3 payload bytes exist
+        )
+        assertNull(ImageMetadataScrubber.scrub(overlong))
+    }
+
+    @Test
+    fun `segment truncated before its length field returns null`() {
+        val truncated = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE1.toByte(), 0x00)
+        assertNull(ImageMetadataScrubber.scrub(truncated))
+    }
+
+    @Test
+    fun `scan without an EOI terminator returns null`() {
+        val out = java.io.ByteArrayOutputStream()
+        out.write(marker(0xD8)) // SOI
+        out.write(marker(0xDA)) // SOS
+        out.write(sosHeader())
+        out.write(scanData()) // ...and nothing else: stream ends mid-scan
+        assertNull(ImageMetadataScrubber.scrub(out.toByteArray()))
+    }
+
+    @Test
+    fun `malformed metadata-bearing jpeg is never returned as-is`() {
+        // The privacy-critical direction: even though this corrupt stream still
+        // contains EXIF bytes, scrubbing must not hand back the original.
+        val corrupt = jpeg(appSegment(0xE1, exifPayload())).copyOfRange(0, 20) // cut mid-segment
+        assertNull(ImageMetadataScrubber.scrub(corrupt))
     }
 
     // --- helpers ---------------------------------------------------------

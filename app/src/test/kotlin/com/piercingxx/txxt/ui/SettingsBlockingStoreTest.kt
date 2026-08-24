@@ -140,7 +140,10 @@ class SettingsBlockingStoreTest {
         SettingsBlockingStore(blockedAddresses = setOf("+1 555 8888")).loadAndApply()
         SettingsBlockingStore.defaults().loadAndApply()
         val (disposition, _) = LiveInboundFilter.current.evaluate("+1 555 8888", "Hello")
-        // No longer blocked after an empty store is applied.
-        assertEquals(MessageDisposition.QUARANTINE, disposition)
+        // No longer blocked after an empty store is applied. The empty default
+        // store DELIVERs: quarantine is explicit opt-in (quarantineUnknownSenders,
+        // docs/PRIVACY.md §8.7 is proposed, not adopted) and no quarantine store
+        // exists yet, so the factory default must not silently discard mail.
+        assertEquals(MessageDisposition.DELIVER, disposition)
     }
 }

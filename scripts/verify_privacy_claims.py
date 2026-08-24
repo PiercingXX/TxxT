@@ -39,6 +39,9 @@ EXPECTED_PERMISSIONS = {
     "android.permission.READ_SMS",
     "android.permission.WRITE_SMS",
     "android.permission.RECEIVE_BOOT_COMPLETED",
+    # WS13 accessibility: on-device speech-to-text (dictation inserts into the
+    # compose field locally; no audio leaves the device, no network involved).
+    "android.permission.RECORD_AUDIO",
 }
 
 # Permissions that would contradict the no-network privacy posture.

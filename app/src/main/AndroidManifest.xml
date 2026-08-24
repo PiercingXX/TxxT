@@ -3,7 +3,12 @@
 
     <!-- Default-SMS-handler role. Declaring this permission makes the app
          eligible to be offered as the default SMS handler by the OS. The
-         broadcast-receiver components that complete the role are WS7's scope. -->
+         role-completing components now exist in this manifest:
+           - .service.SmsDeliverReceiver   (Telephony.SMS_DELIVER)
+           - .service.MmsDeliverReceiver   (Telephony.WAP_PUSH_DELIVER)
+           - .ui.ComposeActivity           (ACTION_SENDTO sms:/smsto:/mms:/mmsto:)
+           - .service.RespondViaMessageService (ACTION_RESPOND_VIA_MESSAGE)
+         Runtime grant happens via a RoleManager request — an on-device step. -->
     <uses-permission android:name="android.permission.role.SMS" />
 
     <!-- Runtime notification permission (API 33+). Requested alongside the
@@ -12,9 +17,10 @@
 
     <!-- SMS/MMS runtime permissions. RECEIVE_SMS + RECEIVE_MMS let the receivers
          in service/ observe inbound SMS/MMS broadcasts; SEND_SMS lets the send
-         pipeline send; READ_SMS/WRITE_SMS let the receivers persist received
-         messages through the data layer. All are part of the default-SMS-handler
-         role the app already declares. -->
+         pipeline send. READ_SMS/WRITE_SMS complete the default-SMS-handler role:
+         inbound delivery persists through the data layer (InboundStore), blocked
+         senders are dropped before any write, and MMS content stays
+         tap-initiated (docs/PRIVACY.md §8.1). -->
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-permission android:name="android.permission.RECEIVE_MMS" />
     <uses-permission android:name="android.permission.SEND_SMS" />
@@ -70,6 +76,27 @@
             android:exported="false"
             android:label="TxxT Settings" />
 
+        <!-- Role-required compose entry point (default-SMS-handler role).
+             Exported: other apps hand off ACTION_SENDTO compose requests with
+             an sms:/smsto:/mms:/mmsto: data URI; the activity resolves the
+             recipient, finds or creates the conversation, and opens the
+             thread. BROWSABLE so browser-initiated sms: links can land here.
+             FLAG_SECURE is set in code. -->
+        <activity
+            android:name=".ui.ComposeActivity"
+            android:exported="true"
+            android:label="TxxT">
+            <intent-filter>
+                <action android:name="android.intent.action.SENDTO" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="sms" />
+                <data android:scheme="smsto" />
+                <data android:scheme="mms" />
+                <data android:scheme="mmsto" />
+            </intent-filter>
+        </activity>
+
         <!-- Inbound SMS. Part of the default-SMS-handler role: receives
              SMS_RECEIVED broadcasts and applies the auto-reply gate. -->
         <receiver
@@ -89,6 +116,35 @@
             android:permission="android.permission.BROADCAST_WAP_PUSH">
             <intent-filter>
                 <action android:name="android.provider.Telephony.WAP_PUSH_RECEIVED" />
+                <data android:mimeType="application/vnd.wap.mms-message" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Primary inbound SMS delivery (default-SMS-handler role). When TxxT
+             IS the default SMS app, the platform delivers messages here via
+             SMS_DELIVER instead of SMS_RECEIVED; the SMS_RECEIVED receiver
+             above covers the non-default case. Exported because only the
+             system can invoke it: BROADCAST_SMS is signature-held by the
+             platform. -->
+        <receiver
+            android:name=".service.SmsDeliverReceiver"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter>
+                <action android:name="android.provider.Telephony.SMS_DELIVER" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Primary inbound MMS delivery (default-SMS-handler role). Same
+             contract as SmsDeliverReceiver: used when TxxT IS the default SMS
+             app. BROADCAST_WAP_PUSH is signature-held by the platform, so only
+             the system can invoke it. -->
+        <receiver
+            android:name=".service.MmsDeliverReceiver"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_WAP_PUSH">
+            <intent-filter>
+                <action android:name="android.provider.Telephony.WAP_PUSH_DELIVER" />
                 <data android:mimeType="application/vnd.wap.mms-message" />
             </intent-filter>
         </receiver>
@@ -115,6 +171,28 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
+
+        <!-- Quick reply (notification action). Not exported: invoked only via
+             the app's own notification PendingIntent, never by external apps. -->
+        <receiver
+            android:name=".service.NotificationReplyReceiver"
+            android:exported="false" />
+
+        <!-- Call-screen quick response (default-SMS-handler role). The
+             platform's in-call UI starts this service to send a canned reply;
+             SEND_RESPOND_VIA_MESSAGE is signature-held by the system, so only
+             the platform can start it. The reply goes through SendPipeline. -->
+        <service
+            android:name=".service.RespondViaMessageService"
+            android:exported="true"
+            android:permission="android.permission.SEND_RESPOND_VIA_MESSAGE">
+            <intent-filter>
+                <action android:name="android.intent.action.RESPOND_VIA_MESSAGE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="sms" />
+                <data android:scheme="smsto" />
+            </intent-filter>
+        </service>
 
     </application>
 

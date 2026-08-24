@@ -153,4 +153,31 @@ class ThemeSyncWiringTest {
         receiver(c).onReceive(context, themeIntent("Not A Real Preset"))
         assertNull(c.launcherTheme)
     }
+
+    // ---- durability: the routed report persists and reaches a fresh controller ----
+
+    @Test
+    fun `a routed broadcast persists into the store a fresh controller reads`() {
+        // H3 regression lock: the receiver builds its own (short-lived)
+        // controller in production, so the report only matters if it is
+        // durable. Drive the REAL factory path shape: one controller reports,
+        // then a brand-new controller over the same backing store must resolve
+        // the launcher theme without ever having been told directly.
+        val kv = ThemeSyncInMemoryKv()
+        val reporting = ThemeController(ThemeStore(kv))
+        reporting.setAutoSync(true)
+
+        receiver(reporting).onReceive(context, themeIntent(ThemePreset.OCEAN_DRIFT.displayName))
+
+        assertEquals(ThemePreset.OCEAN_DRIFT.key, kv.getString(ThemeStore.KEY_LAST_LAUNCHER_THEME))
+        assertEquals(ThemePreset.OCEAN_DRIFT, ThemeController(ThemeStore(kv)).effectiveTheme)
+    }
+
+    @Test
+    fun `an unknown preset name persists nothing`() {
+        val kv = ThemeSyncInMemoryKv()
+        val c = ThemeController(ThemeStore(kv))
+        receiver(c).onReceive(context, themeIntent("Not A Real Preset"))
+        assertNull(kv.getString(ThemeStore.KEY_LAST_LAUNCHER_THEME))
+    }
 }
