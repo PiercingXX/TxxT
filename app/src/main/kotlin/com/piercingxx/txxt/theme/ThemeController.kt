@@ -19,18 +19,38 @@ class ThemeController(
     private val store: ThemeStore,
 ) {
     /**
-     * The last theme THIS instance was told about by the launcher broadcast
-     * (T5's receiver), or null. Durable reports live in
-     * [ThemeStore.lastLauncherTheme] and surface through [effectiveTheme].
+     * The last GROUND this instance was told about by the launcher broadcast
+     * (T5's receiver), or null. A ground rather than a preset because the
+     * launcher's Custom theme is a raw colour with no [ThemePreset] entry —
+     * this is the field that carries it. Durable reports live in
+     * [ThemeStore.lastLauncherGround] and surface through [effectiveGround].
      */
-    var launcherTheme: ThemePreset? = null
+    var launcherGround: ThemeGround? = null
         private set
 
     /**
-     * The theme that should actually drive the UI right now, applying the
-     * manual-wins precedence: a manual pick wins; otherwise the in-memory or
-     * durably-persisted launcher theme applies when auto-sync is on; else the
-     * default ground.
+     * The last launcher theme this instance was told about *as a named
+     * preset*, or null — which is also the honest answer for a Custom
+     * broadcast (see [ThemeStore.lastLauncherTheme]).
+     */
+    val launcherTheme: ThemePreset?
+        get() = ThemePreset.fromKey(launcherGround?.presetKey)
+
+    /**
+     * The GROUND that should actually paint the UI right now — what the
+     * applier reads. Applies the manual-wins precedence unchanged: a manual
+     * pick wins; otherwise the in-memory or durably-persisted launcher ground
+     * applies when auto-sync is on; else the default ground.
+     */
+    val effectiveGround: ThemeGround
+        get() = store.effectiveGround(launcherGround ?: store.lastLauncherGround)
+
+    /**
+     * The effective theme in its preset-shaped view, applying the same
+     * manual-wins precedence. Resolves to the default ground whenever the
+     * winning theme has no [ThemePreset] entry (a Custom broadcast); the
+     * render path reads [effectiveGround] instead, which carries the custom
+     * colour faithfully.
      */
     val effectiveTheme: ThemePreset
         get() = store.effectiveTheme(launcherTheme ?: store.lastLauncherTheme)
@@ -58,12 +78,25 @@ class ThemeController(
 
     /**
      * The launcher broadcast reported [preset] as active (T5's receiver).
-     * Records it in memory for this instance AND persists it through the store,
-     * so the report is durable across process death and visible to any
-     * controller constructed later over the same backing store.
+     * Convenience over [onLauncherGround] for a named preset.
      */
     fun onLauncherTheme(preset: ThemePreset) {
-        launcherTheme = preset
-        store.lastLauncherTheme = preset
+        onLauncherGround(preset.ground)
+    }
+
+    /**
+     * The launcher broadcast reported [ground] as active (T5's receiver) —
+     * either a named preset's ground or the family's Custom colour.
+     *
+     * Records it in memory for this instance AND persists it through the store,
+     * so the report is durable across process death and visible to any
+     * controller constructed later over the same backing store. This is the
+     * single entry point for launcher reports: routing named presets through
+     * it too is what keeps the persisted record whole, whichever kind of
+     * broadcast lands last.
+     */
+    fun onLauncherGround(ground: ThemeGround) {
+        launcherGround = ground
+        store.lastLauncherGround = ground
     }
 }

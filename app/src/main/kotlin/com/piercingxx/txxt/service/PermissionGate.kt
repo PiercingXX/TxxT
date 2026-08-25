@@ -139,6 +139,14 @@ class PermissionGate(
      * Returns `true` when the `RECORD_AUDIO` permission is granted. When it is
      * denied, calls [onRecordDenied] (so the app "says so") and returns `false`
      * — the caller must request the permission instead of listening silently.
+     *
+     * **Currently dormant.** The compose-bar rework deleted the dictation mic,
+     * the feature's only entry point, so nothing in the app calls this and the
+     * manifest no longer declares `RECORD_AUDIO` — meaning this gate would
+     * report denied on a real device. It is kept alongside the pure
+     * [com.piercingxx.txxt.ui.DictationInsert] seam so a future entry point
+     * has both halves waiting; re-declaring the manifest permission is part of
+     * re-wiring one.
      */
     fun canRecord(context: Context): Boolean {
         val granted = hasRecordPermission(context)

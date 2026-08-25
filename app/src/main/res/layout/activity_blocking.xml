@@ -10,7 +10,8 @@
     android:id="@+id/blocking_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#000000">
+    android:background="#000000"
+    android:fitsSystemWindows="true">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -71,9 +72,11 @@
 
             <Button
                 android:id="@+id/blocked_add"
+                style="?android:attr/borderlessButtonStyle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="@font/font_body"
+                android:textColor="#FFFFFF"
                 android:text="ADD" />
         </LinearLayout>
 
@@ -112,9 +115,11 @@
 
             <Button
                 android:id="@+id/keyword_add"
+                style="?android:attr/borderlessButtonStyle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="@font/font_body"
+                android:textColor="#FFFFFF"
                 android:text="ADD" />
         </LinearLayout>
 
@@ -153,9 +158,11 @@
 
             <Button
                 android:id="@+id/phrase_add"
+                style="?android:attr/borderlessButtonStyle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="@font/font_body"
+                android:textColor="#FFFFFF"
                 android:text="ADD" />
         </LinearLayout>
 
@@ -193,9 +200,11 @@
 
             <Button
                 android:id="@+id/starred_add"
+                style="?android:attr/borderlessButtonStyle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="@font/font_body"
+                android:textColor="#FFFFFF"
                 android:text="ADD" />
         </LinearLayout>
 

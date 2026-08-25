@@ -6,6 +6,8 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
+import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.RemoteInput
@@ -23,8 +25,27 @@ const val EXTRA_SENDER = "extra_sender"
 /** RemoteInput key for the reply text in the notification quick-reply action. */
 const val KEY_REPLY_TEXT = "key_reply_text"
 
-/** Notification channel ID for incoming message notifications (sound). */
-const val CHANNEL_ID = "txxt_messages"
+/**
+ * Notification channel ID for incoming message notifications (sound).
+ *
+ * `_v2` because a channel's sound is immutable after creation: v1 shipped with
+ * the system default sound, and the only way to give existing installs the
+ * bundled `res/raw/txxt.wav` is to mint a successor id and delete the old one
+ * (the xx-phone `ChannelIds` versioning pattern — `purpose_vN`, append-only,
+ * never recreate a retired id, because delete-and-recreate resurrects the old
+ * immutable settings instead of applying the new ones).
+ */
+const val CHANNEL_ID = "txxt_messages_v2"
+
+/**
+ * The retired v1 sound-channel id (system default sound). Deleted at channel
+ * creation time so devices that created it before the `_v2` bump migrate to
+ * the bundled-sound channel instead of keeping a dead channel in Settings.
+ * Kept as a named constant (not inlined at the delete site) so the migration
+ * pair — mint [CHANNEL_ID], delete this — reads as one auditable unit and the
+ * unit tests can prove the ids actually differ.
+ */
+const val LEGACY_CHANNEL_ID_SOUND = "txxt_messages"
 
 /** Channel ID for the vibrate-only alert style (no sound). */
 const val CHANNEL_ID_VIBRATE = "txxt_messages_vibrate"
@@ -125,13 +146,41 @@ class NotificationService(
     private val postNotification: (Int, NotificationCompat.Builder) -> Unit = { id, builder ->
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // Migration: the v1 sound channel carried the system default sound,
+            // and that setting is frozen into the channel forever — so the
+            // bundled-sound channel is a NEW id ([CHANNEL_ID], `_v2`) and the
+            // retired id is deleted here, before the create below, so a device
+            // that had v1 ends up with exactly one sound channel in Settings.
+            // deleteNotificationChannel is a no-op for an id that never
+            // existed, so fresh installs pay nothing for this line.
+            manager.deleteNotificationChannel(LEGACY_CHANNEL_ID_SOUND)
+
+            // The bundled notification sound, resolved by resource NAME
+            // (`raw/txxt`, not the numeric R.raw id): the numeric id is
+            // re-assigned across builds, and the platform persists this URI
+            // string inside the immutable channel — a numeric URI would
+            // silently point at the wrong resource (or nothing) after an app
+            // update, while the name form survives every rebuild.
+            val bundledSound = Uri.parse(
+                "android.resource://${context.packageName}/raw/txxt"
+            )
+            // USAGE_NOTIFICATION / CONTENT_TYPE_SONIFICATION so the platform
+            // routes the sound through the notification volume stream (and
+            // respects DND) instead of defaulting to the media stream.
+            val soundAttributes = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build()
+
             // One channel per alert style (a channel's sound/vibration cannot
             // be changed after creation, so the style choice picks the channel
             // at post time instead). All three stay lock-screen SECRET.
             listOf(
                 NotificationChannel(
                     CHANNEL_ID, "Messages", NotificationManager.IMPORTANCE_DEFAULT
-                ),
+                ).apply {
+                    setSound(bundledSound, soundAttributes)
+                },
                 NotificationChannel(
                     CHANNEL_ID_VIBRATE,
                     "Messages (vibrate)",

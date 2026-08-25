@@ -63,11 +63,9 @@ class ThreadLayoutTest {
     @Test
     fun `the thread layout has NO voice-message affordance`() {
         // docs/PRIVACY.md §5 — voice messages are never sent or received, so the
-        // compose bar must not carry a voice-message send/record element. The
-        // dictation mic button (dictation_button) is NOT a voice-message
-        // affordance — it runs on-device SpeechRecognizer and inserts recognized
-        // text into the compose field, never sending or receiving audio — so it
-        // is allowed here.
+        // compose bar must not carry a voice-message send/record element. (The
+        // dictation mic button was removed from this screen entirely — see
+        // DictationWiringTest for the no-affordance lock.)
         val lower = activityThread.lowercase()
         assertFalse(
             "activity_thread.xml must not contain a voice-message send/record affordance",
@@ -75,6 +73,49 @@ class ThreadLayoutTest {
                 lower.contains("record_voice") ||
                 lower.contains("send_voice") ||
                 lower.contains("voice_note"),
+        )
+    }
+
+    @Test
+    fun `the settings affordance sits in the top bar, not the compose bar`() {
+        // The settings button moved to the screen's top-right (top_bar) so the
+        // compose row stays input + send only. Element order in the linear
+        // layout is document order, so the settings button must appear before
+        // the message list, and the compose bar after it must not name it.
+        assertTrue(
+            "activity_thread.xml must declare a top bar",
+            activityThread.contains("@+id/top_bar"),
+        )
+        val settingsIndex = activityThread.indexOf("@+id/settings_button")
+        val listIndex = activityThread.indexOf("@+id/message_list")
+        assertTrue(
+            "the settings button must live in the top bar, above the message list",
+            settingsIndex in 0 until listIndex,
+        )
+        val composeBar = activityThread.substring(activityThread.indexOf("@+id/compose_bar"))
+        assertFalse(
+            "the compose bar must not carry the settings affordance",
+            composeBar.contains("settings_button"),
+        )
+    }
+
+    @Test
+    fun `the send affordance is a borderless monochrome glyph`() {
+        // The send button shows the U+279C paper-airplane-style arrow glyph the
+        // bundled JetBrains Mono face maps (monochrome type, never a color
+        // emoji) and carries no filled background — borderless bright white.
+        val composeBar = activityThread.substring(activityThread.indexOf("@+id/compose_bar"))
+        assertTrue(
+            "the send button must show the ➜ glyph, not a text label",
+            composeBar.contains("android:text=\"➜\""),
+        )
+        assertTrue(
+            "the send button must be borderless",
+            composeBar.contains("?android:attr/borderlessButtonStyle"),
+        )
+        assertFalse(
+            "no button in the thread layout may carry a filled background tint",
+            activityThread.contains("backgroundTint"),
         )
     }
 

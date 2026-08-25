@@ -153,4 +153,103 @@ class ThemePresetTest {
             assertTrue("surface of $preset should differ from its background", t.surface != t.background)
         }
     }
+
+    // ---- The family's eighth theme: Custom (no enum entry, resolved by colour) ----
+
+    @Test
+    fun `Custom is not a preset — it has no colour of its own`() {
+        // The whole point of the design: Custom must NOT join the enum, or the
+        // seven brand presets would gain an eighth with no background to name.
+        assertNull(ThemePreset.fromDisplayName(CUSTOM_THEME_NAME))
+        assertNull(ThemePreset.fromKey(CUSTOM_PRESET_KEY))
+        assertEquals(7, ThemePreset.entries.size)
+    }
+
+    @Test
+    fun `every preset's ground carries its own colour, flag and key`() {
+        for (preset in ThemePreset.entries) {
+            val ground = preset.ground
+            assertEquals("background of $preset", preset.background, ground.background)
+            assertEquals("isDark of $preset", preset.isDark, ground.isDark)
+            assertEquals("key of $preset", preset.key, ground.presetKey)
+        }
+    }
+
+    @Test
+    fun `the contrast rule cuts at luminance 182 — the family-wide threshold`() {
+        // Every sibling app and the launcher use this exact cut-off; a
+        // different one would put two family apps on opposite sides of the
+        // decision for the same mid-tone ground.
+        assertFalse(prefersDarkForeground(0xFF000000L))
+        assertFalse(prefersDarkForeground(ThemePreset.GRAPHITE.background))
+        assertTrue(prefersDarkForeground(0xFFFFFFFFL))
+        assertTrue(prefersDarkForeground(ThemePreset.PAPER.background))
+        assertTrue(prefersDarkForeground(ThemePreset.MIST.background))
+        // 0xFFB6B6B6 has luminance 182.0 exactly — strictly above only.
+        assertFalse(prefersDarkForeground(0xFFB6B6B6L))
+        assertTrue(prefersDarkForeground(0xFFB7B7B7L))
+    }
+
+    @Test
+    fun `a light custom ground derives legible black-on-light tokens`() {
+        // The bug this guards: a pale custom ground painted with the dark
+        // theme's white ramp would be white-on-white — illegible on the very
+        // first broadcast, with no second broadcast coming to fix it.
+        val t = deriveTokens(customGround(0xFFEEDDCCL))
+        assertEquals(0xFFEEDDCCL, t.background)
+        assertEquals(0xE6000000L, t.text) // 90% black
+        assertEquals(0x80000000L, t.muted)
+        assertEquals(0x1A000000L, t.line)
+        assertFalse(t.isDark)
+    }
+
+    @Test
+    fun `a dark custom ground derives white-on-dark tokens`() {
+        val t = deriveTokens(customGround(0xFF203040L))
+        assertEquals(0xFF203040L, t.background)
+        assertEquals(0xE6FFFFFFL, t.text) // 90% white
+        assertTrue(t.isDark)
+    }
+
+    @Test
+    fun `a custom ground is tagged with the custom key, never a preset key`() {
+        val ground = customGround(0xFF123456L)
+        assertEquals(CUSTOM_PRESET_KEY, ground.presetKey)
+        assertNull(ThemePreset.fromKey(ground.presetKey))
+    }
+
+    // ---- resolveSyncedTheme: the broadcast payload → ground decision ----
+
+    @Test
+    fun `resolveSyncedTheme resolves every named preset by display name`() {
+        for (preset in ThemePreset.entries) {
+            // The background extra is present on every real broadcast; a named
+            // preset must still resolve to its OWN colour, not the carried one.
+            assertEquals(preset.ground, resolveSyncedTheme(preset.displayName, 0xFF00FF00L))
+            assertEquals(preset.ground, resolveSyncedTheme(preset.displayName, null))
+        }
+    }
+
+    @Test
+    fun `resolveSyncedTheme resolves Custom through the carried background`() {
+        assertEquals(customGround(0xFFEEDDCCL), resolveSyncedTheme("Custom", 0xFFEEDDCCL))
+        // Case- and whitespace-tolerant: the name crossed a process boundary.
+        assertEquals(customGround(0xFF203040L), resolveSyncedTheme("custom", 0xFF203040L))
+        assertEquals(customGround(0xFF203040L), resolveSyncedTheme("  CUSTOM  ", 0xFF203040L))
+    }
+
+    @Test
+    fun `resolveSyncedTheme ignores a Custom broadcast with no background`() {
+        // Nothing sensible to paint — keeping the ground the user already has
+        // beats guessing a colour the launcher never sent (sibling-wide rule).
+        assertNull(resolveSyncedTheme("Custom", null))
+    }
+
+    @Test
+    fun `resolveSyncedTheme ignores an unknown or empty name`() {
+        assertNull(resolveSyncedTheme("Not A Real Preset", 0xFF112233L))
+        assertNull(resolveSyncedTheme(null, 0xFF112233L))
+        assertNull(resolveSyncedTheme("", 0xFF112233L))
+        assertNull(resolveSyncedTheme("   ", 0xFF112233L))
+    }
 }

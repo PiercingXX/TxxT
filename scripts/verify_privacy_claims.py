@@ -39,9 +39,10 @@ EXPECTED_PERMISSIONS = {
     "android.permission.READ_SMS",
     "android.permission.WRITE_SMS",
     "android.permission.RECEIVE_BOOT_COMPLETED",
-    # WS13 accessibility: on-device speech-to-text (dictation inserts into the
-    # compose field locally; no audio leaves the device, no network involved).
-    "android.permission.RECORD_AUDIO",
+    # NOTE: no RECORD_AUDIO. WS13 declared the mic for the compose bar's
+    # dictation button; the compose-bar rework deleted that button — its only
+    # entry point — so the permission was removed with it. The APK must not
+    # ask for a mic it cannot use.
 }
 
 # Permissions that would contradict the no-network privacy posture.

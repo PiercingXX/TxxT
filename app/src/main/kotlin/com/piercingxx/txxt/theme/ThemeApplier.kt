@@ -24,10 +24,15 @@ class ThemeApplier(
 ) {
     /**
      * Re-applies the current effective theme to the running UI: derives the
-     * tokens for [ThemeController.effectiveTheme] and paints them via the
+     * tokens for [ThemeController.effectiveGround] and paints them via the
      * [applyTokens] seam.
+     *
+     * Reads the GROUND rather than the preset-shaped view so a launcher
+     * Custom broadcast actually reaches the screen: Custom has no
+     * [ThemePreset] entry, so painting from `effectiveTheme` would silently
+     * repaint the default ground instead of the colour the user picked.
      */
     fun apply() {
-        applyTokens(deriveTokens(controller.effectiveTheme))
+        applyTokens(deriveTokens(controller.effectiveGround))
     }
 }

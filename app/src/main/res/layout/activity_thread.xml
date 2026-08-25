@@ -5,16 +5,45 @@
   Text-first message lines on AMOLED black (docs/DESIGN.md §"Conversation
   thread"). No chat bubbles, no rounded cards — the no-bubble constraint is
   structural (docs/PRIVACY.md §2). The message list is a RecyclerView filled by
-  ThreadAdapter (T3); the compose bar sits at the bottom with a minimal
-  attachment affordance and NO voice-message affordance (docs/PRIVACY.md §5 —
-  voice messages are never sent or received).
+  ThreadAdapter (T3); a slim top bar carries the settings affordance and the
+  compose bar sits at the bottom. NO voice-message affordance and no dictation
+  mic (docs/PRIVACY.md §5 — voice messages are never sent or received; the
+  dictation seam classes remain, but the thread screen exposes no entry point).
+
+  Buttons are borderless: no filled background, just a bright-white monospace
+  glyph on the ground — a hard white pill would out-shout the text-first lines
+  (docs/DESIGN.md — the accent is reserved for type, not for chrome).
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/thread_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#000000">
+    android:background="#000000"
+    android:fitsSystemWindows="true">
+
+    <!-- Top bar: the settings affordance lives top-right, off the compose bar,
+         so the compose row stays input + send only. -->
+    <LinearLayout
+        android:id="@+id/top_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="end|center_vertical"
+        android:paddingStart="12dp"
+        android:paddingEnd="4dp">
+
+        <!-- Settings affordance: opens the settings screen (WS12 T5).
+             Borderless — a white glyph, no filled background. -->
+        <Button
+            android:id="@+id/settings_button"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="⚙"
+            android:textSize="18sp"
+            android:textColor="#FFFFFF" />
+    </LinearLayout>
 
     <!-- Message list. Flat text-first rows, never bubbles. -->
     <androidx.recyclerview.widget.RecyclerView
@@ -25,12 +54,10 @@
         android:padding="12dp"
         android:clipToPadding="false" />
 
-    <!-- Compose bar: a dictation (mic) affordance, the text field, and minimal
-         send/settings affordances. The mic is dictation only — it runs
-         SpeechRecognizer and inserts recognized text into the compose field via
-         DictationInsert; no audio is ever sent or received (docs/PRIVACY.md §5 —
-         voice messages are never sent or received, and dictation does not send
-         anything). -->
+    <!-- Compose bar: the text field and a borderless send affordance. The send
+         glyph is ➜ (U+279C, heavy round-tipped rightwards arrow) — a codepoint
+         the bundled @font/font_body (JetBrains Mono) actually maps, so it
+         renders as monochrome type from our own face, never a color emoji. -->
     <LinearLayout
         android:id="@+id/compose_bar"
         android:layout_width="match_parent"
@@ -41,15 +68,6 @@
         android:paddingEnd="12dp"
         android:paddingTop="8dp"
         android:paddingBottom="8dp">
-
-        <Button
-            android:id="@+id/dictation_button"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="8dp"
-            android:text="Mic"
-            android:textColor="#000000"
-            android:backgroundTint="#FFFFFF" />
 
         <EditText
             android:id="@+id/compose_input"
@@ -67,22 +85,14 @@
 
         <Button
             android:id="@+id/send_button"
+            style="?android:attr/borderlessButtonStyle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
-            android:text="Send"
-            android:textColor="#000000"
-            android:backgroundTint="#FFFFFF" />
-
-        <!-- Settings affordance: opens the settings screen (WS12 T5). -->
-        <Button
-            android:id="@+id/settings_button"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:text="⚙"
-            android:textColor="#000000"
-            android:backgroundTint="#FFFFFF" />
+            android:fontFamily="@font/font_body"
+            android:text="➜"
+            android:textSize="18sp"
+            android:textColor="#FFFFFF" />
     </LinearLayout>
 
 </LinearLayout>

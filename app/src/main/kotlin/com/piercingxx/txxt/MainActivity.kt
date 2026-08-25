@@ -216,16 +216,17 @@ class MainActivity : Activity(), SwipeActionCallback {
     /**
      * Paints the launcher's chrome from the current effective theme (T6) — the
      * same applier path the thread screen uses, so both surfaces follow the
-     * store's effective theme.
+     * store's effective theme. The NEW affordance stays borderless: the accent
+     * token (the reserved bright-white signal in every preset) colors the word
+     * itself and NO background tint is applied — the accent lives in the type,
+     * not in a filled pill.
      */
     private fun applyTheme() {
         val root = findViewById<View>(R.id.main_root)
         ThemeApplier(themeController) { tokens ->
             root.setBackgroundColor(tokens.background.toInt())
             emptyState.setTextColor(tokens.muted.toInt())
-            newMessageButton.setTextColor(tokens.accentOn.toInt())
-            newMessageButton.backgroundTintList =
-                android.content.res.ColorStateList.valueOf(tokens.accent.toInt())
+            newMessageButton.setTextColor(tokens.accent.toInt())
         }.apply()
     }
 

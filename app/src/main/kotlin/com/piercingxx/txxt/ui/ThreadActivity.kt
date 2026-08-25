@@ -1,24 +1,18 @@
 package com.piercingxx.txxt.ui
 
-import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import android.speech.RecognitionListener
-import android.speech.RecognizerIntent
-import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
-import androidx.core.app.ActivityCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.piercingxx.txxt.R
 import com.piercingxx.txxt.data.OutboundStore
 import com.piercingxx.txxt.data.TxxTDatabase
-import com.piercingxx.txxt.service.PermissionGate
 import com.piercingxx.txxt.service.SendPipeline
 import com.piercingxx.txxt.theme.SharedPreferencesThemeKeyValueStore
 import com.piercingxx.txxt.theme.ThemeApplier
@@ -53,7 +47,6 @@ class ThreadActivity : Activity() {
     private lateinit var composeInput: EditText
     private lateinit var sendButton: Button
     private lateinit var settingsButton: Button
-    private lateinit var dictationButton: Button
 
     /**
      * The on-device text-to-speech engine (WS13 read-aloud). Created in
@@ -62,14 +55,6 @@ class ThreadActivity : Activity() {
      * is read aloud (docs/FEATURES.md §Accessibility).
      */
     private var tts: TextToSpeech? = null
-
-    /**
-     * The single on-device speech recognizer used by [startDictation]. Created
-     * lazily on the first dictation tap (only when the platform reports
-     * recognition as available) and destroyed once in [onDestroy] — one shared
-     * engine for the activity's lifetime instead of a leaked recognizer per tap.
-     */
-    private var recognizer: SpeechRecognizer? = null
 
     private val database: TxxTDatabase by lazy { TxxTDatabase.instance(this) }
 
@@ -117,7 +102,6 @@ class ThreadActivity : Activity() {
         composeInput = findViewById(R.id.compose_input)
         sendButton = findViewById(R.id.send_button)
         settingsButton = findViewById(R.id.settings_button)
-        dictationButton = findViewById(R.id.dictation_button)
 
         adapter = ThreadAdapter(
             onMessageTap = ::readMessageAloud,
@@ -132,7 +116,6 @@ class ThreadActivity : Activity() {
 
         sendButton.setOnClickListener { sendComposed() }
         settingsButton.setOnClickListener { openSettings() }
-        dictationButton.setOnClickListener { startDictation() }
         observeMessages()
 
         // T6 wire-in: the running thread screen reaches the theme applier, which
@@ -146,7 +129,12 @@ class ThreadActivity : Activity() {
      * Paints this screen's chrome from the current effective theme (T6). Builds
      * a [ThemeApplier] over [themeController] whose seam applies the derived
      * tokens to the thread screen's views: the ground, the compose bar, the
-     * compose input's text/hint/field, and the send button's text/tint.
+     * compose input's text/hint/field, and the send/settings glyphs.
+     *
+     * Buttons stay borderless: the accent token (the reserved bright-white
+     * signal in every preset) colors the glyph itself and NO background tint is
+     * applied — a filled accent pill would out-shout the text-first lines, so
+     * the accent lives in the type, not in chrome.
      */
     private fun applyTheme() {
         val root = findViewById<android.view.View>(R.id.thread_root)
@@ -157,90 +145,20 @@ class ThreadActivity : Activity() {
             val text = tokens.text.toInt()
             val muted = tokens.muted.toInt()
             val accent = tokens.accent.toInt()
-            val accentOn = tokens.accentOn.toInt()
 
             root.setBackgroundColor(bg)
             composeBar.setBackgroundColor(surface)
             composeInput.setTextColor(text)
             composeInput.setHintTextColor(muted)
             composeInput.setBackgroundColor(surface)
-            sendButton.setTextColor(accentOn)
-            sendButton.backgroundTintList = android.content.res.ColorStateList.valueOf(accent)
+            sendButton.setTextColor(accent)
+            settingsButton.setTextColor(accent)
         }.apply()
     }
 
     /** Opens the settings screen (WS12 T5) from the thread's settings affordance. */
     private fun openSettings() {
         startActivity(Intent(this, SettingsActivity::class.java))
-    }
-
-    /**
-     * Starts on-device speech recognition (dictation, WS13).
-     *
-     * The last hop — `SpeechRecognizer` capturing audio and returning recognized
-     * text — needs a mic and cannot run on the box; what this does is route the
-     * recognition result through [DictationInsert.insert] into the compose
-     * field. No audio is ever sent or received — dictation only writes text into
-     * the local compose field (docs/PRIVACY.md §5).
-     *
-     * Before listening, the `RECORD_AUDIO` runtime permission is checked via
-     * [PermissionGate.canRecord]: a denial triggers the system permission
-     * prompt instead of silently dead recognition, and a platform without
-     * recognition support is reported rather than crashing on create.
-     */
-    private fun startDictation() {
-        if (!PermissionGate().canRecord(this)) {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.RECORD_AUDIO),
-                REQUEST_RECORD_AUDIO,
-            )
-            return
-        }
-        val speechRecognizer = recognizer ?: run {
-            if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-                Toast.makeText(this, errorMessage(SpeechRecognizer.ERROR_CLIENT), Toast.LENGTH_SHORT).show()
-                return
-            }
-            SpeechRecognizer.createSpeechRecognizer(this).also { recognizer = it }
-        }
-        speechRecognizer.setRecognitionListener(object : RecognitionListener {
-            override fun onResults(results: android.os.Bundle) {
-                val recognized = results
-                    .getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    ?.firstOrNull()
-                    ?: return
-                applyDictation(recognized)
-            }
-
-            override fun onBeginningOfSpeech() {}
-            override fun onBufferReceived(buffer: ByteArray?) {}
-            override fun onEndOfSpeech() {}
-            override fun onError(error: Int) {
-                Toast.makeText(this@ThreadActivity, errorMessage(error), Toast.LENGTH_SHORT).show()
-            }
-            override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
-            override fun onPartialResults(partialResults: android.os.Bundle?) {}
-            override fun onReadyForSpeech(params: android.os.Bundle?) {}
-            override fun onRmsChanged(rmsdB: Float) {}
-        })
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-        }
-        speechRecognizer.startListening(intent)
-    }
-
-    /**
-     * Applies recognized speech text to the compose field via [DictationInsert].
-     *
-     * This is the deterministic dictation step the box can verify: the field's
-     * current text plus the recognized text become the field's new text through
-     * [DictationInsert.insert]. The on-device recognition hop is upstream.
-     */
-    private fun applyDictation(recognized: String) {
-        val current = composeInput.text?.toString().orEmpty()
-        composeInput.setText(DictationInsert.insert(current, recognized))
     }
 
     /**
@@ -304,9 +222,6 @@ class ThreadActivity : Activity() {
         // dead activity — without this, every open leaks the activity, its
         // adapter and the DB observer forever.
         scope.cancel()
-        // One recognizer for the activity's lifetime: destroyed only if created.
-        recognizer?.destroy()
-        recognizer = null
         tts?.shutdown()
         tts = null
     }
@@ -418,27 +333,6 @@ class ThreadActivity : Activity() {
     }
 
     companion object {
-        /** Request code for the `RECORD_AUDIO` runtime-permission prompt. */
-        const val REQUEST_RECORD_AUDIO = 4_001
-
-        /**
-         * A short human-readable line for a [SpeechRecognizer] error code, so a
-         * failed dictation says what happened instead of failing silently. Pure
-         * over its input — JVM-testable.
-         */
-        fun errorMessage(error: Int): String = when (error) {
-            SpeechRecognizer.ERROR_NO_MATCH -> "Didn't catch any speech — try again."
-            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Didn't hear anything — try again."
-            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS ->
-                "Mic permission is off — allow it to dictate."
-            SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Dictation is busy — try again."
-            SpeechRecognizer.ERROR_NETWORK_TIMEOUT,
-            SpeechRecognizer.ERROR_NETWORK,
-            SpeechRecognizer.ERROR_SERVER,
-            -> "Dictation is unavailable right now."
-            else -> "Dictation failed — try again."
-        }
-
         /** Builds a launch intent for [ThreadActivity] for the given conversation. */
         fun launchIntent(context: android.content.Context, conversationId: Long): Intent =
             Intent(context, ThreadActivity::class.java)

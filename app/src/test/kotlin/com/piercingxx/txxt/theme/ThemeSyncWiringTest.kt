@@ -6,6 +6,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.spyk
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -70,11 +71,24 @@ class ThemeSyncWiringTest {
             extraThemeName = ThemeSyncReceiver.EXTRA_THEME_NAME,
         )
 
-    /** A launcher theme-change intent carrying [name] under the real extra key. */
-    private fun themeIntent(name: String): Intent =
+    /**
+     * A launcher theme-change intent carrying [name] under the real extra key,
+     * and — when [background] is given — the resolved ground ARGB under the
+     * real background extra key.
+     *
+     * [background] is an `Int` on purpose: that is the signed form the launcher
+     * actually writes (0xFFEEDDCC does not fit a positive Int), so tests that
+     * pass one exercise the receiver's unmasking rather than a convenient
+     * pre-widened value.
+     */
+    private fun themeIntent(name: String, background: Int? = null): Intent =
         spyk(Intent(ThemeSyncReceiver.ACTION_THEME_CHANGED)).apply {
             every { action } returns ThemeSyncReceiver.ACTION_THEME_CHANGED
             every { getStringExtra(ThemeSyncReceiver.EXTRA_THEME_NAME) } returns name
+            every { hasExtra(ThemeSyncReceiver.EXTRA_BACKGROUND) } returns (background != null)
+            if (background != null) {
+                every { getIntExtra(ThemeSyncReceiver.EXTRA_BACKGROUND, 0) } returns background
+            }
         }
 
     // ---- wiring: the manifest declares the receiver for the launcher broadcast ----
@@ -179,5 +193,92 @@ class ThemeSyncWiringTest {
         val c = ThemeController(ThemeStore(kv))
         receiver(c).onReceive(context, themeIntent("Not A Real Preset"))
         assertNull(kv.getString(ThemeStore.KEY_LAST_LAUNCHER_THEME))
+    }
+
+    // ---- Custom: the family's eighth theme, carried by the background extra ----
+
+    @Test
+    fun `receiver honours a Custom broadcast through the background extra`() {
+        // The regression this locks: resolving on the theme name alone made
+        // every Custom broadcast unresolvable, so TxxT dropped it and stayed
+        // on its previous preset while every sibling app followed.
+        val c = controller()
+        c.setAutoSync(true)
+        receiver(c).onReceive(context, themeIntent("Custom", 0xFFEEDDCC.toInt()))
+        assertEquals(customGround(0xFFEEDDCCL), c.launcherGround)
+        assertEquals(customGround(0xFFEEDDCCL), c.effectiveGround)
+    }
+
+    @Test
+    fun `a Custom ground unmasks the launcher's signed int`() {
+        // The launcher writes a signed Int; without the mask a custom ground
+        // would arrive as a huge negative number and derive nonsense colours.
+        val c = controller()
+        c.setAutoSync(true)
+        receiver(c).onReceive(context, themeIntent("Custom", 0xFF203040.toInt()))
+        assertEquals(0xFF203040L, c.effectiveGround.background)
+    }
+
+    @Test
+    fun `a light Custom ground gets legible dark text on the first broadcast`() {
+        // No second broadcast is coming to fix contrast: the receiver derives
+        // the dark/light flag from the carried colour then and there.
+        val c = controller()
+        c.setAutoSync(true)
+        receiver(c).onReceive(context, themeIntent("Custom", 0xFFEEDDCC.toInt()))
+        val tokens = deriveTokens(c.effectiveGround)
+        assertFalse("a pale custom ground must not wear the dark look", tokens.isDark)
+        assertEquals(0xE6000000L, tokens.text) // 90% black, not white-on-white
+    }
+
+    @Test
+    fun `a Custom broadcast carrying no background persists nothing`() {
+        // Sibling-wide rule: keeping the ground the user already has beats
+        // guessing at a colour the launcher never sent.
+        val kv = ThemeSyncInMemoryKv()
+        val c = ThemeController(ThemeStore(kv))
+        c.setAutoSync(true)
+        receiver(c).onReceive(context, themeIntent("Custom"))
+        assertNull(c.launcherGround)
+        assertNull(kv.getString(ThemeStore.KEY_LAST_LAUNCHER_THEME))
+    }
+
+    @Test
+    fun `a routed Custom broadcast survives process death`() {
+        val kv = ThemeSyncInMemoryKv()
+        val reporting = ThemeController(ThemeStore(kv))
+        reporting.setAutoSync(true)
+
+        receiver(reporting).onReceive(context, themeIntent("Custom", 0xFFEEDDCC.toInt()))
+
+        // A brand-new controller over the same backing store repaints the
+        // custom colour without ever having been told directly.
+        assertEquals(
+            customGround(0xFFEEDDCCL),
+            ThemeController(ThemeStore(kv)).effectiveGround,
+        )
+    }
+
+    @Test
+    fun `a manual theme still wins over a Custom broadcast`() {
+        val c = controller()
+        c.setManualTheme(ThemePreset.BURGUNDY)
+        c.setAutoSync(true)
+        receiver(c).onReceive(context, themeIntent("Custom", 0xFFEEDDCC.toInt()))
+        assertEquals(ThemePreset.BURGUNDY.ground, c.effectiveGround)
+    }
+
+    @Test
+    fun `a named preset broadcast still resolves to its own colour, not the carried one`() {
+        val c = controller()
+        c.setAutoSync(true)
+        // Real broadcasts carry a background for named presets too; the enum
+        // stays the source of truth for the seven brand colours.
+        receiver(c).onReceive(
+            context,
+            themeIntent(ThemePreset.PAPER.displayName, 0xFF00FF00.toInt()),
+        )
+        assertEquals(ThemePreset.PAPER.ground, c.effectiveGround)
+        assertEquals(ThemePreset.PAPER, c.launcherTheme)
     }
 }

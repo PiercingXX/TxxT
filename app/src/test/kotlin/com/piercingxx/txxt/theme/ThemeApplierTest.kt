@@ -99,6 +99,31 @@ class ThemeApplierTest {
         assertEquals(listOf(deriveTokens(ThemePreset.BURGUNDY)), applied)
     }
 
+    @Test
+    fun `applier paints a Custom launcher ground, not the default`() {
+        // The applier reads the GROUND, not the preset-shaped view: Custom has
+        // no ThemePreset entry, so painting from `effectiveTheme` would
+        // silently repaint AMOLED Night over the colour the user picked.
+        val c = controller()
+        c.setAutoSync(true)
+        c.onLauncherGround(customGround(0xFFEEDDCCL))
+        val applied = mutableListOf<ThemeTokens>()
+        applier(c, applied).apply()
+        assertEquals(listOf(deriveTokens(customGround(0xFFEEDDCCL))), applied)
+        assertEquals(0xFFEEDDCCL, applied.single().background)
+    }
+
+    @Test
+    fun `a manual theme still wins over a Custom launcher ground`() {
+        val c = controller()
+        c.setManualTheme(ThemePreset.BURGUNDY)
+        c.setAutoSync(true)
+        c.onLauncherGround(customGround(0xFFEEDDCCL))
+        val applied = mutableListOf<ThemeTokens>()
+        applier(c, applied).apply()
+        assertEquals(listOf(deriveTokens(ThemePreset.BURGUNDY)), applied)
+    }
+
     // ---- wiring: the running thread screen reaches the applier ----
 
     @Test

@@ -47,13 +47,17 @@ class SharedPreferencesThemeKeyValueStore(
  *    the broadcast receiver (T5). Defaults to **off** (privacy by default,
  *    PRIVACY.md §7), so the app never starts following the launcher until the
  *    user opts in.
- *  - [lastLauncherTheme] — the launcher's most recently broadcast theme,
- *    persisted so a receiver's report survives process death and is visible
- *    to controllers constructed later (e.g. the thread screen's).
+ *  - [lastLauncherGround] / [lastLauncherTheme] — the launcher's most recently
+ *    broadcast ground, persisted so a receiver's report survives process death
+ *    and is visible to controllers constructed later (e.g. the thread
+ *    screen's). Stored as a ground, not merely a preset key, because the
+ *    family's eighth theme — Custom — is a raw colour that exists nowhere but
+ *    in the broadcast that carried it.
  *
- * Values are stored under stable keys (the preset's [ThemePreset.key], the
- * toggle as a boolean) so a stored setting survives an app update and the
- * launcher broadcast can match by name.
+ * Values are stored under stable keys (the preset's [ThemePreset.key] or
+ * [CUSTOM_PRESET_KEY], the colour as a string, the toggle as a boolean) so a
+ * stored setting survives an app update and the launcher broadcast can match
+ * by name.
  */
 class ThemeStore(
     private val kv: ThemeKeyValueStore,
@@ -69,15 +73,71 @@ class ThemeStore(
         set(value) = kv.putBoolean(KEY_AUTO_SYNC, value)
 
     /**
-     * The launcher's most recently reported theme, or null when none has been
-     * received (or the stored name no longer resolves). Null-safe: assigning
-     * null leaves the last persisted value untouched — a launcher broadcast
-     * always carries a real preset, so there is nothing legitimate to erase.
+     * The launcher's most recently reported theme *as a named preset*, or null.
+     *
+     * Null has two meanings and both are correct: no broadcast has landed yet,
+     * or the last broadcast was the family's **Custom** theme — which has no
+     * [ThemePreset] entry (it carries no colour of its own, see
+     * [CUSTOM_PRESET_KEY]), so [ThemePreset.fromKey] cannot and must not invent
+     * one. Callers that need the actual ground a Custom broadcast carried read
+     * [lastLauncherGround]; this preset-shaped view stays deliberately narrow
+     * so nothing downstream mistakes a custom colour for a named preset.
+     *
+     * Null-safe on assignment: writing null leaves the last persisted value
+     * untouched — a launcher broadcast always carries a real ground, so there
+     * is nothing legitimate to erase.
      */
     var lastLauncherTheme: ThemePreset?
         get() = ThemePreset.fromKey(kv.getString(KEY_LAST_LAUNCHER_THEME))
         set(value) {
-            if (value != null) kv.putString(KEY_LAST_LAUNCHER_THEME, value.key)
+            // Route through the ground writer so the durable record is never
+            // half-written: a preset assignment must also refresh the stored
+            // background, or a later named-preset broadcast would leave a
+            // previous Custom colour behind as a stale ground.
+            lastLauncherGround = value?.ground
+        }
+
+    /**
+     * The launcher's most recently reported **ground** — the full truth of the
+     * last broadcast, Custom included — or null when none has landed.
+     *
+     * Persisted as three values under stable keys: the preset key (a
+     * [ThemePreset.key] or [CUSTOM_PRESET_KEY]), the raw background, and the
+     * dark/light flag. The background and flag are what make Custom survive
+     * process death: a preset key alone can be re-resolved from the enum, but
+     * a custom colour exists nowhere else — drop it and the app would silently
+     * fall back to its default ground on the next cold start.
+     *
+     * The getter prefers the enum for a named key (so the seven presets stay
+     * the single source of truth for their own colours, and an install that
+     * only ever persisted a key — before Custom support existed — still
+     * resolves). Null-safe on assignment for the same reason as
+     * [lastLauncherTheme].
+     */
+    var lastLauncherGround: ThemeGround?
+        get() {
+            val key = kv.getString(KEY_LAST_LAUNCHER_THEME) ?: return null
+            ThemePreset.fromKey(key)?.let { return it.ground }
+            if (key != CUSTOM_PRESET_KEY) return null
+            val background = kv.getString(KEY_LAST_LAUNCHER_BACKGROUND)?.toLongOrNull() ?: return null
+            return ThemeGround(
+                background = background,
+                // Fall back to the contrast rule rather than to a hardcoded
+                // default: a stored flag can be missing (a partially-written
+                // legacy record), and guessing "dark" would be illegible over
+                // a pale ground.
+                isDark = kv.getBoolean(KEY_LAST_LAUNCHER_DARK, !prefersDarkForeground(background)),
+                presetKey = CUSTOM_PRESET_KEY,
+            )
+        }
+        set(value) {
+            if (value == null) return
+            kv.putString(KEY_LAST_LAUNCHER_THEME, value.presetKey)
+            // Longs go through the String seam: ThemeKeyValueStore is
+            // deliberately string+boolean only, and a 0xAARRGGBB value does
+            // not fit a positive Int.
+            kv.putString(KEY_LAST_LAUNCHER_BACKGROUND, value.background.toString())
+            kv.putBoolean(KEY_LAST_LAUNCHER_DARK, value.isDark)
         }
 
     /**
@@ -99,9 +159,38 @@ class ThemeStore(
         return ThemePreset.DEFAULT
     }
 
+    /**
+     * The ground that should actually paint the UI, applying the SAME
+     * manual-wins precedence [effectiveTheme] applies — this is that rule
+     * expressed over [ThemeGround] so a Custom launcher ground can win an
+     * auto-sync round it would otherwise be unable to represent.
+     *
+     * Deliberately a sibling of [effectiveTheme] rather than a replacement:
+     * the precedence itself ("explicit beats ambient", PRIVACY.md §7) is
+     * unchanged and stated once in each shape — a manual in-app pick wins;
+     * otherwise [launcherGround] applies when auto-sync is on; else the
+     * default ground.
+     *
+     * @param launcherGround the launcher's active ground (from T5's receiver),
+     *   or null when none is known in memory. Callers wanting the durable
+     *   fallback pass `inMemory ?: store.lastLauncherGround`.
+     */
+    fun effectiveGround(launcherGround: ThemeGround?): ThemeGround {
+        val manual = manualTheme
+        if (manual != ThemePreset.DEFAULT) return manual.ground
+        if (autoSyncEnabled && launcherGround != null) return launcherGround
+        return ThemePreset.DEFAULT.ground
+    }
+
     companion object {
         const val KEY_MANUAL_THEME = "theme_manual"
         const val KEY_AUTO_SYNC = "theme_auto_sync"
         const val KEY_LAST_LAUNCHER_THEME = "theme_last_launcher"
+
+        /** Raw 0xAARRGGBB ground of the last broadcast, as a decimal string. */
+        const val KEY_LAST_LAUNCHER_BACKGROUND = "theme_last_launcher_background"
+
+        /** Dark/light classification of the last broadcast's ground. */
+        const val KEY_LAST_LAUNCHER_DARK = "theme_last_launcher_dark"
     }
 }

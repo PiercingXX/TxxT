@@ -192,6 +192,31 @@ class NotificationServiceTest {
         assertFalse(NotificationPolicy.shouldBubble())
     }
 
+    /**
+     * The bundled-sound migration contract: a channel's sound is immutable
+     * after creation, so the sound channel moved to a versioned successor id
+     * (`_v2`, the xx-phone `ChannelIds` convention) and the retired v1 id is
+     * deleted at creation time. These ids are persisted on user devices —
+     * pinning the exact strings here makes an accidental rename (which would
+     * strand users on a dead channel) a test failure, not a field bug.
+     */
+    @Test
+    fun `sound channel id is the versioned successor of the retired v1 id`() {
+        assertEquals("txxt_messages_v2", CHANNEL_ID)
+        assertEquals("txxt_messages", LEGACY_CHANNEL_ID_SOUND)
+    }
+
+    @Test
+    fun `retired v1 channel id is not any live channel id`() {
+        // delete(LEGACY) at creation time must never delete a channel we still
+        // post on — the retired id has to be disjoint from all three live ids.
+        val live = setOf(CHANNEL_ID, CHANNEL_ID_VIBRATE, CHANNEL_ID_SILENT)
+        assertFalse(
+            "retired id must not collide with a live channel",
+            LEGACY_CHANNEL_ID_SOUND in live,
+        )
+    }
+
     @Test
     fun `title and text come from NotificationPolicy`() {
         assertEquals("Alice", NotificationPolicy.notificationTitle("Alice"))

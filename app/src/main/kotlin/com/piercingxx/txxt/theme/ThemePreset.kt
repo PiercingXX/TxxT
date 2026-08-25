@@ -28,6 +28,19 @@ enum class ThemePreset(
     PAPER("paper", "Paper", 0xFFF3EEE2, false),
     MIST("mist", "Mist", 0xFFE6EDF5, false);
 
+    /**
+     * The [ThemeGround] this preset resolves to — its own background and its
+     * own dark/light classification, tagged with its stable [key].
+     *
+     * Exists so a named preset and the launcher's "Custom" ground are the SAME
+     * shape downstream: the store, the controller and the applier only ever
+     * speak [ThemeGround], which is what lets Custom flow through a pipeline
+     * that was originally enum-typed without the enum growing an eighth entry
+     * that has no colour of its own.
+     */
+    val ground: ThemeGround
+        get() = ThemeGround(background, isDark, key)
+
     companion object {
         /** The default preset (AMOLED Night — the brand's default ground). */
         val DEFAULT: ThemePreset = AMOLED_NIGHT
@@ -39,10 +52,116 @@ enum class ThemePreset(
         fun fromKey(key: String?): ThemePreset? =
             entries.firstOrNull { it.key == key }
 
-        /** Resolve a preset by its display name (case-insensitive). */
+        /**
+         * Resolve a preset by its display name (case-insensitive).
+         *
+         * Returns null for anything unrecognised — the launcher's "Custom"
+         * included. Custom deliberately has no entry here: it carries no
+         * colour of its own, so it is honoured through the broadcast's
+         * background extra instead (see [resolveSyncedTheme]).
+         */
         fun fromDisplayName(name: String?): ThemePreset? =
             entries.firstOrNull { it.displayName.equals(name, ignoreCase = true) }
     }
+}
+
+/**
+ * Display name the xx-launcher broadcasts for a user-picked custom ground —
+ * the family's eighth theme, matched case-insensitively because the name
+ * crossed a process boundary and a casing tweak on the launcher side must not
+ * silently break sync.
+ */
+const val CUSTOM_THEME_NAME = "Custom"
+
+/**
+ * Stable persisted key standing in for a Custom ground.
+ *
+ * Deliberately NOT a [ThemePreset] entry (the family-wide choice — see
+ * xx-clock's `CUSTOM_PRESET_KEY` and xx-phone's `ThemeGroundStore.KEY_CUSTOM`):
+ * Custom has no ground of its own, it always resolves through a remembered
+ * background plus the contrast rule. Keeping it out of the enum is also what
+ * keeps the seven brand presets and their colours untouched, and what makes
+ * [ThemePreset.fromKey] return null for a Custom key — see
+ * [ThemeStore.lastLauncherTheme] for why that null is the right answer.
+ */
+const val CUSTOM_PRESET_KEY = "custom"
+
+/**
+ * Perceived luminance of a 0xAARRGGBB colour per the family-wide contrast
+ * rule: `0.299 r + 0.587 g + 0.114 b` (0..255).
+ */
+fun luminance(argb: Long): Double {
+    val r = ((argb ushr 16) and 0xFF).toDouble()
+    val g = ((argb ushr 8) and 0xFF).toDouble()
+    val b = (argb and 0xFF).toDouble()
+    return 0.299 * r + 0.587 * g + 0.114 * b
+}
+
+/**
+ * Family-wide contrast rule, identical in every sibling app and in the
+ * launcher: a ground with luminance strictly above 182 takes the dark
+ * (near-black) foreground; anything darker takes white.
+ *
+ * The threshold is copied verbatim rather than re-derived on purpose — a
+ * different cut-off would put two family apps on opposite sides of the
+ * decision for the same mid-tone custom ground.
+ */
+fun prefersDarkForeground(background: Long): Boolean = luminance(background) > 182.0
+
+/**
+ * The GROUND a theme resolves to: the exact background to paint plus whether
+ * the app should wear its dark look (white foreground ramp) or its light one
+ * (black ramp).
+ *
+ * This — not [ThemePreset] — is the currency of the render path, because the
+ * launcher can broadcast a ground that belongs to no named preset. A named
+ * preset's ground carries that preset's [ThemePreset.key]; a Custom ground
+ * carries [CUSTOM_PRESET_KEY]. Pure Kotlin, so the whole resolution rule stays
+ * JVM-testable.
+ */
+data class ThemeGround(
+    /** Background (ground) colour as a 0xAARRGGBB long. */
+    val background: Long,
+    /** True → dark look (white ramp); false → light look (black ramp). */
+    val isDark: Boolean,
+    /** Stable persisted key: a [ThemePreset.key], or [CUSTOM_PRESET_KEY]. */
+    val presetKey: String,
+)
+
+/**
+ * The ground an arbitrary (Custom) [background] resolves to.
+ *
+ * The dark/light flag is *derived*, never carried: the launcher sends a colour
+ * and nothing else, so the contrast rule is the only thing standing between a
+ * pale custom ground and white-on-white text. Deriving it here is what makes a
+ * Custom ground legible on the very first broadcast, with no second round-trip.
+ */
+fun customGround(background: Long): ThemeGround =
+    ThemeGround(background, isDark = !prefersDarkForeground(background), presetKey = CUSTOM_PRESET_KEY)
+
+/**
+ * Resolve an xx-launcher theme broadcast's payload to the [ThemeGround] it
+ * means, or null when the payload says nothing actionable.
+ *
+ * Three cases, matching every sibling app's receiver verbatim so the family
+ * never disagrees about what a broadcast meant:
+ *  - a named preset resolves to its own ground and classification;
+ *  - [CUSTOM_THEME_NAME] resolves through [backgroundExtra] plus the contrast
+ *    rule ([customGround]);
+ *  - anything else — an unknown name, or a Custom broadcast that carried no
+ *    background — resolves to null. Null means *persist nothing*: keeping the
+ *    ground the user already has beats guessing at a colour the launcher
+ *    never sent.
+ *
+ * The name is trimmed before matching because it crossed a process boundary.
+ */
+fun resolveSyncedTheme(displayName: String?, backgroundExtra: Long?): ThemeGround? {
+    val name = displayName?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    ThemePreset.fromDisplayName(name)?.let { return it.ground }
+    if (name.equals(CUSTOM_THEME_NAME, ignoreCase = true) && backgroundExtra != null) {
+        return customGround(backgroundExtra)
+    }
+    return null
 }
 
 /**
@@ -90,29 +209,41 @@ private const val LINE_STOP = 0x1A // 10%
 private const val SURFACE_STEP = 0.04f
 
 /**
- * Derive the full [ThemeTokens] for [preset] from its background color.
+ * Derive the full [ThemeTokens] for [ground] from its background color.
  *
- * Dark presets ramp white over the background; light presets ramp black (the
+ * Dark grounds ramp white over the background; light grounds ramp black (the
  * brand guide §3.2's "transparency ramps of white-on-black (and the inverse)").
  * The signal accent is always pure white with ink text on it.
+ *
+ * Takes a [ThemeGround] rather than a [ThemePreset] so the launcher's Custom
+ * ground — which belongs to no preset — derives through exactly the same
+ * ramps, and therefore gets the same legible text hierarchy as the seven
+ * named presets rather than a second-class fallback.
  */
-fun deriveTokens(preset: ThemePreset): ThemeTokens {
-    val fg = if (preset.isDark) 0xFFL else 0x00L // white foreground on dark, black on light
+fun deriveTokens(ground: ThemeGround): ThemeTokens {
+    val fg = if (ground.isDark) 0xFFL else 0x00L // white foreground on dark, black on light
     return ThemeTokens(
-        background = preset.background,
-        surface = if (preset.isDark) {
-            lighten(preset.background, SURFACE_STEP)
+        background = ground.background,
+        surface = if (ground.isDark) {
+            lighten(ground.background, SURFACE_STEP)
         } else {
-            darken(preset.background, SURFACE_STEP)
+            darken(ground.background, SURFACE_STEP)
         },
         text = withAlpha(fg, TEXT_STOP),
         muted = withAlpha(fg, MUTED_STOP),
         line = withAlpha(fg, LINE_STOP),
         accent = ThemeTokens.SIGNAL,
         accentOn = ThemeTokens.INK,
-        isDark = preset.isDark,
+        isDark = ground.isDark,
     )
 }
+
+/**
+ * Derive the full [ThemeTokens] for a named [preset] — its ground run through
+ * the same [deriveTokens] ramps. Kept as its own overload because the seven
+ * named presets are what most callers and tests speak.
+ */
+fun deriveTokens(preset: ThemePreset): ThemeTokens = deriveTokens(preset.ground)
 
 /** Mix [color] toward white by [fraction] (0..1), preserving alpha. */
 private fun lighten(color: Long, fraction: Float): Long = mix(color, 0xFFFFFFFFL, fraction)

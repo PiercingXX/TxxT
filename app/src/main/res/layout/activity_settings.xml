@@ -17,6 +17,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#000000"
+    android:fitsSystemWindows="true"
     android:fillViewport="true">
 
     <LinearLayout
@@ -108,33 +109,34 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="12dp" />
 
-        <!-- Backup / restore (WS12 T4). -->
+        <!-- Backup / restore (WS12 T4). Borderless bright-white text — no
+             filled background; the accent lives in the type, not in chrome. -->
         <Button
             android:id="@+id/backup_button"
+            style="?android:attr/borderlessButtonStyle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Backup settings"
-            android:textColor="#000000"
-            android:backgroundTint="#FFFFFF"
+            android:textColor="#FFFFFF"
             android:layout_marginBottom="8dp" />
 
         <Button
             android:id="@+id/restore_button"
+            style="?android:attr/borderlessButtonStyle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Restore settings"
-            android:textColor="#000000"
-            android:backgroundTint="#FFFFFF"
+            android:textColor="#FFFFFF"
             android:layout_marginBottom="8dp" />
 
         <!-- Blocking management and starred contacts (WS12 T3). -->
         <Button
             android:id="@+id/blocking_button"
+            style="?android:attr/borderlessButtonStyle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Blocking &amp; starred contacts"
-            android:textColor="#000000"
-            android:backgroundTint="#FFFFFF"
+            android:textColor="#FFFFFF"
             android:layout_marginBottom="8dp" />
 
     </LinearLayout>

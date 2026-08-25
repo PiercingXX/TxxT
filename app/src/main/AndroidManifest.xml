@@ -40,13 +40,17 @@
          booting. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
-    <!-- Mic permission (WS13 dictation). Required by SpeechRecognizer so the
-         compose bar's mic affordance can run on-device speech-to-text. Dictation
-         writes recognized text into the compose field only — no audio is ever
-         sent or received (docs/PRIVACY.md §5). -->
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Deliberately NO RECORD_AUDIO permission. WS13 declared it for the
+         compose bar's dictation mic; the compose-bar rework deleted that
+         button, and it was the feature's only entry point — ThreadActivity
+         wires no SpeechRecognizer and nothing in the app calls
+         PermissionGate.canRecord. A permission the shipping code cannot
+         exercise is one the user is asked for and gets nothing from, so it is
+         gone: the permission list stays exactly the set the app actually uses
+         (docs/PRIVACY.md §5). The pure DictationInsert seam survives for a
+         future entry point — declaring the mic again is part of re-wiring one.
 
-    <!-- Deliberately NO INTERNET permission. TxxT never talks to a network;
+         Deliberately NO INTERNET permission. TxxT never talks to a network;
          keeping this absent makes that claim verifiable. -->
 
     <!-- NoActionBar: the surfaces are full-bleed AMOLED black text-first
