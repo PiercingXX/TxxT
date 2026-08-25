@@ -29,6 +29,8 @@ class ThreadAdapter(
     private val bindRow: (View, ThreadRow) -> Unit = ::defaultBindRow,
     /** Invoked when a message row is tapped, so the activity can read it aloud. */
     private val onMessageTap: (Message) -> Unit = {},
+    /** Invoked on a long-press, so the activity can offer copy/delete. */
+    private val onMessageLongPress: (Message) -> Unit = {},
 ) : RecyclerView.Adapter<ThreadAdapter.RowHolder>() {
 
     private val messages = mutableListOf<Message>()
@@ -68,6 +70,10 @@ class ThreadAdapter(
         // direction → alignment/emphasis mapping is the single source of truth.
         val row = ThreadMessagePresenter.present(message)
         holder.itemView.setOnClickListener { onMessageTap(message) }
+        holder.itemView.setOnLongClickListener {
+            onMessageLongPress(message)
+            true
+        }
         bindRow(holder.itemView, row)
     }
 

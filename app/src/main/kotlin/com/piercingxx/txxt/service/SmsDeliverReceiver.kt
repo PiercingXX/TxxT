@@ -184,7 +184,18 @@ class SmsDeliverReceiver(
                     notify ?: { ctx, from, text ->
                         val gate = PermissionGate()
                         if (gate.canNotify(ctx)) {
-                            NotificationService(ctx).postMessageNotification(sender = from, body = text)
+                            // The persisted settings drive the decision: the
+                            // lock-screen privacy choice is the global posture
+                            // and a starred sender bypasses suppression
+                            // (docs/PRIVACY.md §6) — never the hardcoded
+                            // defaults.
+                            NotificationService(ctx).postMessageNotification(
+                                sender = from,
+                                body = text,
+                                starred = NotificationPrefs.isStarred(ctx, from),
+                                globalPosture = NotificationPrefs.globalPosture(ctx),
+                                channelId = NotificationPrefs.channelId(ctx),
+                            )
                         }
                     }
                 post(context, sender, body)

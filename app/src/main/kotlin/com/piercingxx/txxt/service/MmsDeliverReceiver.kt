@@ -178,7 +178,16 @@ class MmsDeliverReceiver(
                     notify ?: { ctx, from, text ->
                         val gate = PermissionGate()
                         if (gate.canNotify(ctx)) {
-                            NotificationService(ctx).postMessageNotification(sender = from, body = text)
+                            // Persisted settings drive the decision, exactly
+                            // like the SMS deliver path: lock-screen privacy
+                            // is the global posture; starred bypasses.
+                            NotificationService(ctx).postMessageNotification(
+                                sender = from,
+                                body = text,
+                                starred = NotificationPrefs.isStarred(ctx, from),
+                                globalPosture = NotificationPrefs.globalPosture(ctx),
+                                channelId = NotificationPrefs.channelId(ctx),
+                            )
                         }
                     }
                 post(context, sender, "")

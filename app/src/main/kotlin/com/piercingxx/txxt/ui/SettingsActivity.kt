@@ -206,7 +206,9 @@ class SettingsActivity : Activity() {
             // uses) and loadAndApply() drives the LiveInboundFilter seam that
             // rebuilds the process-wide InboundFilter the inbound receivers read.
             loadBlockingStore().loadAndApply()
-            Toast.makeText(this, "Blocking & starred applied", Toast.LENGTH_SHORT).show()
+            // Then opens the editor, where the rules are actually managed —
+            // its own edits re-apply live on every change.
+            startActivity(android.content.Intent(this, BlockingActivity::class.java))
         }
     }
 

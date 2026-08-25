@@ -88,6 +88,14 @@
             android:exported="false"
             android:label="TxxT Settings" />
 
+        <!-- Blocking & starred editor. Not exported: launched only by the
+             settings screen's blocking affordance. FLAG_SECURE is set in
+             code. Edits apply to the live inbound filter immediately. -->
+        <activity
+            android:name=".ui.BlockingActivity"
+            android:exported="false"
+            android:label="TxxT Blocking" />
+
         <!-- Role-required compose entry point (default-SMS-handler role).
              Exported: other apps hand off ACTION_SENDTO compose requests with
              an sms:/smsto:/mms:/mmsto: data URI; the activity resolves the

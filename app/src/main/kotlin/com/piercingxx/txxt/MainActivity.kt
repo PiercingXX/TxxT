@@ -16,6 +16,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.SearchView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -24,10 +25,12 @@ import com.piercingxx.txxt.core.Conversation
 import com.piercingxx.txxt.data.InboundStore
 import com.piercingxx.txxt.data.TxxTDatabase
 import com.piercingxx.txxt.service.DefaultHandlerMonitor
+import com.piercingxx.txxt.service.EXTRA_SENDER
 import com.piercingxx.txxt.theme.SharedPreferencesThemeKeyValueStore
 import com.piercingxx.txxt.theme.ThemeApplier
 import com.piercingxx.txxt.theme.ThemeController
 import com.piercingxx.txxt.theme.ThemeStore
+import com.piercingxx.txxt.ui.BlockingRules
 import com.piercingxx.txxt.ui.ConversationListAdapter
 import com.piercingxx.txxt.ui.ConversationListLoader
 import com.piercingxx.txxt.ui.ConversationSearchFilter
@@ -161,6 +164,29 @@ class MainActivity : Activity(), SwipeActionCallback {
         observeConversations()
         applyTheme()
         requestDefaultHandlerGrants()
+
+        // A notification tap lands here carrying the sender: open their
+        // thread. Only on a fresh launch — a recreate (rotation) re-delivers
+        // the same intent and must not re-open the thread.
+        if (savedInstanceState == null) {
+            openThreadFromNotification(intent)
+        }
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        // A notification tap while the launcher is already up (SINGLE_TOP).
+        openThreadFromNotification(intent)
+    }
+
+    /**
+     * Consumes a notification content intent's sender extra: finds (or
+     * creates) that sender's conversation and opens its thread — a tapped
+     * notification must land on the message, not the bare list.
+     */
+    private fun openThreadFromNotification(intent: Intent?) {
+        val sender = intent?.getStringExtra(EXTRA_SENDER) ?: return
+        openNewConversation(sender)
     }
 
     override fun onDestroy() {
@@ -300,26 +326,90 @@ class MainActivity : Activity(), SwipeActionCallback {
 
     /**
      * Long-press actions for a conversation row: pin/unpin (feeds the
-     * PINNED_FIRST ordering) and archive (the swipe-left action, offered here
-     * too for discoverability). Reads the persisted flags first so the dialog
-     * names the toggle it will actually perform.
+     * PINNED_FIRST ordering), star/unstar (the persisted starred-contacts set
+     * that bypasses every blocking rule, docs/PRIVACY.md §6), call, block the
+     * sender (adds them to the persisted blocked-addresses set and re-applies
+     * the live filter), and archive (the swipe-left action, offered here too
+     * for discoverability). Reads the persisted state first so the dialog
+     * names the toggles it will actually perform.
      */
     private fun promptRowActions(conversationId: Long) {
         scope.launch {
             val entity = database.conversationDao().getById(conversationId) ?: return@launch
+            val address = entity.participantAddresses
+                .split(ADDRESS_DELIMITER)
+                .firstOrNull { it.isNotBlank() }
             val pinLabel = if (entity.isPinned) "Unpin" else "Pin"
+            val starLabel = if (
+                address != null && BlockingRules.isStarred(blockingMap(), address)
+            ) "Unstar" else "Star"
             AlertDialog.Builder(this@MainActivity)
                 .setTitle(entity.participantAddresses.replace(ADDRESS_DELIMITER, ", "))
-                .setItems(arrayOf(pinLabel, "Call", "Archive")) { _, which ->
+                .setItems(
+                    arrayOf(pinLabel, starLabel, "Call", "Block sender", "Archive")
+                ) { _, which ->
                     when (which) {
                         0 -> togglePinned(conversationId)
-                        1 -> onCall(conversationId)
-                        2 -> onArchive(conversationId)
+                        1 -> address?.let { toggleStarred(it) }
+                        2 -> onCall(conversationId)
+                        3 -> address?.let { confirmBlockSender(it) }
+                        4 -> onArchive(conversationId)
                     }
                 }
                 .setNegativeButton("Cancel", null)
                 .show()
         }
+    }
+
+    /** The persisted blocking/starred string map (the settings-screen shape). */
+    private fun blockingMap(): Map<String, String> {
+        val prefs = getSharedPreferences("txxt_settings", MODE_PRIVATE)
+        return com.piercingxx.txxt.ui.SettingsBlockingStore.KEY_NAMES
+            .mapNotNull { key -> prefs.getString(key, null)?.let { key to it } }
+            .toMap()
+    }
+
+    /** Persists [map] and re-applies it to the live inbound filter. */
+    private fun persistBlockingMap(map: Map<String, String>) {
+        val prefs = getSharedPreferences("txxt_settings", MODE_PRIVATE)
+        prefs.edit().apply {
+            map.forEach { (key, value) -> putString(key, value) }
+        }.apply()
+        com.piercingxx.txxt.ui.SettingsBlockingStore.fromMap(map).loadAndApply()
+    }
+
+    /** Toggles [address] in the persisted starred-contacts set, live. */
+    private fun toggleStarred(address: String) {
+        val (map, nowStarred) = BlockingRules.withStarredToggled(blockingMap(), address)
+        persistBlockingMap(map)
+        Toast.makeText(
+            this,
+            if (nowStarred) "Starred $address" else "Unstarred $address",
+            Toast.LENGTH_SHORT,
+        ).show()
+    }
+
+    /**
+     * Confirms, then adds [address] to the persisted blocked set and
+     * re-applies the live filter — the very next message from them is dropped.
+     * Reversible in Settings → Blocking & starred.
+     */
+    private fun confirmBlockSender(address: String) {
+        AlertDialog.Builder(this)
+            .setTitle("Block $address?")
+            .setMessage("New messages from this sender will be dropped. Undo in Settings → Blocking & starred.")
+            .setPositiveButton("Block") { _, _ ->
+                persistBlockingMap(
+                    BlockingRules.withEntry(
+                        blockingMap(),
+                        com.piercingxx.txxt.ui.SettingsBlockingStore.KEY_BLOCKED_ADDRESSES,
+                        address,
+                    )
+                )
+                Toast.makeText(this, "Blocked $address", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     /** Flips a conversation's persisted pinned flag (PINNED_FIRST ordering). */

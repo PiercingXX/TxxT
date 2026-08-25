@@ -119,7 +119,10 @@ class ThreadActivity : Activity() {
         settingsButton = findViewById(R.id.settings_button)
         dictationButton = findViewById(R.id.dictation_button)
 
-        adapter = ThreadAdapter(onMessageTap = ::readMessageAloud)
+        adapter = ThreadAdapter(
+            onMessageTap = ::readMessageAloud,
+            onMessageLongPress = ::promptMessageActions,
+        )
         messageList.layoutManager = LinearLayoutManager(this)
         messageList.adapter = adapter
 
@@ -238,6 +241,46 @@ class ThreadActivity : Activity() {
     private fun applyDictation(recognized: String) {
         val current = composeInput.text?.toString().orEmpty()
         composeInput.setText(DictationInsert.insert(current, recognized))
+    }
+
+    /**
+     * Long-press actions for a message row: copy the body to the clipboard,
+     * read it aloud (the tap action, offered here too for discoverability),
+     * or delete the single message. Delete is confirmed — it is the only
+     * destructive one.
+     */
+    private fun promptMessageActions(message: com.piercingxx.txxt.core.Message) {
+        android.app.AlertDialog.Builder(this)
+            .setItems(arrayOf("Copy", "Read aloud", "Delete")) { _, which ->
+                when (which) {
+                    0 -> copyMessage(message)
+                    1 -> readMessageAloud(message)
+                    2 -> confirmDeleteMessage(message)
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /** Copies the message body to the clipboard. */
+    private fun copyMessage(message: com.piercingxx.txxt.core.Message) {
+        val clipboard =
+            getSystemService(CLIPBOARD_SERVICE) as? android.content.ClipboardManager ?: return
+        clipboard.setPrimaryClip(
+            android.content.ClipData.newPlainText("message", message.body)
+        )
+        Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show()
+    }
+
+    /** Confirms, then deletes one message; the live Flow refreshes the list. */
+    private fun confirmDeleteMessage(message: com.piercingxx.txxt.core.Message) {
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Delete this message?")
+            .setPositiveButton("Delete") { _, _ ->
+                scope.launch { database.messageDao().deleteById(message.id) }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     /**

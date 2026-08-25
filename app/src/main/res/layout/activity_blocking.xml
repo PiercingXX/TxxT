@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  TxxT blocking & starred editor (docs/FEATURES.md §Privacy/blocking).
+
+  Four text-first sections on AMOLED black: blocked numbers, keyword rules,
+  phrase rules, starred contacts. Each section lists its current entries
+  (tap an entry to remove it) above an input row that adds one.
+-->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/blocking_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Blocking &amp; starred"
+            android:textColor="#FFFFFF"
+            android:textSize="22sp"
+            android:fontFamily="monospace"
+            android:paddingBottom="4dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Tap an entry to remove it. Changes apply immediately."
+            android:textColor="#80FFFFFF"
+            android:textSize="12sp"
+            android:fontFamily="monospace"
+            android:paddingBottom="12dp" />
+
+        <!-- Blocked numbers -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Blocked numbers"
+            android:textColor="#E6FFFFFF"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:fontFamily="monospace" />
+
+        <LinearLayout
+            android:id="@+id/blocked_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+
+            <EditText
+                android:id="@+id/blocked_input"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="Number to block"
+                android:inputType="phone"
+                android:fontFamily="monospace"
+                android:textColor="#E6FFFFFF"
+                android:textColorHint="#80FFFFFF" />
+
+            <Button
+                android:id="@+id/blocked_add"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="monospace"
+                android:text="ADD" />
+        </LinearLayout>
+
+        <!-- Keyword rules -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Blocked keywords"
+            android:textColor="#E6FFFFFF"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:fontFamily="monospace" />
+
+        <LinearLayout
+            android:id="@+id/keyword_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+
+            <EditText
+                android:id="@+id/keyword_input"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="Keyword to block"
+                android:inputType="text"
+                android:fontFamily="monospace"
+                android:textColor="#E6FFFFFF"
+                android:textColorHint="#80FFFFFF" />
+
+            <Button
+                android:id="@+id/keyword_add"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="monospace"
+                android:text="ADD" />
+        </LinearLayout>
+
+        <!-- Phrase rules -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Blocked phrases"
+            android:textColor="#E6FFFFFF"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:fontFamily="monospace" />
+
+        <LinearLayout
+            android:id="@+id/phrase_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+
+            <EditText
+                android:id="@+id/phrase_input"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="Phrase to block"
+                android:inputType="text"
+                android:fontFamily="monospace"
+                android:textColor="#E6FFFFFF"
+                android:textColorHint="#80FFFFFF" />
+
+            <Button
+                android:id="@+id/phrase_add"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="monospace"
+                android:text="ADD" />
+        </LinearLayout>
+
+        <!-- Starred contacts -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Starred contacts (bypass all blocking)"
+            android:textColor="#E6FFFFFF"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:fontFamily="monospace" />
+
+        <LinearLayout
+            android:id="@+id/starred_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <EditText
+                android:id="@+id/starred_input"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="Number to star"
+                android:inputType="phone"
+                android:fontFamily="monospace"
+                android:textColor="#E6FFFFFF"
+                android:textColorHint="#80FFFFFF" />
+
+            <Button
+                android:id="@+id/starred_add"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="monospace"
+                android:text="ADD" />
+        </LinearLayout>
+
+    </LinearLayout>
+</ScrollView>

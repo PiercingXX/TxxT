@@ -23,8 +23,14 @@ const val EXTRA_SENDER = "extra_sender"
 /** RemoteInput key for the reply text in the notification quick-reply action. */
 const val KEY_REPLY_TEXT = "key_reply_text"
 
-/** Notification channel ID for incoming message notifications. */
+/** Notification channel ID for incoming message notifications (sound). */
 const val CHANNEL_ID = "txxt_messages"
+
+/** Channel ID for the vibrate-only alert style (no sound). */
+const val CHANNEL_ID_VIBRATE = "txxt_messages_vibrate"
+
+/** Channel ID for the silent alert style (no sound, no vibration). */
+const val CHANNEL_ID_SILENT = "txxt_messages_silent"
 
 /**
  * Posts incoming-message notifications with the privacy posture from
@@ -49,8 +55,13 @@ class NotificationService(
      * Defaults to a pending intent that launches [MainActivity].
      */
     private val contentIntent: (Context, String) -> PendingIntent = { ctx, sender ->
+        // SINGLE_TOP so a tap while the launcher is already up delivers the
+        // sender through onNewIntent instead of recreating the activity; the
+        // launcher consumes EXTRA_SENDER and opens that sender's thread.
         val intent = Intent(ctx, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra(EXTRA_SENDER, sender)
         }
         // Request code = the per-sender notification id: the intents differ
@@ -114,12 +125,33 @@ class NotificationService(
     private val postNotification: (Int, NotificationCompat.Builder) -> Unit = { id, builder ->
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID, "Messages", NotificationManager.IMPORTANCE_DEFAULT
-            ).apply {
-                lockscreenVisibility = Notification.VISIBILITY_SECRET
+            // One channel per alert style (a channel's sound/vibration cannot
+            // be changed after creation, so the style choice picks the channel
+            // at post time instead). All three stay lock-screen SECRET.
+            listOf(
+                NotificationChannel(
+                    CHANNEL_ID, "Messages", NotificationManager.IMPORTANCE_DEFAULT
+                ),
+                NotificationChannel(
+                    CHANNEL_ID_VIBRATE,
+                    "Messages (vibrate)",
+                    NotificationManager.IMPORTANCE_DEFAULT,
+                ).apply {
+                    setSound(null, null)
+                    enableVibration(true)
+                },
+                NotificationChannel(
+                    CHANNEL_ID_SILENT,
+                    "Messages (silent)",
+                    NotificationManager.IMPORTANCE_LOW,
+                ).apply {
+                    setSound(null, null)
+                    enableVibration(false)
+                },
+            ).forEach { channel ->
+                channel.lockscreenVisibility = Notification.VISIBILITY_SECRET
+                manager.createNotificationChannel(channel)
             }
-            manager.createNotificationChannel(channel)
         }
         manager.notify(id, builder.build())
     },
@@ -155,6 +187,12 @@ class NotificationService(
         starred: Boolean = false,
         globalPosture: NotificationPosture.Posture = NotificationPosture.Posture.REDACTED,
         overrides: Map<String, NotificationPosture.Override> = emptyMap(),
+        /**
+         * The channel to post on — the alert-style choice (sound / vibrate /
+         * silent) picks between [CHANNEL_ID], [CHANNEL_ID_VIBRATE], and
+         * [CHANNEL_ID_SILENT] via [NotificationPrefs.channelIdFor].
+         */
+        channelId: String = CHANNEL_ID,
     ): Boolean {
         val posture = NotificationPosture.decide(
             sender = sender,
@@ -176,7 +214,7 @@ class NotificationService(
                     NotificationPolicy.redactedContent(sender)
                 }
 
-                val builder = makeBuilder(CHANNEL_ID)
+                val builder = makeBuilder(channelId)
                     .setSmallIcon(android.R.drawable.sym_action_email)
                     .setContentTitle(title)
                     .setContentText(text)
