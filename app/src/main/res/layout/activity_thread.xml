@@ -59,7 +59,7 @@
             android:hint="Message"
             android:textColor="#E6FFFFFF"
             android:textColorHint="#80FFFFFF"
-            android:fontFamily="monospace"
+            android:fontFamily="@font/font_body"
             android:background="#18181B"
             android:padding="10dp"
             android:inputType="textShortMessage"

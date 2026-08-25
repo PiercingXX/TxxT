@@ -35,6 +35,10 @@
         <item name="txxtAccent">@color/theme_accent</item>
         <item name="txxtAccentOn">@color/theme_accent_on</item>
 
+        <!-- BRAND-GUIDE.md §4: monospace IS the identity. Default every view to
+             the shipped body face; display roles opt into @font/font_display. -->
+        <item name="android:fontFamily">@font/font_body</item>
+
         <!-- Bind the platform surfaces to the brand ground so the window and
              system bars start on Ink, not an unthemed default. -->
         <item name="android:colorBackground">@color/theme_background</item>

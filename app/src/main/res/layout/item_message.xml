@@ -27,7 +27,7 @@
             android:id="@+id/message_body"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:fontFamily="monospace"
+            android:fontFamily="@font/font_body"
             android:textSize="16sp"
             android:textColor="#E6FFFFFF"
             android:lineSpacingMultiplier="1.15" />
@@ -37,7 +37,7 @@
             android:id="@+id/message_timestamp"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:fontFamily="monospace"
+            android:fontFamily="@font/font_body"
             android:textSize="11sp"
             android:textColor="#80FFFFFF" />
     </LinearLayout>

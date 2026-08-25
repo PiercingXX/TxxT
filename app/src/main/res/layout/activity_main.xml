@@ -37,7 +37,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginEnd="8dp"
-            android:fontFamily="monospace"
+            android:fontFamily="@font/font_body"
             android:textStyle="bold"
             android:text="NEW" />
     </LinearLayout>
@@ -49,7 +49,7 @@
         android:layout_height="wrap_content"
         android:padding="24dp"
         android:gravity="center"
-        android:fontFamily="monospace"
+        android:fontFamily="@font/font_body"
         android:textSize="14sp"
         android:textColor="#80FFFFFF"
         android:text="No conversations yet.\nNEW starts one."

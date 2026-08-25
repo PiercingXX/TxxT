@@ -50,14 +50,14 @@
          keeping this absent makes that claim verifiable. -->
 
     <!-- NoActionBar: the surfaces are full-bleed AMOLED black text-first
-         layouts (docs/DESIGN.md) — the platform's DeviceDefault title bar
-         must not sit above them. -->
+         layouts (docs/DESIGN.md) — no title bar may sit above them. Theme.TxxT
+         binds the txxt* color attributes the UI reads (values/themes.xml). -->
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
-        android:label="TxxT"
+        android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
+        android:theme="@style/Theme.TxxT">
 
         <!-- Launcher entry. FLAG_SECURE is set in code, so the activity
              declares nothing that would block it: no screenOrientation lock,
@@ -65,7 +65,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:label="TxxT">
+            android:label="@string/app_name">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -78,7 +78,7 @@
         <activity
             android:name=".ui.ThreadActivity"
             android:exported="false"
-            android:label="TxxT" />
+            android:label="@string/app_name" />
 
         <!-- Settings screen. Not exported: launched only by ThreadActivity's
              settings affordance, never by external apps. FLAG_SECURE is set in
@@ -86,7 +86,7 @@
         <activity
             android:name=".ui.SettingsActivity"
             android:exported="false"
-            android:label="TxxT Settings" />
+            android:label="@string/title_settings" />
 
         <!-- Blocking & starred editor. Not exported: launched only by the
              settings screen's blocking affordance. FLAG_SECURE is set in
@@ -94,7 +94,7 @@
         <activity
             android:name=".ui.BlockingActivity"
             android:exported="false"
-            android:label="TxxT Blocking" />
+            android:label="@string/title_blocking" />
 
         <!-- Role-required compose entry point (default-SMS-handler role).
              Exported: other apps hand off ACTION_SENDTO compose requests with
@@ -105,7 +105,7 @@
         <activity
             android:name=".ui.ComposeActivity"
             android:exported="true"
-            android:label="TxxT">
+            android:label="@string/app_name">
             <intent-filter>
                 <action android:name="android.intent.action.SENDTO" />
                 <category android:name="android.intent.category.DEFAULT" />

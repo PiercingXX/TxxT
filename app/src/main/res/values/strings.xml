@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TxxT</string>
+    <string name="title_settings">TxxT Settings</string>
+    <string name="title_blocking">TxxT Blocking</string>
+</resources>

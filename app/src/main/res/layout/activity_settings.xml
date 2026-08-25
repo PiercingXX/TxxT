@@ -31,7 +31,7 @@
             android:text="Settings"
             android:textColor="#FFFFFF"
             android:textSize="22sp"
-            android:fontFamily="monospace"
+            android:fontFamily="@font/font_body"
             android:paddingBottom="12dp" />
 
         <!-- Lock-screen privacy: sender-only / content / nothing. -->
@@ -42,7 +42,7 @@
             android:text="Lock-screen privacy"
             android:textColor="#E6FFFFFF"
             android:textSize="14sp"
-            android:fontFamily="monospace" />
+            android:fontFamily="@font/font_body" />
 
         <Spinner
             android:id="@+id/lock_screen_privacy_spinner"
@@ -58,7 +58,7 @@
             android:text="Notification posture"
             android:textColor="#E6FFFFFF"
             android:textSize="14sp"
-            android:fontFamily="monospace" />
+            android:fontFamily="@font/font_body" />
 
         <Spinner
             android:id="@+id/notification_posture_spinner"
@@ -73,7 +73,7 @@
             android:layout_height="wrap_content"
             android:text="Auto-sync theme with launcher"
             android:textColor="#E6FFFFFF"
-            android:fontFamily="monospace"
+            android:fontFamily="@font/font_body"
             android:layout_marginBottom="12dp" />
 
         <!-- Theme preset (rendering is WS14's scope). -->
@@ -84,7 +84,7 @@
             android:text="Theme preset"
             android:textColor="#E6FFFFFF"
             android:textSize="14sp"
-            android:fontFamily="monospace" />
+            android:fontFamily="@font/font_body" />
 
         <Spinner
             android:id="@+id/theme_preset_spinner"
@@ -100,7 +100,7 @@
             android:text="Font"
             android:textColor="#E6FFFFFF"
             android:textSize="14sp"
-            android:fontFamily="monospace" />
+            android:fontFamily="@font/font_body" />
 
         <Spinner
             android:id="@+id/font_mode_spinner"

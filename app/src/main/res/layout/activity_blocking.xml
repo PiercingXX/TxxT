@@ -24,7 +24,7 @@
             android:text="Blocking &amp; starred"
             android:textColor="#FFFFFF"
             android:textSize="22sp"
-            android:fontFamily="monospace"
+            android:fontFamily="@font/font_body"
             android:paddingBottom="4dp" />
 
         <TextView
@@ -33,7 +33,7 @@
             android:text="Tap an entry to remove it. Changes apply immediately."
             android:textColor="#80FFFFFF"
             android:textSize="12sp"
-            android:fontFamily="monospace"
+            android:fontFamily="@font/font_body"
             android:paddingBottom="12dp" />
 
         <!-- Blocked numbers -->
@@ -44,7 +44,7 @@
             android:textColor="#E6FFFFFF"
             android:textSize="14sp"
             android:textStyle="bold"
-            android:fontFamily="monospace" />
+            android:fontFamily="@font/font_body" />
 
         <LinearLayout
             android:id="@+id/blocked_container"
@@ -65,7 +65,7 @@
                 android:layout_weight="1"
                 android:hint="Number to block"
                 android:inputType="phone"
-                android:fontFamily="monospace"
+                android:fontFamily="@font/font_body"
                 android:textColor="#E6FFFFFF"
                 android:textColorHint="#80FFFFFF" />
 
@@ -73,7 +73,7 @@
                 android:id="@+id/blocked_add"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:fontFamily="monospace"
+                android:fontFamily="@font/font_body"
                 android:text="ADD" />
         </LinearLayout>
 
@@ -85,7 +85,7 @@
             android:textColor="#E6FFFFFF"
             android:textSize="14sp"
             android:textStyle="bold"
-            android:fontFamily="monospace" />
+            android:fontFamily="@font/font_body" />
 
         <LinearLayout
             android:id="@+id/keyword_container"
@@ -106,7 +106,7 @@
                 android:layout_weight="1"
                 android:hint="Keyword to block"
                 android:inputType="text"
-                android:fontFamily="monospace"
+                android:fontFamily="@font/font_body"
                 android:textColor="#E6FFFFFF"
                 android:textColorHint="#80FFFFFF" />
 
@@ -114,7 +114,7 @@
                 android:id="@+id/keyword_add"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:fontFamily="monospace"
+                android:fontFamily="@font/font_body"
                 android:text="ADD" />
         </LinearLayout>
 
@@ -126,7 +126,7 @@
             android:textColor="#E6FFFFFF"
             android:textSize="14sp"
             android:textStyle="bold"
-            android:fontFamily="monospace" />
+            android:fontFamily="@font/font_body" />
 
         <LinearLayout
             android:id="@+id/phrase_container"
@@ -147,7 +147,7 @@
                 android:layout_weight="1"
                 android:hint="Phrase to block"
                 android:inputType="text"
-                android:fontFamily="monospace"
+                android:fontFamily="@font/font_body"
                 android:textColor="#E6FFFFFF"
                 android:textColorHint="#80FFFFFF" />
 
@@ -155,7 +155,7 @@
                 android:id="@+id/phrase_add"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:fontFamily="monospace"
+                android:fontFamily="@font/font_body"
                 android:text="ADD" />
         </LinearLayout>
 
@@ -167,7 +167,7 @@
             android:textColor="#E6FFFFFF"
             android:textSize="14sp"
             android:textStyle="bold"
-            android:fontFamily="monospace" />
+            android:fontFamily="@font/font_body" />
 
         <LinearLayout
             android:id="@+id/starred_container"
@@ -187,7 +187,7 @@
                 android:layout_weight="1"
                 android:hint="Number to star"
                 android:inputType="phone"
-                android:fontFamily="monospace"
+                android:fontFamily="@font/font_body"
                 android:textColor="#E6FFFFFF"
                 android:textColorHint="#80FFFFFF" />
 
@@ -195,7 +195,7 @@
                 android:id="@+id/starred_add"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:fontFamily="monospace"
+                android:fontFamily="@font/font_body"
                 android:text="ADD" />
         </LinearLayout>
 
