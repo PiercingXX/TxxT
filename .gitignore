@@ -1,5 +1,6 @@
 # Skippy workspace state — never commit
 .skippy/
+.ws13-measure/
 
 # Build artifacts
 build/

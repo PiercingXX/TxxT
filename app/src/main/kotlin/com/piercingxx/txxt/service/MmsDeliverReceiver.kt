@@ -162,7 +162,7 @@ class MmsDeliverReceiver(
             try {
                 val store: suspend (String, Long) -> Unit =
                     persist ?: { address, date ->
-                        val database = TxxTDatabase.build(context)
+                        val database = TxxTDatabase.instance(context)
                         InboundStore.persistInboundMmsMetadata(
                             database.conversationDao(),
                             database.messageDao(),

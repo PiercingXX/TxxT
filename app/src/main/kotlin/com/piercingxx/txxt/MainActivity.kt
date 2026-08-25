@@ -99,10 +99,14 @@ class MainActivity : Activity(), SwipeActionCallback {
                 return true
             }
         })
-        startActivity(
-            Intent(this, ThreadActivity::class.java)
-                .putExtra("extra_conversation_id", 1L)
-        )
+        // Only on a fresh launch — a recreate (rotation, theme change, process
+        // restore) must not stack another ThreadActivity on the back stack.
+        if (savedInstanceState == null) {
+            startActivity(
+                Intent(this, ThreadActivity::class.java)
+                    .putExtra("extra_conversation_id", 1L)
+            )
+        }
         requestDefaultHandlerGrants()
     }
 

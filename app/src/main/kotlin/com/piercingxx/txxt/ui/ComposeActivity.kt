@@ -60,7 +60,7 @@ class ComposeActivity(
      * the first touch happens inside [onCreate]'s coroutine, never during
      * construction (ThreadActivity precedent).
      */
-    private val database: TxxTDatabase by lazy { TxxTDatabase.build(this) }
+    private val database: TxxTDatabase by lazy { TxxTDatabase.instance(this) }
 
     /**
      * The activity-scoped coroutine scope (ThreadActivity precedent): a

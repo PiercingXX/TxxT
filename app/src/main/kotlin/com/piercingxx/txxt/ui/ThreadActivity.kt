@@ -71,7 +71,7 @@ class ThreadActivity : Activity() {
      */
     private var recognizer: SpeechRecognizer? = null
 
-    private val database: TxxTDatabase by lazy { TxxTDatabase.build(this) }
+    private val database: TxxTDatabase by lazy { TxxTDatabase.instance(this) }
 
     /**
      * The theme controller over the same `txxt_theme` SharedPreferences the

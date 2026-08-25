@@ -53,14 +53,17 @@ class SmsReceiver(
             ?.originatingAddress
     },
     /**
-     * Extracts the body text of the inbound SMS from [Intent]. Defaults to
-     * reading the first message's body; injectable so a JVM unit test can
-     * drive `onReceive` with a real body without mocking [android.telephony.SmsMessage].
+     * Extracts the body text of the inbound SMS from [Intent]. A message over
+     * one SMS segment arrives as several PDUs in a single intent — one message
+     * per PDU — so the segments are joined in order (reading only the first
+     * would evaluate the filter against a truncated body). Injectable so a JVM
+     * unit test can drive `onReceive` with a real body without mocking
+     * [android.telephony.SmsMessage].
      */
     private val extractBody: (Intent) -> String = { intent ->
         Telephony.Sms.Intents.getMessagesFromIntent(intent)
-            ?.firstOrNull()
-            ?.displayMessageBody
+            ?.filterNotNull()
+            ?.joinToString(separator = "") { it.displayMessageBody ?: "" }
             ?: ""
     },
     /**

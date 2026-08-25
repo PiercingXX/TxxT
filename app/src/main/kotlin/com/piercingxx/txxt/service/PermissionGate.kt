@@ -4,6 +4,8 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 
@@ -49,11 +51,16 @@ class PermissionGate(
      * user-visible [Toast].
      */
     private val onDenied: (Context) -> Unit = { context ->
-        Toast.makeText(
-            context,
-            "SMS permission is off — allow it to send messages.",
-            Toast.LENGTH_LONG,
-        ).show()
+        // Post to the main looper: the gate is consulted from Dispatchers.IO
+        // (deliver receivers, quick reply, boot reconcile), and Toast throws
+        // off the main thread — which would abort the caller's pipeline step.
+        Handler(Looper.getMainLooper()).post {
+            Toast.makeText(
+                context,
+                "SMS permission is off — allow it to send messages.",
+                Toast.LENGTH_LONG,
+            ).show()
+        }
     },
     /**
      * Whether the app currently holds the `RECORD_AUDIO` runtime permission.
@@ -69,11 +76,16 @@ class PermissionGate(
      * user-visible [Toast].
      */
     private val onRecordDenied: (Context) -> Unit = { context ->
-        Toast.makeText(
-            context,
-            "Mic permission is off — allow it to dictate.",
-            Toast.LENGTH_LONG,
-        ).show()
+        // Post to the main looper: the gate is consulted from Dispatchers.IO
+        // (deliver receivers, quick reply, boot reconcile), and Toast throws
+        // off the main thread — which would abort the caller's pipeline step.
+        Handler(Looper.getMainLooper()).post {
+            Toast.makeText(
+                context,
+                "Mic permission is off — allow it to dictate.",
+                Toast.LENGTH_LONG,
+            ).show()
+        }
     },
     /**
      * Whether the app may post notifications right now. `POST_NOTIFICATIONS`
@@ -95,11 +107,16 @@ class PermissionGate(
      * user-visible [Toast].
      */
     private val onNotifyDenied: (Context) -> Unit = { context ->
-        Toast.makeText(
-            context,
-            "Notification permission is off — messages arrive silently.",
-            Toast.LENGTH_LONG,
-        ).show()
+        // Post to the main looper: the gate is consulted from Dispatchers.IO
+        // (deliver receivers, quick reply, boot reconcile), and Toast throws
+        // off the main thread — which would abort the caller's pipeline step.
+        Handler(Looper.getMainLooper()).post {
+            Toast.makeText(
+                context,
+                "Notification permission is off — messages arrive silently.",
+                Toast.LENGTH_LONG,
+            ).show()
+        }
     },
 ) {
 

@@ -88,13 +88,16 @@ class SmsDeliverReceiver(
             ?.originatingAddress
     },
     /**
-     * Extracts the body text of the inbound SMS from [Intent]. Defaults to the
-     * first message's display body; injectable for JVM tests.
+     * Extracts the body text of the inbound SMS from [Intent]. A message over
+     * one SMS segment arrives as several PDUs in a single DELIVER intent —
+     * one [android.telephony.SmsMessage] per PDU — so the segments are joined
+     * in order; reading only the first would truncate every long message.
+     * Injectable for JVM tests.
      */
     private val extractBody: (Intent) -> String = { intent ->
         Telephony.Sms.Intents.getMessagesFromIntent(intent)
-            ?.firstOrNull()
-            ?.displayMessageBody
+            ?.filterNotNull()
+            ?.joinToString(separator = "") { it.displayMessageBody ?: "" }
             ?: ""
     },
     /**
@@ -164,7 +167,7 @@ class SmsDeliverReceiver(
             try {
                 val store: suspend (String, String, Long) -> Unit =
                     persist ?: { address, text, dateMillis ->
-                        val database = TxxTDatabase.build(context)
+                        val database = TxxTDatabase.instance(context)
                         InboundStore.persistInboundSms(
                             database.conversationDao(),
                             database.messageDao(),

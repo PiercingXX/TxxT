@@ -1,6 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- The SMS permissions below imply telephony hardware; declare it
+         explicitly (not hard-required) so devices without telephony — e.g.
+         ChromeOS — can still install, per lint
+         PermissionImpliesUnsupportedChromeOsHardware. -->
+    <uses-feature
+        android:name="android.hardware.telephony"
+        android:required="false" />
+
     <!-- Default-SMS-handler role. Declaring this permission makes the app
          eligible to be offered as the default SMS handler by the OS. The
          role-completing components now exist in this manifest:

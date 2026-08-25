@@ -53,7 +53,16 @@ class NotificationService(
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(EXTRA_SENDER, sender)
         }
-        PendingIntent.getActivity(ctx, 0, intent, PendingIntent.FLAG_IMMUTABLE)
+        // Request code = the per-sender notification id: the intents differ
+        // only in extras, so a shared request code would make filterEquals
+        // match and the platform hand every sender the FIRST sender's intent.
+        // FLAG_UPDATE_CURRENT keeps the extras fresh on re-posts.
+        PendingIntent.getActivity(
+            ctx,
+            idFor(sender),
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
     },
 
     /**
@@ -64,8 +73,22 @@ class NotificationService(
         val replyIntent = Intent(ctx, NotificationReplyReceiver::class.java).apply {
             putExtra(EXTRA_SENDER, sender)
         }
+        // The reply PendingIntent MUST be mutable on API 31+: the system writes
+        // the RemoteInput results bundle into it, and with FLAG_IMMUTABLE that
+        // write is refused — `RemoteInput.getResultsFromIntent` then returns
+        // null in the receiver and every quick reply is silently discarded.
+        // Per-sender request code + FLAG_UPDATE_CURRENT for the same
+        // filterEquals reason as the content intent above.
+        val mutability = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            PendingIntent.FLAG_MUTABLE
+        } else {
+            0
+        }
         val replyPendingIntent = PendingIntent.getBroadcast(
-            ctx, 1, replyIntent, PendingIntent.FLAG_IMMUTABLE
+            ctx,
+            idFor(sender),
+            replyIntent,
+            mutability or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val remoteInput = RemoteInput.Builder(KEY_REPLY_TEXT).run {
             setLabel("Reply")
@@ -105,7 +128,16 @@ class NotificationService(
     /**
      * Notification ID — one per sender, derived from the sender string hash.
      */
-    fun notificationId(sender: String): Int = sender.hashCode() and 0x7fffffff
+    fun notificationId(sender: String): Int = idFor(sender)
+
+    companion object {
+        /**
+         * The per-sender notification id, shared with the PendingIntent request
+         * codes above and the quick-reply receiver's post-reply cancel — every
+         * consumer must derive the SAME id for a given sender.
+         */
+        fun idFor(sender: String): Int = sender.hashCode() and 0x7fffffff
+    }
 
     /**
      * Post a notification for a message from [sender] with [body].
@@ -226,6 +258,14 @@ class NotificationReplyReceiver(
      * same lazily built Room database as [persist].
      */
     private val markSent: (suspend (Long) -> Unit)? = null,
+    /**
+     * Dismisses the sender's notification once the reply is handled. Defaults
+     * to `null`, meaning the real `NotificationManager.cancel` runs inside
+     * [onReceive]: after an inline reply Android shows a progress spinner on
+     * the notification until the app updates or cancels it — without this the
+     * notification hangs in a "sending" state forever.
+     */
+    private val clearNotification: ((Context, String) -> Unit)? = null,
 ) : android.content.BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -242,7 +282,7 @@ class NotificationReplyReceiver(
         val exceptionHandler = CoroutineExceptionHandler { _, _ -> }
         CoroutineScope(Dispatchers.IO + exceptionHandler).launch {
             try {
-                val database by lazy { TxxTDatabase.build(context) }
+                val database by lazy { TxxTDatabase.instance(context) }
                 val persistStep = persist ?: { address, text ->
                     OutboundStore.persistOutgoingSms(
                         database.conversationDao(),
@@ -260,6 +300,15 @@ class NotificationReplyReceiver(
                 if (ok) {
                     markSentStep(messageId)
                 }
+                // Dismiss the notification whether or not the send was gated:
+                // the RemoteInput spinner must never hang forever (see the
+                // [clearNotification] KDoc). The safe-cast keeps a JVM test's
+                // relaxed mock Context from throwing here.
+                val clearStep = clearNotification ?: { ctx, from ->
+                    (ctx.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager)
+                        ?.cancel(NotificationService.idFor(from))
+                }
+                clearStep(context, sender)
             } finally {
                 pendingResult.finish()
             }

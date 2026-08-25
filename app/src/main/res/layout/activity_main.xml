@@ -17,7 +17,7 @@
 
     <!-- Conversation search (T3). The SearchView widget whose query listener
          MainActivity wires into applySearchQuery → filterConversations. -->
-    <androidx.appcompat.widget.SearchView
+    <SearchView
         android:id="@+id/searchView"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

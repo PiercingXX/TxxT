@@ -29,9 +29,25 @@ abstract class TxxTDatabase : RoomDatabase() {
     companion object {
         const val NAME = "txxt.db"
 
+        @Volatile
+        private var instance: TxxTDatabase? = null
+
+        /**
+         * The process-wide singleton. Every production call site (activities,
+         * deliver receivers, quick reply, boot reconcile) must share ONE Room
+         * instance: separate instances each hold their own SQLite connection
+         * (leaked per broadcast) and — worse — Room's invalidation tracker is
+         * per-instance, so a message persisted through one instance never
+         * triggers the Flow observers reading through another.
+         */
+        fun instance(context: Context): TxxTDatabase =
+            instance ?: synchronized(this) {
+                instance ?: build(context.applicationContext).also { instance = it }
+            }
+
         /**
          * Builds a [TxxTDatabase] instance. Callers own the returned instance's
-         * lifecycle; use a singleton holder in production.
+         * lifecycle; production code goes through [instance] instead.
          */
         fun build(context: Context): TxxTDatabase =
             Room.databaseBuilder(context, TxxTDatabase::class.java, NAME)

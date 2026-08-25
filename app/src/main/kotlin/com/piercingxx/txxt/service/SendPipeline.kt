@@ -51,7 +51,15 @@ object SendPipeline {
         if (!gate.canSend(context)) return false
         // scAddress null = use the device default; sent/delivery null = never
         // request a delivery or read report (`docs/PRIVACY.md:23`).
-        resolveSmsManager(context).sendTextMessage(destination, null, body, null, null)
+        val manager = resolveSmsManager(context)
+        val parts = manager.divideMessage(body)
+        if (parts != null && parts.size > 1) {
+            // A body over one SMS segment must go through the multipart API —
+            // sendTextMessage silently fails at the radio layer for it.
+            manager.sendMultipartTextMessage(destination, null, parts, null, null)
+        } else {
+            manager.sendTextMessage(destination, null, body, null, null)
+        }
         return true
     }
 

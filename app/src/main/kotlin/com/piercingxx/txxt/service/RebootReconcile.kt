@@ -178,7 +178,7 @@ class BootReceiver : BroadcastReceiver() {
         val exceptionHandler = CoroutineExceptionHandler { _, _ -> }
         CoroutineScope(Dispatchers.IO + exceptionHandler).launch {
             try {
-                val database = TxxTDatabase.build(context)
+                val database = TxxTDatabase.instance(context)
                 val reconcile = RebootReconcile(
                     loadMessages = { database.messageDao().getAll() },
                     loadConversations = { database.conversationDao().getAll() },
