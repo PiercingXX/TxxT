@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  TxxT launcher conversation list (WS10 corrective-corrective T2).
+  TxxT launcher conversation list (WS10).
 
   The launcher's conversation-list host. The list is a RecyclerView identified
   as recyclerView — the runtime ID MainActivity resolves via
-  findViewById<RecyclerView>(R.id.recyclerView) and drives the swipe helper
-  (T1) once the WS10 conversation list lands. Text-first on AMOLED black
-  (docs/DESIGN.md §"Conversation thread").
+  findViewById<RecyclerView>(R.id.recyclerView), fills through
+  ConversationListAdapter, and hosts the swipe helper on. Text-first on AMOLED
+  black (docs/DESIGN.md §"Conversation thread").
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/main_root"
@@ -15,21 +15,56 @@
     android:orientation="vertical"
     android:background="#000000">
 
-    <!-- Conversation search (T3). The SearchView widget whose query listener
-         MainActivity wires into applySearchQuery → filterConversations. -->
-    <SearchView
-        android:id="@+id/searchView"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:queryHint="Search conversations" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <!-- Conversation search (T3). The SearchView widget whose query listener
+             MainActivity wires into applySearchQuery → filterConversations. -->
+        <SearchView
+            android:id="@+id/searchView"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:queryHint="Search conversations" />
+
+        <!-- New-conversation affordance: prompts for a number and opens (or
+             creates) its thread. Text-first — a monospace word, not an icon. -->
+        <Button
+            android:id="@+id/new_message_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:fontFamily="monospace"
+            android:textStyle="bold"
+            android:text="NEW" />
+    </LinearLayout>
+
+    <!-- Shown instead of an empty list; MainActivity toggles visibility. -->
+    <TextView
+        android:id="@+id/empty_state"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="24dp"
+        android:gravity="center"
+        android:fontFamily="monospace"
+        android:textSize="14sp"
+        android:textColor="#80FFFFFF"
+        android:text="No conversations yet.\nNEW starts one."
+        android:visibility="gone" />
 
     <!-- Conversation list. The runtime view ID MainActivity resolves and the
          swipe helper (T1) attaches to. -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerView"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:padding="12dp"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="12dp"
         android:clipToPadding="false" />
 
 </LinearLayout>

@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  TxxT conversation-list row (WS10).
+
+  A text-first line, never a card (docs/DESIGN.md §"Conversation list",
+  docs/PRIVACY.md §2): title + unread badge + timestamp on the first line,
+  a one-line snippet below. Emphasis comes from the white-opacity ramp,
+  never hue — the unread badge is signal-white text, not a colored dot.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingTop="10dp"
+    android:paddingBottom="10dp"
+    android:paddingStart="4dp"
+    android:paddingEnd="4dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <!-- Participant addresses. Signal-white, single line. -->
+        <TextView
+            android:id="@+id/conversation_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:fontFamily="monospace"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:textColor="#E6FFFFFF"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <!-- Unread badge: "n new" in signal-white; GONE at zero. -->
+        <TextView
+            android:id="@+id/conversation_unread"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:fontFamily="monospace"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:textColor="#FFFFFFFF"
+            android:visibility="gone" />
+
+        <!-- Latest-activity timestamp, muted. -->
+        <TextView
+            android:id="@+id/conversation_timestamp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:fontFamily="monospace"
+            android:textSize="11sp"
+            android:textColor="#80FFFFFF" />
+    </LinearLayout>
+
+    <!-- One-line snippet of the latest message, muted. -->
+    <TextView
+        android:id="@+id/conversation_snippet"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:fontFamily="monospace"
+        android:textSize="13sp"
+        android:textColor="#80FFFFFF"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+</LinearLayout>

@@ -268,6 +268,30 @@ class ThreadActivity : Activity() {
         tts = null
     }
 
+    /**
+     * Whether this screen is currently in front of the user ([onStart] to
+     * [onStop]). A VISIBLE thread reads its messages; one parked in the back
+     * stack must NOT — an inbound message arriving while the user is elsewhere
+     * would otherwise be marked read unseen and the launcher badge wiped.
+     */
+    private var started = false
+
+    /** Whether the latest collected message list still holds unread messages. */
+    private var hasUnread = false
+
+    override fun onStart() {
+        super.onStart()
+        started = true
+        // Returning to a thread that accumulated unread messages while parked
+        // reads them now.
+        if (hasUnread) markThreadRead()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        started = false
+    }
+
     /** Loads this conversation's messages from Room and submits them to the adapter. */
     private fun observeMessages() {
         scope.launch(Dispatchers.Main) {
@@ -275,7 +299,23 @@ class ThreadActivity : Activity() {
                 .messages()
                 .collect { messages ->
                     adapter.submit(messages)
+                    // A visible thread reads its incoming messages: clear their
+                    // unread flag so the launcher's badge and any UNREAD_FIRST
+                    // ordering settle. Gated on [started] (a backgrounded
+                    // thread never reads for the user) and on something
+                    // actually being unread — the update's own `isRead = 0`
+                    // clause then makes the settled state a no-op instead of
+                    // an invalidation loop.
+                    hasUnread = messages.any { it.isUnread }
+                    if (started && hasUnread) markThreadRead()
                 }
+        }
+    }
+
+    /** Clears this conversation's unread flags (the visible-thread read). */
+    private fun markThreadRead() {
+        scope.launch(Dispatchers.Main) {
+            database.messageDao().markConversationRead(conversationId)
         }
     }
 

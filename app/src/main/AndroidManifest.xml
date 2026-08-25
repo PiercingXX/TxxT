@@ -49,11 +49,15 @@
     <!-- Deliberately NO INTERNET permission. TxxT never talks to a network;
          keeping this absent makes that claim verifiable. -->
 
+    <!-- NoActionBar: the surfaces are full-bleed AMOLED black text-first
+         layouts (docs/DESIGN.md) — the platform's DeviceDefault title bar
+         must not sit above them. -->
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="TxxT"
-        android:supportsRtl="true">
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
 
         <!-- Launcher entry. FLAG_SECURE is set in code, so the activity
              declares nothing that would block it: no screenOrientation lock,

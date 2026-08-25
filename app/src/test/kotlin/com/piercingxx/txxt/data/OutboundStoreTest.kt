@@ -56,6 +56,10 @@ class OutboundStoreTest {
         override suspend fun deleteById(id: Long) {
             rows.remove(id)
         }
+
+        override suspend fun unarchive(id: Long) {
+            rows[id]?.let { rows[id] = it.copy(isArchived = false) }
+        }
     }
 
     /** REPLACE-by-primary-key message DAO fake (Room upsert semantics). */
@@ -97,6 +101,14 @@ class OutboundStoreTest {
 
         override suspend fun markSent(id: Long) {
             rows[id]?.let { rows[id] = it.copy(sent = true) }
+        }
+
+        override fun observeAll(): kotlinx.coroutines.flow.Flow<List<MessageEntity>> =
+            kotlinx.coroutines.flow.flowOf(rows.values.toList())
+
+        override suspend fun markConversationRead(conversationId: Long) {
+            rows.values.filter { it.conversationId == conversationId && it.direction == "INCOMING" }
+                .forEach { rows[it.id] = it.copy(isRead = true) }
         }
 
         override suspend fun deleteForConversation(conversationId: Long) {
@@ -193,5 +205,18 @@ class OutboundStoreTest {
         assertEquals(2, messages.rows.size)
         assertEquals("pre-existing", messages.rows.getValue(now).body)
         assertEquals("reply", messages.rows.getValue(messageId).body)
+    }
+    @Test
+    fun `sending into an archived conversation unarchives it`() = runBlocking {
+        val conversations = FakeConversationDao()
+        val messages = FakeMessageDao()
+        val conversationId = InboundStore.findOrCreateConversation(conversations, "+15551234567")
+        conversations.rows[conversationId] =
+            conversations.rows.getValue(conversationId).copy(isArchived = true)
+
+        OutboundStore.persistOutgoingSms(conversations, messages, "+15551234567", "hi")
+
+        // The send is new activity: the thread must resurface in the list.
+        assertEquals(false, conversations.rows.getValue(conversationId).isArchived)
     }
 }

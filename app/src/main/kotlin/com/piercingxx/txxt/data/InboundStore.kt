@@ -134,6 +134,9 @@ object InboundStore {
         dateMillis: Long,
     ): Long = MUTEX.withLock {
         val conversationId = findOrCreateConversationLocked(conversations, address)
+        // New activity unarchives: an archived thread receiving a message must
+        // surface in the launcher's list again, never stay silently hidden.
+        conversations.unarchive(conversationId)
         val message = MessageEntity(
             id = freshMessageId(messages),
             conversationId = conversationId,
@@ -165,6 +168,9 @@ object InboundStore {
         dateMillis: Long,
     ): Long = MUTEX.withLock {
         val conversationId = findOrCreateConversationLocked(conversations, address)
+        // New activity unarchives: an archived thread receiving a message must
+        // surface in the launcher's list again, never stay silently hidden.
+        conversations.unarchive(conversationId)
         val message = MessageEntity(
             id = freshMessageId(messages),
             conversationId = conversationId,

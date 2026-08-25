@@ -56,6 +56,8 @@ object OutboundStore {
         // findOrCreateConversation — which self-locks — must NOT be called
         // in here; the internal unlocked variant is exactly for this).
         val conversationId = InboundStore.findOrCreateConversationLocked(conversations, address)
+        // Sending into an archived thread unarchives it (InboundStore rule).
+        conversations.unarchive(conversationId)
         val message = MessageEntity(
             id = InboundStore.freshMessageId(messages),
             conversationId = conversationId,

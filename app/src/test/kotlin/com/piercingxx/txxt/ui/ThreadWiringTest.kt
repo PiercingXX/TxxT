@@ -77,17 +77,21 @@ class ThreadWiringTest {
 
     @Test
     fun `MainActivity launches ThreadActivity with FLAG_SECURE`() {
+        // The launcher opens threads through ThreadActivity.launchIntent — the
+        // factory that carries EXTRA_CONVERSATION_ID (locked behaviourally in
+        // `launchIntent carries the conversation id` below where applicable),
+        // so a tapped row and the NEW affordance both land on a real thread.
         assertTrue(
-            "MainActivity must start ThreadActivity",
-            mainActivity.contains("ThreadActivity::class.java"),
+            "MainActivity must open threads via ThreadActivity.launchIntent",
+            mainActivity.contains("ThreadActivity.launchIntent("),
         )
         assertTrue(
             "MainActivity must set FLAG_SECURE in code",
             mainActivity.contains("FLAG_SECURE"),
         )
         assertTrue(
-            "MainActivity must pass a conversation id to the thread",
-            mainActivity.contains("extra_conversation_id"),
+            "ThreadActivity.launchIntent must pass the conversation id extra",
+            sourceText("ui/ThreadActivity.kt").contains("EXTRA_CONVERSATION_ID"),
         )
     }
 

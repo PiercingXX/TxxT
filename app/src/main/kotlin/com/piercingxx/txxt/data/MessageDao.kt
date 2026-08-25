@@ -42,6 +42,21 @@ interface MessageDao {
     @Query("SELECT * FROM messages")
     suspend fun getAll(): List<MessageEntity>
 
+    /** Live view of every message — drives the launcher's conversation list. */
+    @Query("SELECT * FROM messages")
+    fun observeAll(): Flow<List<MessageEntity>>
+
+    /**
+     * Marks a conversation's incoming messages read (opening its thread reads
+     * them). The `isRead = 0` clause makes the write a no-op — and stops the
+     * Room invalidation cycle — once nothing is unread.
+     */
+    @Query(
+        "UPDATE messages SET isRead = 1 " +
+            "WHERE conversationId = :conversationId AND direction = 'INCOMING' AND isRead = 0"
+    )
+    suspend fun markConversationRead(conversationId: Long)
+
     @Query("DELETE FROM messages WHERE id = :id")
     suspend fun deleteById(id: Long)
 

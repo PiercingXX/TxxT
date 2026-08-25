@@ -47,4 +47,14 @@ interface ConversationDao {
 
     @Query("DELETE FROM conversations WHERE id = :id")
     suspend fun deleteById(id: Long)
+
+    /**
+     * Clears a conversation's archived flag. New activity — an inbound message
+     * or an outgoing send — unarchives the thread so it surfaces in the
+     * launcher's list again (archived-and-hidden must never swallow a live
+     * conversation). The `isArchived = 1` clause keeps the settled state a
+     * no-op for Room invalidation.
+     */
+    @Query("UPDATE conversations SET isArchived = 0 WHERE id = :id AND isArchived = 1")
+    suspend fun unarchive(id: Long)
 }

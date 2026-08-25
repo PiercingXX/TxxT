@@ -2,34 +2,57 @@ package com.piercingxx.txxt
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Typeface
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.text.InputType
+import android.view.View
 import android.view.WindowManager
+import android.widget.Button
+import android.widget.EditText
 import android.widget.SearchView
+import android.widget.TextView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.piercingxx.txxt.core.Conversation
+import com.piercingxx.txxt.data.InboundStore
+import com.piercingxx.txxt.data.TxxTDatabase
 import com.piercingxx.txxt.service.DefaultHandlerMonitor
 import com.piercingxx.txxt.theme.SharedPreferencesThemeKeyValueStore
+import com.piercingxx.txxt.theme.ThemeApplier
 import com.piercingxx.txxt.theme.ThemeController
 import com.piercingxx.txxt.theme.ThemeStore
+import com.piercingxx.txxt.ui.ConversationListAdapter
+import com.piercingxx.txxt.ui.ConversationListLoader
 import com.piercingxx.txxt.ui.ConversationSearchFilter
 import com.piercingxx.txxt.ui.ConversationSwipeHelper
 import com.piercingxx.txxt.ui.SwipeActionCallback
 import com.piercingxx.txxt.ui.ThreadActivity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 /**
- * Launcher activity for TxxT.
+ * Launcher activity for TxxT: the conversation list.
  *
- * Declared in the manifest with the MAIN/LAUNCHER intent-filter
- * (`app/src/main/AndroidManifest.xml:36-44`). FLAG_SECURE is set in code
- * (docs/PRIVACY.md §3) so the launcher never appears in recents previews or
- * screenshots. With the conversation list (WS10) not yet landed, the launcher
- * opens the thread screen directly — the conversation list will pass the real
- * conversation id when it arrives.
+ * Declared in the manifest with the MAIN/LAUNCHER intent-filter. FLAG_SECURE
+ * is set in code (docs/PRIVACY.md §3) so the launcher never appears in recents
+ * previews or screenshots.
+ *
+ * The list is live: [ConversationListLoader] combines the conversations and
+ * messages tables into sorted, archive-filtered `core` [Conversation]s, and
+ * every emission re-applies the current search query before submitting to
+ * [ConversationListAdapter]. Tapping a row opens its [ThreadActivity]; the NEW
+ * affordance prompts for a number and opens (or creates) that thread; swiping
+ * left archives, swiping right deletes (WS10).
  */
 class MainActivity : Activity(), SwipeActionCallback {
 
@@ -63,6 +86,32 @@ class MainActivity : Activity(), SwipeActionCallback {
     /** The conversation list the launcher filters and displays. */
     private var conversations: List<Conversation> = emptyList()
 
+    /** The current search query, re-applied when the live list re-emits. */
+    private var currentQuery: String = ""
+
+    /** The process-wide Room database behind the live list. */
+    private val database: TxxTDatabase by lazy { TxxTDatabase.instance(this) }
+
+    /**
+     * The activity-scoped coroutine scope (ThreadActivity precedent). Cancelled
+     * in [onDestroy] so the Room Flow collection cannot outlive the launcher.
+     */
+    private val scope: CoroutineScope =
+        CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    /**
+     * The conversation-list adapter. Stable-id rows (the swipe helper reads
+     * `viewHolder.itemId` as the conversation id); a tapped row opens its
+     * thread.
+     */
+    private val adapter = ConversationListAdapter(
+        onConversationTap = { row -> openThread(row.conversationId) },
+        onConversationLongPress = { row -> promptRowActions(row.conversationId) },
+    )
+
+    private lateinit var emptyState: TextView
+    private lateinit var newMessageButton: Button
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // FLAG_SECURE in code (docs/PRIVACY.md §3): no recents preview, no screenshots.
@@ -79,11 +128,18 @@ class MainActivity : Activity(), SwipeActionCallback {
         )
         // The controller carries the manual-wins precedence over that store.
         themeController = ThemeController(themeStore)
-        // The launcher's conversation-list host (activity_main.xml). The
-        // RecyclerView is resolved by its runtime ID and hosts the swipe helper
-        // (T1) — the wiring the WS10 conversation list drives when it lands.
+
         setContentView(R.layout.activity_main)
+        emptyState = findViewById(R.id.empty_state)
+        newMessageButton = findViewById(R.id.new_message_button)
+
+        // The launcher's conversation-list host (activity_main.xml): the live
+        // adapter plus the swipe helper (T1) over the same RecyclerView.
+        val recyclerView = findViewById<RecyclerView>(R.id.recyclerView)
+        recyclerView.layoutManager = LinearLayoutManager(this)
+        recyclerView.adapter = adapter
         attachSwipeHelper(findViewById<RecyclerView>(R.id.recyclerView))
+
         // Search wiring (T3): the SearchView widget's query listener routes every
         // keystroke and submit through applySearchQuery, which filters the
         // conversation list and submits the result to the adapter.
@@ -99,15 +155,88 @@ class MainActivity : Activity(), SwipeActionCallback {
                 return true
             }
         })
-        // Only on a fresh launch — a recreate (rotation, theme change, process
-        // restore) must not stack another ThreadActivity on the back stack.
-        if (savedInstanceState == null) {
-            startActivity(
-                Intent(this, ThreadActivity::class.java)
-                    .putExtra("extra_conversation_id", 1L)
-            )
-        }
+
+        newMessageButton.setOnClickListener { promptNewConversation() }
+
+        observeConversations()
+        applyTheme()
         requestDefaultHandlerGrants()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // Stop the Room Flow collection feeding a dead activity (ThreadActivity
+        // precedent) — without this every recreate leaks the launcher.
+        scope.cancel()
+    }
+
+    /**
+     * Collects the live conversation list. Every emission — a new inbound
+     * message, a send, an archive/delete, a restore — updates [conversations]
+     * and re-applies the current query, so the visible list, snippets, and
+     * unread badges track Room without a manual refresh.
+     */
+    private fun observeConversations() {
+        scope.launch {
+            ConversationListLoader(database.conversationDao(), database.messageDao())
+                .conversations()
+                .collect { loaded ->
+                    conversations = loaded
+                    applySearchQuery(currentQuery)
+                }
+        }
+    }
+
+    /**
+     * Paints the launcher's chrome from the current effective theme (T6) — the
+     * same applier path the thread screen uses, so both surfaces follow the
+     * store's effective theme.
+     */
+    private fun applyTheme() {
+        val root = findViewById<View>(R.id.main_root)
+        ThemeApplier(themeController) { tokens ->
+            root.setBackgroundColor(tokens.background.toInt())
+            emptyState.setTextColor(tokens.muted.toInt())
+            newMessageButton.setTextColor(tokens.accentOn.toInt())
+            newMessageButton.backgroundTintList =
+                android.content.res.ColorStateList.valueOf(tokens.accent.toInt())
+        }.apply()
+    }
+
+    /** Opens the thread screen for [conversationId]. */
+    private fun openThread(conversationId: Long) {
+        startActivity(ThreadActivity.launchIntent(this, conversationId))
+    }
+
+    /**
+     * The NEW affordance: prompts for a phone number, finds or creates its
+     * conversation through [InboundStore] (the same collision-safe path inbound
+     * delivery and the SENDTO hand-off use), and opens the thread.
+     */
+    private fun promptNewConversation() {
+        val input = EditText(this).apply {
+            hint = "Phone number"
+            inputType = InputType.TYPE_CLASS_PHONE
+            typeface = Typeface.MONOSPACE
+        }
+        AlertDialog.Builder(this)
+            .setTitle("New message")
+            .setView(input)
+            .setPositiveButton("Open") { _, _ ->
+                val address = input.text?.toString()?.trim().orEmpty()
+                if (address.isNotEmpty()) openNewConversation(address)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /** Finds or creates the conversation for [address] and opens its thread. */
+    private fun openNewConversation(address: String) {
+        scope.launch {
+            val conversationId =
+                InboundStore.findOrCreateConversation(database.conversationDao(), address)
+            openThread(conversationId)
+        }
     }
 
     /**
@@ -146,13 +275,10 @@ class MainActivity : Activity(), SwipeActionCallback {
     }
 
     /**
-     * The conversation-list swipe seam (WS10 corrective-corrective T1). The
-     * launcher is the reachable call site for the swipe helper: it constructs a
+     * The conversation-list swipe seam (WS10). The launcher constructs a
      * [ConversationSwipeHelper] over this activity (the [SwipeActionCallback])
-     * and attaches it to the conversation-list RecyclerView. With the WS10 list
-     * not yet landed the launcher opens the thread screen directly; this seam is
-     * the wiring the conversation list will drive when it arrives, and it is what
-     * `MainActivityWiringTest` verifies reaches the helper.
+     * and attaches it to the conversation-list RecyclerView; the helper hands
+     * swiped rows' stable ids to the callbacks below.
      */
     fun attachSwipeHelper(recyclerView: RecyclerView) {
         ConversationSwipeHelper(this).attachTo(recyclerView)
@@ -166,25 +292,83 @@ class MainActivity : Activity(), SwipeActionCallback {
      * types in the launcher's search box.
      */
     fun applySearchQuery(query: String) {
+        currentQuery = query
         val filtered = searchFilter.filterConversations(conversations, query)
-        // Submit the filtered list to the conversation-list adapter. The adapter
-        // is the WS10 conversation-list surface; the seam is what the box verifies.
         adapter.submit(filtered)
+        emptyState.visibility = if (filtered.isEmpty()) View.VISIBLE else View.GONE
     }
 
-    // The four swipe actions are deferred (DAO/intent operations are out of
-    // scope for this corrective) — implemented as no-ops so the wiring seam is
-    // what the box verifies, not the deferred operations.
-    override fun onArchive(conversationId: Long) {}
-    override fun onDelete(conversationId: Long) {}
-    override fun onCall(conversationId: Long) {}
-    override fun onSchedule(conversationId: Long) {}
+    /**
+     * Long-press actions for a conversation row: pin/unpin (feeds the
+     * PINNED_FIRST ordering) and archive (the swipe-left action, offered here
+     * too for discoverability). Reads the persisted flags first so the dialog
+     * names the toggle it will actually perform.
+     */
+    private fun promptRowActions(conversationId: Long) {
+        scope.launch {
+            val entity = database.conversationDao().getById(conversationId) ?: return@launch
+            val pinLabel = if (entity.isPinned) "Unpin" else "Pin"
+            AlertDialog.Builder(this@MainActivity)
+                .setTitle(entity.participantAddresses.replace(ADDRESS_DELIMITER, ", "))
+                .setItems(arrayOf(pinLabel, "Call", "Archive")) { _, which ->
+                    when (which) {
+                        0 -> togglePinned(conversationId)
+                        1 -> onCall(conversationId)
+                        2 -> onArchive(conversationId)
+                    }
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+    }
+
+    /** Flips a conversation's persisted pinned flag (PINNED_FIRST ordering). */
+    private fun togglePinned(conversationId: Long) {
+        scope.launch {
+            val dao = database.conversationDao()
+            dao.getById(conversationId)?.let { dao.update(it.copy(isPinned = !it.isPinned)) }
+        }
+    }
 
     /**
-     * The conversation-list adapter. The WS10 conversation-list adapter is out of
-     * scope for this corrective; the submit seam is what T3's box verifies.
+     * Swipe left: archive (WS10). Sets the persisted archive flag; the live
+     * list drops the row on the next emission (archiving hides, never deletes).
      */
-    private val adapter = ConversationListAdapter()
+    override fun onArchive(conversationId: Long) {
+        scope.launch {
+            val dao = database.conversationDao()
+            dao.getById(conversationId)?.let { dao.update(it.copy(isArchived = true)) }
+        }
+    }
+
+    /** Swipe right: delete the conversation and its messages (WS10). */
+    override fun onDelete(conversationId: Long) {
+        scope.launch {
+            database.messageDao().deleteForConversation(conversationId)
+            database.conversationDao().deleteById(conversationId)
+        }
+    }
+
+    /**
+     * Call-through (WS10): opens the dialer pre-filled with the conversation's
+     * first participant. ACTION_DIAL needs no permission — the user places the
+     * call from the dialer.
+     */
+    override fun onCall(conversationId: Long) {
+        scope.launch {
+            val number = database.conversationDao().getById(conversationId)
+                ?.participantAddresses
+                ?.split(ADDRESS_DELIMITER)
+                ?.firstOrNull { it.isNotBlank() }
+                ?: return@launch
+            startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$number")))
+        }
+    }
+
+    // Scheduled sending is deferred (docs/FEATURES.md open question) and is not
+    // reachable from the two swipe directions the helper maps; kept as a no-op
+    // so the SwipeActionCallback surface stays complete.
+    override fun onSchedule(conversationId: Long) {}
 
     companion object {
         /** Request code for the default-SMS-handler role request. */
@@ -192,6 +376,9 @@ class MainActivity : Activity(), SwipeActionCallback {
 
         /** Request code for the POST_NOTIFICATIONS runtime-permission prompt. */
         const val REQUEST_POST_NOTIFICATIONS = 4_002
+
+        /** Delimiter joining participant addresses in the conversations table. */
+        private const val ADDRESS_DELIMITER = "\u0001"
 
         /**
          * Whether the launcher should start a default-SMS-role request. Pure
@@ -209,16 +396,5 @@ class MainActivity : Activity(), SwipeActionCallback {
          */
         fun needsNotificationPermission(sdkInt: Int, granted: Boolean): Boolean =
             sdkInt >= Build.VERSION_CODES.TIRAMISU && !granted
-    }
-}
-
-/**
- * Placeholder conversation-list adapter (WS10). The real adapter is out of scope
- * for this corrective; [submit] is the seam `MainActivity.applySearchQuery` drives.
- */
-private class ConversationListAdapter {
-    @Suppress("UNUSED_PARAMETER") // placeholder until the WS10 adapter lands
-    fun submit(conversations: List<Conversation>) {
-        // No-op until the WS10 conversation-list adapter lands.
     }
 }
