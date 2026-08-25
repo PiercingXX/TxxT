@@ -58,7 +58,7 @@ resolved background ARGB. All nine family apps subscribe. TxxT's receiver
 death, and the applier repaints. Seven named grounds — AMOLED Night, Graphite,
 Forest Night, Ocean Drift, Burgundy, Paper, Mist — plus the launcher's Custom,
 which TxxT keys off the name and therefore leaves on the last resolved preset;
-xx-phone is the app that consumes the raw ARGB. Manual beats ambient: pick a
+xx-dialer is the app that consumes the raw ARGB. Manual beats ambient: pick a
 theme in Settings and the launcher stops overriding it (`docs/PRIVACY.md` §7).
 
 ## Notifications 🔔
