@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 108 108" role="img" aria-label="PiercingXX logomark: two stacked white X's, underlined, on black">
+  <!-- PiercingXX logomark. Copied from PiercingXX/TxxT
+       app/src/main/res/drawable/ic_launcher_foreground.xml (the TxxT adaptive-icon
+       foreground). Two Signal-white X's as round-capped strokes at ±45°, stacked,
+       with a white underline stroke, on an Ink tile. Corner radius ≈ 20% of the tile. -->
+  <rect x="0" y="0" width="108" height="108" rx="22" fill="#000000"/>
+  <!-- Top X: white cross centred at (54,40), half-extent 14, stroke 6. -->
+  <path d="M40,26 L68,54 M40,54 L68,26" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round"/>
+  <!-- Bottom X: white cross centred at (54,66), half-extent 14. -->
+  <path d="M40,52 L68,80 M40,80 L68,52" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round"/>
+  <!-- Underline: white bar beneath the two X's. -->
+  <path d="M38,88 L70,88" fill="none" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round"/>
+</svg>

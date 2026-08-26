@@ -1,4 +1,7 @@
 # TxxT
+
+<img src="docs/logomark.svg" width="128" height="128" alt="TxxT">
+
 > An SMS client whose defaults are the product.
 
 A private SMS client for Android. Holds the system SMS role on a Pixel 6
