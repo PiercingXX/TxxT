@@ -34,6 +34,17 @@ reports, (2) never rendering them if a proprietary channel smuggles one in,
 and (3) **excluding RCS entirely**, which removes the whole class. The
 load-bearing decision is the RCS exclusion, not per-message toggles.
 
+### Channels and the version suffix
+
+TxxT ships its own notification sound — `app/src/main/res/raw/txxt.wav` on
+channel `txxt_messages_v2` — alongside vibrate-only and silent channels.
+
+The `_v2` is not decoration. Android freezes a notification channel's sound at
+creation and refuses to change it afterward, so shipping a new tone means
+**minting a successor channel id and deleting the predecessor** — never editing
+one in place, never reusing a retired id. Every future tone change bumps the
+version again. The suffix is an append-only counter, not an app version.
+
 ---
 
 ## 2. Nothing ever bubbles
@@ -132,16 +143,18 @@ TxxT's background theme follows the **xx-launcher**'s active theme automatically
 - **Local only** — the sync is an on-device broadcast between two apps on the
   same handset; nothing about the theme is fetched from or published to a
   service.
-- **Mechanism (to confirm against the launcher's actual source):** the
-  launcher repo is not on disk to verify, so this is a spec, not a measured
-  fact. Preferred: the launcher **broadcasts an intent** on theme change
-  (e.g. `xx.launcher.THEME_CHANGED`) carrying the preset name; TxxT registers a
-  receiver and re-applies. Fallback: TxxT reads the launcher's shared settings
-  (shared prefs / content provider) for the active theme on launch and on
-  resume. The exact channel must be confirmed once the launcher source is
-  available; until then this is a designed contract, not an implemented one.
+- **Mechanism (confirmed and shipping):** the launcher broadcasts
+  `xx.launcher.THEME_CHANGED` on theme change, carrying the theme's display name
+  and its resolved background ARGB, targeted at each family app by package. All
+  nine subscribe. TxxT's receiver — `.theme.ThemeSyncReceiver`, exported —
+  resolves the carried name to a `ThemePreset`, persists it to the `txxt_theme`
+  store so the choice survives process death, and the applier repaints.
+- **Custom:** the launcher's Custom ground has no preset to resolve. TxxT keys
+  off the *name* only and therefore stays on the last resolved preset when a
+  Custom broadcast arrives; xx-dialer is the family app that consumes the raw
+  ARGB off the broadcast.
 - **User override:** a manual in-app theme still wins over auto-sync (explicit
-  beats ambient).
+  beats ambient). Pick a theme in Settings and the launcher stops overriding it.
 
 ---
 

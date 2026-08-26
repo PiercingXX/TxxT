@@ -12,6 +12,13 @@
   metadata scrub happens. A caption typed alongside a photo is sent as its own
   SMS — the MMS entry point carries media only, and a dropped caption would
   misreport what was sent. Other file types are **not** wired yet.
+  - **Why staged, not referenced:** the picker's grant is one-shot and not
+    persistable, so the bytes are copied into app-private cache the moment you
+    pick. The send cannot fail on an expired grant however long you spend
+    typing. The copy is deleted when the photo is sent or removed, and copies
+    orphaned by a killed process are swept after a day.
+  - The send goes through `SendPipeline.sendMms`, which is where EXIF/XMP/IPTC
+    stripping happens (PRIVACY.md §4).
 - Emoji reactions
 - Message pinning
 - Message sorting
