@@ -105,7 +105,7 @@ class ThreadAdapter(
             val timestamp = itemView.findViewById<TextView>(R.id.message_timestamp)
             val rowContainer = itemView.findViewById<LinearLayout>(R.id.message_row)
 
-            body.text = row.body
+            body.text = EmojiNerdFont.display(row.body)
             timestamp.text = formatTimestamp(row.timestampMillis)
             EmojiTypeface.apply(body)
             val photo = itemView.findViewById<View>(R.id.message_photo) as? ImageView

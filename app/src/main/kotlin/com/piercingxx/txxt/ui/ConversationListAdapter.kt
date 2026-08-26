@@ -106,7 +106,8 @@ class ConversationListAdapter(
          */
         fun defaultBindRow(itemView: View, row: ConversationRow) {
             itemView.findViewById<TextView>(R.id.conversation_title).text = row.title
-            itemView.findViewById<TextView>(R.id.conversation_snippet).text = row.snippet
+            itemView.findViewById<TextView>(R.id.conversation_snippet).text =
+                EmojiNerdFont.display(row.snippet)
             itemView.findViewById<TextView>(R.id.conversation_timestamp).text =
                 row.timestampMillis?.let { formatTimestamp(System.currentTimeMillis(), it) }.orEmpty()
             val unread = itemView.findViewById<TextView>(R.id.conversation_unread)

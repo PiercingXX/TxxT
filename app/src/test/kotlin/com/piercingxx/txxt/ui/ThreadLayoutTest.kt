@@ -97,6 +97,23 @@ class ThreadLayoutTest {
             "the compose bar must not carry the settings affordance",
             composeBar.contains("settings_button"),
         )
+        assertFalse(
+            "the compose bar must not carry an in-app emoji picker",
+            composeBar.contains("emoji_button"),
+        )
+    }
+
+    @Test
+    fun `the compose field requests sentence capitals including the first letter`() {
+        val composeBar = activityThread.substring(activityThread.indexOf("@+id/compose_bar"))
+        assertTrue(
+            "compose inputType must include textCapSentences so the IME shifts the first letter",
+            composeBar.contains("textCapSentences"),
+        )
+        assertFalse(
+            "textShortMessage makes IMEs ignore CAP_SENTENCES; do not use it on compose",
+            composeBar.contains("textShortMessage"),
+        )
     }
 
     @Test

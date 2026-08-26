@@ -77,4 +77,20 @@ class MainActivityTest {
             activityMain.contains("@+id/recyclerView"),
         )
     }
+
+    @Test
+    fun `launcher chrome is search, settings, then NEW at the far right`() {
+        val search = activityMain.indexOf("@+id/searchView")
+        val settings = activityMain.indexOf("@+id/settings_button")
+        val newBtn = activityMain.indexOf("@+id/new_message_button")
+        assertTrue("search must be the leftmost chrome", search >= 0)
+        assertTrue(
+            "settings must sit second from the left, after search",
+            settings > search,
+        )
+        assertTrue(
+            "NEW must be the rightmost chrome control",
+            newBtn > settings,
+        )
+    }
 }

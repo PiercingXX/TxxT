@@ -31,10 +31,20 @@
             android:layout_weight="1"
             android:queryHint="Search conversations" />
 
+        <!-- Second from the left, after search. NEW sits at the far right. -->
+        <Button
+            android:id="@+id/settings_button"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="⚙"
+            android:textSize="18sp"
+            android:textColor="#FFFFFF" />
+
         <!-- New-conversation affordance: opens the recipient picker (name or
              number) and then the thread. Text-first — a monospace word, not
              an icon, and borderless: a bright-white word on the ground, no
-             filled pill. -->
+             filled pill. Far-right of the chrome row. -->
         <Button
             android:id="@+id/new_message_button"
             style="?android:attr/borderlessButtonStyle"
@@ -45,16 +55,6 @@
             android:textStyle="bold"
             android:textColor="#FFFFFF"
             android:text="NEW" />
-
-        <Button
-            android:id="@+id/settings_button"
-            style="?android:attr/borderlessButtonStyle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="8dp"
-            android:text="⚙"
-            android:textSize="18sp"
-            android:textColor="#FFFFFF" />
     </LinearLayout>
 
     <TextView

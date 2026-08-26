@@ -12,7 +12,6 @@ import android.view.WindowManager
 import android.app.AlertDialog
 import android.widget.Button
 import android.widget.EditText
-import android.widget.GridLayout
 import android.widget.SearchView
 import android.widget.TextView
 import android.widget.Toast
@@ -93,7 +92,6 @@ class ThreadActivity : Activity() {
     private lateinit var attachmentRow: View
     private lateinit var attachmentLabel: TextView
     private lateinit var attachmentClear: Button
-    private lateinit var emojiButton: Button
     private lateinit var threadSearch: SearchView
     private var allMessages: List<com.piercingxx.txxt.core.Message> = emptyList()
     private var threadQuery: String = ""
@@ -188,8 +186,6 @@ class ThreadActivity : Activity() {
         attachmentRow = findViewById(R.id.attachment_row)
         attachmentLabel = findViewById(R.id.attachment_label)
         attachmentClear = findViewById(R.id.attachment_clear)
-        emojiButton = findViewById(R.id.emoji_button)
-        emojiButton.text = EmojiPalette.PICKER_GLYPH
         threadSearch = findViewById(R.id.thread_search)
 
         adapter = ThreadAdapter(
@@ -207,12 +203,13 @@ class ThreadActivity : Activity() {
         settingsButton.setOnClickListener { openSettings() }
         attachButton.setOnClickListener { launchPhotoPicker() }
         attachmentClear.setOnClickListener { clearAttachment() }
-        emojiButton.setOnClickListener { showEmojiPicker() }
         threadTitle.setOnLongClickListener {
             copyThreadNumber()
             true
         }
         EmojiTypeface.apply(composeInput)
+        SentenceCapitalizer.bind(composeInput)
+        EmojiNerdCompose.bind(composeInput)
         threadSearch.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
             override fun onQueryTextSubmit(query: String?): Boolean {
                 applyThreadSearch(query.orEmpty())
@@ -275,7 +272,6 @@ class ThreadActivity : Activity() {
             composeInput.setBackgroundColor(surface)
             sendButton.setTextColor(accent)
             settingsButton.setTextColor(accent)
-            emojiButton.setTextColor(accent)
             // The attach and remove glyphs are affordances, so they take the
             // accent exactly as send and settings do — borderless, no tint.
             attachButton.setTextColor(accent)
@@ -600,28 +596,6 @@ class ThreadActivity : Activity() {
             clipboard.setPrimaryClip(android.content.ClipData.newPlainText("number", number))
             Toast.makeText(this@ThreadActivity, "Copied $number", Toast.LENGTH_SHORT).show()
         }
-    }
-
-    private fun showEmojiPicker() {
-        val grid = GridLayout(this).apply {
-            columnCount = 8
-            setPadding(16, 16, 16, 16)
-        }
-        val dialog = AlertDialog.Builder(this).setView(grid).create()
-        EmojiPalette.glyphs.forEach { glyph ->
-            val cell = TextView(this).apply {
-                text = glyph
-                textSize = 22f
-                setPadding(12, 12, 12, 12)
-                setOnClickListener {
-                    val start = composeInput.selectionStart.coerceAtLeast(0)
-                    composeInput.text?.insert(start, glyph)
-                    dialog.dismiss()
-                }
-            }
-            grid.addView(cell)
-        }
-        dialog.show()
     }
 
     // ---- Photo attachment ----

@@ -119,6 +119,10 @@ class ThreadWiringTest {
             "ThreadActivity must set FLAG_SECURE in code",
             threadActivity.contains("FLAG_SECURE"),
         )
+        assertTrue(
+            "ThreadActivity must bind sentence capitalization on the compose field",
+            threadActivity.contains("SentenceCapitalizer.bind(composeInput)"),
+        )
     }
 
     // ---- Adapter seam (behavioural: drives the real onBindViewHolder path) ----

@@ -5,10 +5,9 @@ import androidx.core.content.res.ResourcesCompat
 import com.piercingxx.txxt.R
 
 /**
- * Applies the bundled body face (JetBrains Mono Nerd Font) so Nerd Font
- * glyphs in [EmojiPalette] render as monochrome type. No colour-emoji
- * fallback — that would light the AMOLED with candy glyphs the picker
- * does not insert.
+ * Applies the bundled body face (JetBrains Mono Nerd Font) so [EmojiNerdFont]
+ * glyphs paint as monochrome type instead of falling through to a colour-emoji
+ * font.
  */
 object EmojiTypeface {
 
