@@ -46,6 +46,10 @@ EXPECTED_PERMISSIONS = {
     # naming a sender never requires modifying the contacts database.
     "android.permission.READ_CONTACTS",
     "android.permission.RECEIVE_BOOT_COMPLETED",
+    # Family theme-sync: signature-level IPC with XX-Launcher. Not a dangerous
+    # permission and not network — required to receive the launcher's
+    # THEME_CHANGED broadcast (sendBroadcast with this permission name).
+    "com.piercingxx.xxlauncher.permission.THEME_SYNC",
     # NOTE: no RECORD_AUDIO. WS13 declared the mic for the compose bar's
     # dictation button; the compose-bar rework deleted that button — its only
     # entry point — so the permission was removed with it. The APK must not

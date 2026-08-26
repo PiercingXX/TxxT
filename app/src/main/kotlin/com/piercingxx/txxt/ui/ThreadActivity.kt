@@ -190,7 +190,6 @@ class ThreadActivity : Activity() {
         attachmentClear = findViewById(R.id.attachment_clear)
         emojiButton = findViewById(R.id.emoji_button)
         emojiButton.text = EmojiPalette.PICKER_GLYPH
-        EmojiTypeface.apply(emojiButton)
         threadSearch = findViewById(R.id.thread_search)
 
         adapter = ThreadAdapter(
@@ -614,7 +613,6 @@ class ThreadActivity : Activity() {
                 text = glyph
                 textSize = 22f
                 setPadding(12, 12, 12, 12)
-                EmojiTypeface.apply(this)
                 setOnClickListener {
                     val start = composeInput.selectionStart.coerceAtLeast(0)
                     composeInput.text?.insert(start, glyph)

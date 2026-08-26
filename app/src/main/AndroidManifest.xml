@@ -61,6 +61,14 @@
          booting. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!-- Family theme-sync. XX-Launcher sendBroadcast()s with this signature
+         permission; uses-permission is required to receive it. Declared here
+         too so install order against the launcher does not drop the grant. -->
+    <permission
+        android:name="com.piercingxx.xxlauncher.permission.THEME_SYNC"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="com.piercingxx.xxlauncher.permission.THEME_SYNC" />
+
     <!-- Deliberately NO RECORD_AUDIO permission. WS13 declared it for the
          compose bar's dictation mic; the compose-bar rework deleted that
          button, and it was the feature's only entry point — ThreadActivity
@@ -213,7 +221,8 @@
              between two apps on the same handset. -->
         <receiver
             android:name=".theme.ThemeSyncReceiver"
-            android:exported="true">
+            android:exported="true"
+            android:permission="com.piercingxx.xxlauncher.permission.THEME_SYNC">
             <intent-filter>
                 <action android:name="xx.launcher.THEME_CHANGED" />
             </intent-filter>
