@@ -70,7 +70,14 @@ tokens and rules in `INSPIRATION.md` §1.
   cards (PRIVACY.md §2 — "nothing ever bubbles"). Inbound left, outbound right;
   minimal chrome.
 - Timestamps in Space Mono.
-- Compose bar at bottom; attachment affordance minimal. **No voice-message
+- Compose bar at bottom; attachment affordance minimal. **Shipping:** attach is
+  a borderless monospace `⊕` (U+2295) beside the send `➜` (U+279C) — no filled
+  pill, no vector icon, and both codepoints are verified present in the bundled
+  JetBrains Mono's cmap so they render as type from our own face rather than as
+  colour emoji from a system fallback. A staged photo announces itself as a
+  **one-line text indicator** above the compose row (`photo · name · size`) with
+  a `✕` (U+2715) that removes it without sending — a line of type, not a
+  thumbnail card, because this app has no cards. **No voice-message
   affordance** (voice messages are never sent or received — PRIVACY.md §5).
 - Quick reply from notification.
 - **No notification bubbles / chat-heads** — ever (PRIVACY.md §2).

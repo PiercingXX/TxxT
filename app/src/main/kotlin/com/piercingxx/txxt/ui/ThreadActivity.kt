@@ -1,14 +1,20 @@
 package com.piercingxx.txxt.ui
 
 import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.speech.tts.TextToSpeech
+import android.view.View
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.piercingxx.txxt.R
@@ -25,6 +31,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.IOException
 
 /** Intent extra: the conversation id the thread screen opens. */
 const val EXTRA_CONVERSATION_ID = "extra_conversation_id"
@@ -37,7 +46,27 @@ const val EXTRA_CONVERSATION_ID = "extra_conversation_id"
  * (via [TxxTDatabase] + the message DAO, mapped to the pure `core` model) and
  * rendered by [ThreadAdapter] through [ThreadMessagePresenter]. The compose bar
  * routes a send through [SendPipeline.sendSms] — the same pipeline the
- * notification quick reply uses (docs/PRIVACY.md §3, §5).
+ * notification quick reply uses (docs/PRIVACY.md §3, §5) — or through
+ * [SendPipeline.sendMms] when a photo is attached, which is where the
+ * metadata scrub happens.
+ *
+ * **Photos.** The compose bar's `⊕` opens the Android photo picker
+ * ([ActivityResultContracts.PickVisualMedia] with `ImageOnly`). That picker is
+ * the whole reason this feature costs **no new permission**: the operator
+ * chooses exactly one photo and the app is granted access to that one item and
+ * nothing else — no `READ_MEDIA_IMAGES`, no `ACTION_GET_CONTENT`, no widening
+ * of the manifest's justified permission list (docs/PRIVACY.md §8). The picked
+ * bytes are staged into app-private cache immediately ([PhotoStaging]) because
+ * the picker's grant is one-shot and not persistable; what a composed send
+ * expands into is decided by [PhotoAttachment.plan].
+ *
+ * The picker is driven through `startActivityForResult` with the contract's own
+ * `createIntent` / `parseResult` rather than `registerForActivityResult`,
+ * because this screen is a plain `android.app.Activity` (as every screen in
+ * this app is) and the registry API needs a `ComponentActivity`. The contract
+ * — and therefore the picker selection, the ImageOnly MIME filter and the
+ * pre-Android-13 `ACTION_OPEN_DOCUMENT` fallback — is exactly the same object
+ * either way.
  *
  * FLAG_SECURE is set in code (docs/PRIVACY.md §3) so the thread never appears
  * in recents previews or screenshots.
@@ -50,6 +79,33 @@ class ThreadActivity : Activity() {
     private lateinit var sendButton: Button
     private lateinit var settingsButton: Button
     private lateinit var threadTitle: TextView
+    private lateinit var attachButton: Button
+    private lateinit var attachmentRow: View
+    private lateinit var attachmentLabel: TextView
+    private lateinit var attachmentClear: Button
+
+    /**
+     * The staged copy of the picked photo, or null when nothing is attached.
+     *
+     * This is a file in this app's own cache directory, never the picker's
+     * `content://` URI — see [PhotoStaging] for why the picker's one-shot,
+     * non-persistable grant cannot be held until send time. Its path is written
+     * to the saved instance state so a rotation or a saved-state restore
+     * re-attaches the same photo.
+     */
+    private var stagedPhoto: File? = null
+
+    /** The indicator line for [stagedPhoto], from [PhotoAttachment.indicator]. */
+    private var stagedLabel: String = ""
+
+    /**
+     * The photo-picker contract, held so [launchPhotoPicker] and
+     * [onActivityResult] provably use the SAME contract instance to build the
+     * intent and to parse its result — the pair is the contract's API surface,
+     * and splitting them across two instances is how a picker silently starts
+     * returning nothing.
+     */
+    private val photoPicker = ActivityResultContracts.PickVisualMedia()
 
     /**
      * Resolves the thread's participant numbers to their saved contact names
@@ -114,6 +170,10 @@ class ThreadActivity : Activity() {
         sendButton = findViewById(R.id.send_button)
         settingsButton = findViewById(R.id.settings_button)
         threadTitle = findViewById(R.id.thread_title)
+        attachButton = findViewById(R.id.attach_button)
+        attachmentRow = findViewById(R.id.attachment_row)
+        attachmentLabel = findViewById(R.id.attachment_label)
+        attachmentClear = findViewById(R.id.attachment_clear)
 
         adapter = ThreadAdapter(
             onMessageTap = ::readMessageAloud,
@@ -128,6 +188,16 @@ class ThreadActivity : Activity() {
 
         sendButton.setOnClickListener { sendComposed() }
         settingsButton.setOnClickListener { openSettings() }
+        attachButton.setOnClickListener { launchPhotoPicker() }
+        attachmentClear.setOnClickListener { clearAttachment() }
+
+        // Re-attach the photo a rotation or a saved-state restore interrupted,
+        // then collect whatever an unrestored process death orphaned in the
+        // staging directory (PhotoStaging's KDoc has the full reasoning).
+        restoreStagedPhoto(savedInstanceState)
+        showAttachment()
+        sweepStagedPhotos()
+
         observeMessages()
         showThreadTitle()
 
@@ -142,7 +212,8 @@ class ThreadActivity : Activity() {
      * Paints this screen's chrome from the current effective theme (T6). Builds
      * a [ThemeApplier] over [themeController] whose seam applies the derived
      * tokens to the thread screen's views: the ground, the compose bar, the
-     * compose input's text/hint/field, and the send/settings glyphs.
+     * compose input's text/hint/field, the send/settings/attach/remove glyphs,
+     * and the attachment indicator line.
      *
      * Buttons stay borderless: the accent token (the reserved bright-white
      * signal in every preset) colors the glyph itself and NO background tint is
@@ -166,6 +237,13 @@ class ThreadActivity : Activity() {
             composeInput.setBackgroundColor(surface)
             sendButton.setTextColor(accent)
             settingsButton.setTextColor(accent)
+            // The attach and remove glyphs are affordances, so they take the
+            // accent exactly as send and settings do — borderless, no tint.
+            attachButton.setTextColor(accent)
+            attachmentClear.setTextColor(accent)
+            // The indicator is type, not an affordance: muted, so a staged
+            // photo announces itself without competing with the thread.
+            attachmentLabel.setTextColor(muted)
             // The header is type, not chrome: it takes the theme's text token,
             // not the accent — the accent stays reserved for the affordances.
             threadTitle.setTextColor(text)
@@ -317,18 +395,30 @@ class ThreadActivity : Activity() {
     }
 
     /**
-     * Sends the composed text to the thread's participant (H6b).
+     * Sends what is composed — text, a photo, or both — to the thread's
+     * participant (H6b).
      *
-     * The outgoing message is persisted **before** sending (`sent = false`, so
-     * an interrupted send is re-driven by the reboot reconcile) and marked sent
-     * only after [SendPipeline.sendSms] reports the platform send was attempted
-     * — which is also when the compose field clears. A denied gate or missing
-     * recipient never destroys the draft: the field keeps its text and a toast
-     * says why nothing was sent.
+     * What a tap on `➜` actually dispatches is decided by the pure
+     * [PhotoAttachment.plan] seam, not by branching here, so the routing rule
+     * is JVM-testable: text only still goes through
+     * [SendPipeline.sendSms] exactly as it did before attachments existed; a
+     * photo goes through [SendPipeline.sendMms] (where the metadata scrub
+     * happens); a photo with a caption dispatches both, the caption first,
+     * because the MMS entry point carries media only and a silently dropped
+     * caption would be a lie about what was sent.
+     *
+     * Each step persists **before** sending (`sent = false`) and is marked sent
+     * only after the pipeline reports the platform send was attempted. Each
+     * step also clears only its OWN input on success: a failed photo leaves the
+     * attachment attached even when the caption went out, and a failed caption
+     * leaves the draft text in the field. Nothing composed is ever destroyed by
+     * a send that did not happen, and every failure is surfaced.
      */
     private fun sendComposed() {
         val body = composeInput.text?.toString()?.trim().orEmpty()
-        if (body.isEmpty()) return
+        val photo = stagedPhoto
+        val steps = PhotoAttachment.plan(body, photo != null)
+        if (steps.isEmpty()) return
         scope.launch(Dispatchers.Main) {
             val destination = destinationAddress()
             if (destination == null) {
@@ -339,27 +429,268 @@ class ThreadActivity : Activity() {
                 ).show()
                 return@launch
             }
-            // Persist through the shared OutboundStore path (collision-safe id
-            // allocation under the same lock inbound delivery uses) — NOT a
-            // bare wall-clock id, which could REPLACE-destroy a row the
-            // delivery path wrote in the same millisecond.
-            val messageId = OutboundStore.persistOutgoingSms(
-                conversations = database.conversationDao(),
-                messages = database.messageDao(),
-                address = destination,
-                body = body,
-            )
-            val ok = SendPipeline.sendSms(this@ThreadActivity, destination, body)
-            if (ok) {
-                database.messageDao().markSent(messageId)
-                composeInput.setText("")
-            } else {
+            val failures = mutableListOf<String>()
+            steps.forEach { step ->
+                when (step) {
+                    SendStep.SMS_TEXT ->
+                        if (sendTextStep(destination, body)) {
+                            composeInput.setText("")
+                        } else {
+                            failures += "message"
+                        }
+                    SendStep.MMS_PHOTO ->
+                        // `photo` is non-null whenever the plan produced this
+                        // step — plan() emits MMS_PHOTO only for hasPhoto.
+                        if (photo != null && sendPhotoStep(destination, photo)) {
+                            clearAttachment()
+                        } else {
+                            failures += "photo"
+                        }
+                }
+            }
+            if (failures.isNotEmpty()) {
                 Toast.makeText(
                     this@ThreadActivity,
-                    "Message not sent",
+                    "Not sent: ${failures.joinToString(" and ")}",
                     Toast.LENGTH_LONG,
                 ).show()
             }
+        }
+    }
+
+    /**
+     * Persists and sends the composed text over SMS. Returns whether the
+     * platform send was attempted.
+     *
+     * Persist through the shared [OutboundStore] path (collision-safe id
+     * allocation under the same lock inbound delivery uses) — NOT a bare
+     * wall-clock id, which could REPLACE-destroy a row the delivery path wrote
+     * in the same millisecond.
+     */
+    private suspend fun sendTextStep(destination: String, body: String): Boolean {
+        val messageId = OutboundStore.persistOutgoingSms(
+            conversations = database.conversationDao(),
+            messages = database.messageDao(),
+            address = destination,
+            body = body,
+        )
+        val ok = SendPipeline.sendSms(this@ThreadActivity, destination, body)
+        if (ok) database.messageDao().markSent(messageId)
+        return ok
+    }
+
+    /**
+     * Persists and sends the staged photo over MMS. Returns whether the
+     * platform send was attempted with the scrubbed copy.
+     *
+     * The pipeline is handed a `file://` URI for this app's own staged copy,
+     * so the send cannot fail on an expired picker grant no matter how long the
+     * operator spent typing. [SendPipeline.sendMms] reads it, scrubs it
+     * (EXIF/XMP/IPTC — the guarantee is not optional and is not re-implemented
+     * here), and sends the scrubbed temp file; a `false` return means the gate
+     * denied, the media was unreadable, or the bytes were recognized-but-
+     * malformed and the send was aborted fail-closed.
+     *
+     * The pipeline lets a platform error propagate after cleaning up its temp
+     * file. That is caught here and reported as a failed step rather than
+     * crashing the thread screen — an SMS/MMS stack throwing (no service, a
+     * carrier config race) must surface to the operator, and the row stays
+     * pending so it is visibly unsent.
+     */
+    private suspend fun sendPhotoStep(destination: String, photo: File): Boolean {
+        val messageId = OutboundStore.persistOutgoingMms(
+            conversations = database.conversationDao(),
+            messages = database.messageDao(),
+            address = destination,
+        )
+        val ok = try {
+            SendPipeline.sendMms(this@ThreadActivity, Uri.fromFile(photo))
+        } catch (_: Exception) {
+            false
+        }
+        if (ok) database.messageDao().markSent(messageId)
+        return ok
+    }
+
+    // ---- Photo attachment ----
+
+    /**
+     * Opens the Android photo picker, restricted to images.
+     *
+     * `PickVisualMedia` + [PickVisualMediaRequest] with `ImageOnly` is chosen
+     * deliberately over `ACTION_GET_CONTENT` and over declaring
+     * `READ_MEDIA_IMAGES`: it needs **no storage permission at all**, the
+     * operator picks exactly one photo, and the app receives access to that one
+     * item and nothing else. Either alternative would widen the manifest's
+     * permission list — the thing this app's whole posture is about — for no
+     * benefit (docs/PRIVACY.md §8).
+     *
+     * On a device with no picker and no document provider at all the intent
+     * resolves to nothing; that is reported rather than crashing.
+     */
+    private fun launchPhotoPicker() {
+        val request = PickVisualMediaRequest.Builder()
+            .setMediaType(ActivityResultContracts.PickVisualMedia.ImageOnly)
+            .build()
+        try {
+            startActivityForResult(photoPicker.createIntent(this, request), REQUEST_PICK_PHOTO)
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(this, "No photo picker on this device", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    @Deprecated("startActivityForResult: this screen is a plain Activity, not a ComponentActivity")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        @Suppress("DEPRECATION")
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQUEST_PICK_PHOTO) return
+        // The contract owns result parsing (RESULT_OK plus data/clipData), so
+        // the picker's result shape is never re-guessed here. A null means the
+        // operator cancelled: leave whatever was already attached alone.
+        val picked = photoPicker.parseResult(resultCode, data) ?: return
+        stagePickedPhoto(picked)
+    }
+
+    /**
+     * Copies the picked photo into app-private cache and attaches it.
+     *
+     * The copy happens NOW, on the picker's live one-shot grant, because that
+     * grant is not persistable and will not survive until send time — see
+     * [PhotoStaging] for the full reasoning. The read and the write both run on
+     * [Dispatchers.IO]: a photo is megabytes, and doing this on the main thread
+     * would jank the compose bar at exactly the moment the operator is looking
+     * at it.
+     *
+     * A previously staged photo is replaced (and its copy deleted) only once
+     * the new one is safely on disk, so a failed pick never silently discards
+     * the attachment the operator already had.
+     */
+    private fun stagePickedPhoto(uri: Uri) {
+        scope.launch(Dispatchers.Main) {
+            val staged = withContext(Dispatchers.IO) {
+                val bytes = readPickedBytes(uri) ?: return@withContext null
+                val file = PhotoStaging.stage(
+                    directory = PhotoStaging.directory(cacheDir),
+                    bytes = bytes,
+                    nowMillis = System.currentTimeMillis(),
+                ) ?: return@withContext null
+                file to PhotoAttachment.indicator(displayNameOf(uri), bytes.size.toLong())
+            }
+            if (staged == null) {
+                Toast.makeText(
+                    this@ThreadActivity,
+                    "Photo could not be attached",
+                    Toast.LENGTH_LONG,
+                ).show()
+                return@launch
+            }
+            PhotoStaging.discard(stagedPhoto)
+            stagedPhoto = staged.first
+            stagedLabel = staged.second
+            showAttachment()
+        }
+    }
+
+    /**
+     * Reads the picked photo's bytes through the content resolver. Null — never
+     * a throw — when the URI is unreadable (a revoked grant, a provider that
+     * died, an I/O error), so the caller can report it.
+     */
+    private fun readPickedBytes(uri: Uri): ByteArray? = try {
+        contentResolver.openInputStream(uri)?.use { it.readBytes() }
+    } catch (_: IOException) {
+        null
+    } catch (_: SecurityException) {
+        null
+    }
+
+    /**
+     * The picker's display name for the photo, used only to make the indicator
+     * line specific enough to identify which photo is attached. Null whenever
+     * the provider does not supply one — the indicator then simply omits that
+     * segment.
+     */
+    private fun displayNameOf(uri: Uri): String? = try {
+        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { cursor ->
+                if (cursor.moveToFirst() && cursor.columnCount > 0) {
+                    cursor.getString(0)
+                } else {
+                    null
+                }
+            }
+    } catch (_: SecurityException) {
+        null
+    } catch (_: IllegalStateException) {
+        null
+    }
+
+    /**
+     * Detaches the staged photo and deletes its copy.
+     *
+     * This is the "remove without sending" path the `✕` on the indicator line
+     * drives, and it is also what a successful photo send calls. Deleting the
+     * copy is the point: a photo the operator changed their mind about must not
+     * be left sitting in the app's cache.
+     */
+    private fun clearAttachment() {
+        PhotoStaging.discard(stagedPhoto)
+        stagedPhoto = null
+        stagedLabel = ""
+        showAttachment()
+    }
+
+    /** Shows or hides the one-line attachment indicator to match [stagedPhoto]. */
+    private fun showAttachment() {
+        val attached = stagedPhoto != null
+        attachmentRow.visibility = if (attached) View.VISIBLE else View.GONE
+        attachmentLabel.text = stagedLabel
+    }
+
+    /**
+     * Re-attaches the staged photo recorded in [savedInstanceState].
+     *
+     * Only a real file still inside the staging directory is accepted
+     * ([PhotoStaging.isStagedIn]), so a stale bundle — or one naming a copy the
+     * OS reclaimed from the cache — leaves the compose bar with no attachment
+     * rather than with an indicator for something the app can no longer read.
+     * Losing the attachment is a supported end state; claiming one that is gone
+     * is not.
+     */
+    private fun restoreStagedPhoto(savedInstanceState: Bundle?) {
+        val path = savedInstanceState?.getString(STATE_STAGED_PATH) ?: return
+        val file = File(path)
+        if (!PhotoStaging.isStagedIn(PhotoStaging.directory(cacheDir), file)) return
+        stagedPhoto = file
+        stagedLabel = savedInstanceState.getString(STATE_STAGED_LABEL).orEmpty()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        // The staged FILE survives process death; the pointer to it does not.
+        // Carrying the path (and its indicator line) through saved state is
+        // what makes a rotation or a saved-state restore keep the attachment.
+        stagedPhoto?.let { file ->
+            outState.putString(STATE_STAGED_PATH, file.absolutePath)
+            outState.putString(STATE_STAGED_LABEL, stagedLabel)
+        }
+    }
+
+    /**
+     * Deletes staged copies orphaned by a process death that never restored.
+     *
+     * Without this, every abandoned pick leaves a full copy of one of the
+     * operator's photos in the app's cache directory indefinitely. The
+     * currently-attached copy is explicitly held back regardless of age.
+     */
+    private fun sweepStagedPhotos() {
+        val attached = stagedPhoto
+        scope.launch(Dispatchers.IO) {
+            PhotoStaging.sweep(
+                directory = PhotoStaging.directory(cacheDir),
+                nowMillis = System.currentTimeMillis(),
+                keep = attached,
+            )
         }
     }
 
@@ -379,6 +710,15 @@ class ThreadActivity : Activity() {
          * character.
          */
         private const val ADDRESS_DELIMITER = "\u0001"
+
+        /** `startActivityForResult` request code for the photo picker. */
+        private const val REQUEST_PICK_PHOTO = 0x9701
+
+        /** Saved-state key: the absolute path of the staged photo copy. */
+        private const val STATE_STAGED_PATH = "state_staged_photo_path"
+
+        /** Saved-state key: the indicator line for the staged photo. */
+        private const val STATE_STAGED_LABEL = "state_staged_photo_label"
 
         /** Builds a launch intent for [ThreadActivity] for the given conversation. */
         fun launchIntent(context: android.content.Context, conversationId: Long): Intent =

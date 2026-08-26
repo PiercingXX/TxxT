@@ -2,6 +2,7 @@ package com.piercingxx.txxt.ui
 
 import com.piercingxx.txxt.core.Message
 import com.piercingxx.txxt.core.MessageDirection
+import com.piercingxx.txxt.core.MessageTransport
 
 /**
  * Horizontal alignment of a message row within the thread.
@@ -58,10 +59,34 @@ object ThreadMessagePresenter {
         return ThreadRow(
             alignment = alignment,
             emphasis = emphasis,
-            body = message.body,
+            body = bodyFor(message),
             timestampMillis = message.timestampMillis,
         )
     }
+
+    /**
+     * The text a row shows.
+     *
+     * Bodies pass through unchanged with exactly one substitution: an
+     * **outgoing MMS with a blank body** — a photo the operator sent with no
+     * caption — renders as the text-first `[photo]` marker rather than as an
+     * empty line. Without it, sending a photo produces a row of nothing at all
+     * and the thread looks like the send vanished.
+     *
+     * Deliberately narrow. It is scoped to OUTGOING because that is the row
+     * this app creates and therefore the only one whose media it knows to be a
+     * photo; an inbound MMS could carry anything, so its body is left exactly
+     * as the receive path stored it and nothing is invented about it here.
+     */
+    private fun bodyFor(message: Message): String =
+        if (message.direction == MessageDirection.OUTGOING &&
+            message.transport == MessageTransport.MMS &&
+            message.body.isBlank()
+        ) {
+            PhotoAttachment.PHOTO_ROW_PLACEHOLDER
+        } else {
+            message.body
+        }
 }
 
 /**

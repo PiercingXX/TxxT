@@ -219,4 +219,61 @@ class OutboundStoreTest {
         // The send is new activity: the thread must resurface in the list.
         assertEquals(false, conversations.rows.getValue(conversationId).isArchived)
     }
+
+    // ---- persistOutgoingMms (photo attachments) ----
+
+    @Test
+    fun `persistOutgoingMms inserts an MMS-transport pending row`() = runBlocking {
+        val conversations = FakeConversationDao()
+        val messages = FakeMessageDao()
+
+        val messageId = OutboundStore.persistOutgoingMms(conversations, messages, "+15551234567")
+
+        val stored = messages.rows.getValue(messageId)
+        // The transport is the load-bearing field: RebootReconcile refuses to
+        // re-drive an MMS row, and ThreadMessagePresenter renders a blank-bodied
+        // one as [photo]. Both branch on exactly this.
+        assertEquals(MessageTransport.MMS.name, stored.transport)
+        assertEquals(MessageDirection.OUTGOING.name, stored.direction)
+        assertEquals("", stored.body)
+        assertNull(stored.senderAddress)
+        assertEquals(true, stored.isRead)
+        assertEquals("photo sends are pending until dispatched", false, stored.sent)
+    }
+
+    @Test
+    fun `a photo and a text send share one conversation and never collide`() = runBlocking {
+        // A caption travels as its own SMS row alongside the photo's MMS row
+        // (PhotoAttachment.plan), so both must land in the same thread with
+        // distinct ids.
+        val conversations = FakeConversationDao()
+        val messages = FakeMessageDao()
+
+        val textId = OutboundStore.persistOutgoingSms(
+            conversations, messages, "+15551234567", "look at this",
+        )
+        val photoId = OutboundStore.persistOutgoingMms(conversations, messages, "+15551234567")
+
+        assertEquals(1, conversations.rows.size)
+        assertTrue("the two rows must not share an id", textId != photoId)
+        assertEquals(
+            messages.rows.getValue(textId).conversationId,
+            messages.rows.getValue(photoId).conversationId,
+        )
+        assertEquals(MessageTransport.SMS.name, messages.rows.getValue(textId).transport)
+        assertEquals(MessageTransport.MMS.name, messages.rows.getValue(photoId).transport)
+    }
+
+    @Test
+    fun `sending a photo into an archived conversation unarchives it too`() = runBlocking {
+        val conversations = FakeConversationDao()
+        val messages = FakeMessageDao()
+        val conversationId = InboundStore.findOrCreateConversation(conversations, "+15551234567")
+        conversations.rows[conversationId] =
+            conversations.rows.getValue(conversationId).copy(isArchived = true)
+
+        OutboundStore.persistOutgoingMms(conversations, messages, "+15551234567")
+
+        assertEquals(false, conversations.rows.getValue(conversationId).isArchived)
+    }
 }

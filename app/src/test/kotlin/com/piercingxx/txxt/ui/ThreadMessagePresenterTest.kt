@@ -48,6 +48,45 @@ class ThreadMessagePresenterTest {
     }
 
     @Test
+    fun `an outgoing photo with no caption renders as a text-first photo line`() {
+        // Sending a photo with an empty caption persists a blank-bodied MMS
+        // row. Without the substitution the thread shows a row of nothing at
+        // all and the send looks like it vanished.
+        val row = present(
+            message(id = 6L, direction = MessageDirection.OUTGOING, body = "")
+                .copy(transport = MessageTransport.MMS),
+        )
+        assertEquals(PhotoAttachment.PHOTO_ROW_PLACEHOLDER, row.body)
+    }
+
+    @Test
+    fun `an outgoing MMS that carries a body keeps its own text`() {
+        val row = present(
+            message(id = 7L, direction = MessageDirection.OUTGOING, body = "real text")
+                .copy(transport = MessageTransport.MMS),
+        )
+        assertEquals("real text", row.body)
+    }
+
+    @Test
+    fun `an inbound MMS body is never invented over`() {
+        // The substitution is scoped to OUTGOING on purpose: this app only ever
+        // sends photos, but an inbound MMS could carry anything, so its body is
+        // left exactly as the receive path stored it.
+        val row = present(
+            message(id = 8L, direction = MessageDirection.INCOMING, body = "")
+                .copy(transport = MessageTransport.MMS),
+        )
+        assertEquals("", row.body)
+    }
+
+    @Test
+    fun `a blank-bodied SMS is left blank`() {
+        val row = present(message(id = 9L, direction = MessageDirection.OUTGOING, body = ""))
+        assertEquals("", row.body)
+    }
+
+    @Test
     fun `both directions produce a text-first row with no bubble state`() {
         // The row model carries only alignment + emphasis + content — no bubble
         // or card field exists, so the no-bubble constraint is structural.

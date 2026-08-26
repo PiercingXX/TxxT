@@ -239,6 +239,54 @@ class RebootReconcileTest {
         assertEquals(1, result.pendingResent)
     }
 
+    // ---- The media rule: a pending MMS row is held, never re-driven ----
+
+    @Test
+    fun `a pending MMS row is never re-driven through the SMS resend seam`() {
+        // A pending MMS row is an interrupted photo send. Its media is a staged
+        // cache copy this reconcile has no reference to and the OS may have
+        // reclaimed, and the resend seam is the SMS path — so re-driving it
+        // would put the row's BODY on the wire instead of the photo. For the
+        // common empty-caption photo that is an empty SMS the platform rejects,
+        // attempted on every boot forever.
+        val photo = messageEntity(1L, 1L, MessageDirection.OUTGOING, sent = false)
+            .copy(transport = MessageTransport.MMS.name, body = "")
+        val resend = mutableListOf<Pair<Message, String>>()
+        val markedSent = mutableListOf<Long>()
+
+        val result = runBlocking {
+            reconcile(listOf(photo), listOf(conversationEntity(1L)), resend, markedSent).reconcile()
+        }
+
+        assertTrue("a photo row must never reach the SMS resend seam", resend.isEmpty())
+        // And it must NOT be marked sent — marking it would claim a photo went
+        // out that never did. The row stays pending and visibly unsent.
+        assertTrue("a held row must not be marked sent", markedSent.isEmpty())
+        assertEquals(1, result.pendingMediaHeld)
+        assertEquals(0, result.pendingResent)
+        assertEquals(0, result.pendingSkipped)
+        assertEquals(0, result.pendingFailed)
+    }
+
+    @Test
+    fun `holding a photo row does not stop the pending SMS rows around it`() {
+        val photo = messageEntity(1L, 1L, MessageDirection.OUTGOING, sent = false)
+            .copy(transport = MessageTransport.MMS.name, body = "")
+        val text = messageEntity(2L, 1L, MessageDirection.OUTGOING, sent = false)
+        val resend = mutableListOf<Pair<Message, String>>()
+        val markedSent = mutableListOf<Long>()
+
+        val result = runBlocking {
+            reconcile(listOf(photo, text), listOf(conversationEntity(1L)), resend, markedSent)
+                .reconcile()
+        }
+
+        assertEquals(listOf(2L), resend.map { it.first.id })
+        assertEquals(listOf(2L), markedSent)
+        assertEquals(1, result.pendingResent)
+        assertEquals(1, result.pendingMediaHeld)
+    }
+
     // ---- Wire-in: the running boot path reaches RebootReconcile ----
 
     @Test

@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import com.piercingxx.txxt.core.Message
 import com.piercingxx.txxt.core.MessageDirection
+import com.piercingxx.txxt.core.MessageTransport
 import com.piercingxx.txxt.core.UnreadCount
 import com.piercingxx.txxt.data.ConversationEntity
 import com.piercingxx.txxt.data.MessageEntity
@@ -37,7 +38,9 @@ private const val ADDRESS_DELIMITER = "\u0001"
  *     Its destination comes from its conversation's participant addresses (an
  *     outgoing message carries no `senderAddress` by model contract), and once
  *     it has been re-sent the row is marked sent ([markSent]) so the next boot
- *     never re-drives an already-transmitted message.
+ *     never re-drives an already-transmitted message. A pending **MMS** row is
+ *     the one exception and is held, never re-driven — see the media rule in
+ *     [reconcile].
  *
  * The component is pure over its four seams — [loadMessages], [loadConversations],
  * [resendPending] and [markSent] — so the reconcile logic is JVM-testable without
@@ -71,6 +74,14 @@ class RebootReconcile(
         val pendingSkipped: Int = 0,
         /** Pending outgoing messages whose resend threw; the rows stay pending for the next boot. */
         val pendingFailed: Int = 0,
+        /**
+         * Pending outgoing **MMS** rows deliberately not re-driven. See the
+         * media rule in [reconcile]: their media is a staged cache copy the
+         * reboot may have reclaimed, and this pipeline's resend seam is the
+         * SMS path, so re-driving one would transmit something the operator
+         * never composed. The rows stay pending and visibly unsent.
+         */
+        val pendingMediaHeld: Int = 0,
     )
 
     /**
@@ -107,7 +118,22 @@ class RebootReconcile(
         var pendingResent = 0
         var pendingSkipped = 0
         var pendingFailed = 0
+        var pendingMediaHeld = 0
         pending.forEach { message ->
+            // The media rule. A pending MMS row is a photo send that did not
+            // complete; its media is a staged copy in the cache directory,
+            // which the OS may reclaim at any time and which this reconcile
+            // has no reference to. [resendPending] is the SMS path, so
+            // re-driving the row would put the row's BODY on the wire instead
+            // of the photo — and for the common empty-caption photo that means
+            // attempting an empty SMS, which the platform rejects, on every
+            // boot forever. Hold the row instead: it stays pending, it stays
+            // visible in the thread as unsent, and nothing is transmitted that
+            // the operator did not compose.
+            if (message.transport == MessageTransport.MMS) {
+                pendingMediaHeld += 1
+                return@forEach
+            }
             val recipient = conversationById[message.conversationId]
                 ?.participantAddresses
                 ?.split(ADDRESS_DELIMITER)
@@ -143,6 +169,7 @@ class RebootReconcile(
             pendingResent = pendingResent,
             pendingSkipped = pendingSkipped,
             pendingFailed = pendingFailed,
+            pendingMediaHeld = pendingMediaHeld,
         )
     }
 }

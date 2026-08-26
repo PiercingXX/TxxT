@@ -55,6 +55,22 @@ android {
 
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
+    // ActivityResultContracts.PickVisualMedia — the Android photo picker. Pinned
+    // explicitly because appcompat 1.6.1 only drags in androidx.activity 1.6.0,
+    // and the photo-picker contract landed in 1.7.0. The library's own manifest
+    // declares NO permissions, which is the point: the picker gives access to
+    // exactly the one photo the operator chose, so attaching a photo costs the
+    // app nothing on its permission list (scripts/verify_privacy_claims.py
+    // asserts the built APK's list is unchanged).
+    //
+    // Pinned to 1.8.2 and NOT higher on purpose: it is the newest version whose
+    // transitive androidx.core (1.8.0) stays below appcompat's own 1.9.0, so
+    // adding the picker moves NOTHING else in the resolved dependency graph.
+    // From activity 1.9.0 core jumps to 1.13.0 and drags lifecycle/core
+    // upgrades in behind it — a much larger blast radius than one contract
+    // class is worth on an app whose shipped artifact is asserted
+    // permission-by-permission.
+    implementation 'androidx.activity:activity:1.8.2'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
     implementation 'com.google.android.material:material:1.11.0'
 

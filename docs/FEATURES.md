@@ -5,7 +5,13 @@
 ### Core messaging
 - SMS + MMS
 - Group MMS
-- Attachments (any file type)
+- Attachments — **photos ship**: the compose bar's `⊕` opens the Android photo
+  picker (`PickVisualMedia`, ImageOnly), which needs **no storage permission**;
+  the picked photo is staged app-private, shown as a one-line indicator that can
+  be removed without sending, and dispatched through the MMS pipeline, where the
+  metadata scrub happens. A caption typed alongside a photo is sent as its own
+  SMS — the MMS entry point carries media only, and a dropped caption would
+  misreport what was sent. Other file types are **not** wired yet.
 - Emoji reactions
 - Message pinning
 - Message sorting

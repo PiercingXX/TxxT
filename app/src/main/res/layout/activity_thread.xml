@@ -6,7 +6,8 @@
   thread"). No chat bubbles, no rounded cards — the no-bubble constraint is
   structural (docs/PRIVACY.md §2). The message list is a RecyclerView filled by
   ThreadAdapter (T3); a slim top bar carries the settings affordance and the
-  compose bar sits at the bottom. NO voice-message affordance and no dictation
+  compose bar sits at the bottom, carrying attach / input / send plus a
+  text-first indicator line for a staged photo. NO voice-message affordance and no dictation
   mic (docs/PRIVACY.md §5 — voice messages are never sent or received; the
   dictation seam classes remain, but the thread screen exposes no entry point).
 
@@ -72,45 +73,112 @@
         android:padding="12dp"
         android:clipToPadding="false" />
 
-    <!-- Compose bar: the text field and a borderless send affordance. The send
-         glyph is ➜ (U+279C, heavy round-tipped rightwards arrow) — a codepoint
-         the bundled @font/font_body (JetBrains Mono) actually maps, so it
-         renders as monochrome type from our own face, never a color emoji. -->
+    <!-- Compose bar: an attachment indicator line above the compose row. The
+         glyphs are ⊕ (U+2295, attach), ➜ (U+279C, send) and ✕ (U+2715, remove
+         the attachment) — all three are codepoints the bundled @font/font_body
+         (JetBrains Mono) actually maps in its cmap, checked against the font
+         binary rather than assumed, so they render as monochrome type from our
+         own face and never fall through to a colour-emoji font. A paperclip
+         emoji is NOT in that cmap and is deliberately not used. -->
     <LinearLayout
         android:id="@+id/compose_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
+        android:orientation="vertical"
         android:background="#09090B"
         android:paddingStart="12dp"
         android:paddingEnd="12dp"
         android:paddingTop="8dp"
         android:paddingBottom="8dp">
 
-        <EditText
-            android:id="@+id/compose_input"
-            android:layout_width="0dp"
+        <!-- Attachment indicator. Hidden until a photo is picked; then it names
+             what is attached as a LINE OF TYPE — this app has no bubbles and no
+             cards (docs/PRIVACY.md §2), so an attachment announces itself the
+             way everything else here does, as text. The ✕ removes the staged
+             photo outright, so nothing has to be sent to get rid of it. -->
+        <LinearLayout
+            android:id="@+id/attachment_row"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:hint="Message"
-            android:textColor="#E6FFFFFF"
-            android:textColorHint="#80FFFFFF"
-            android:fontFamily="@font/font_body"
-            android:background="#18181B"
-            android:padding="10dp"
-            android:inputType="textShortMessage"
-            android:maxLines="4" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:visibility="gone">
 
-        <Button
-            android:id="@+id/send_button"
-            style="?android:attr/borderlessButtonStyle"
-            android:layout_width="wrap_content"
+            <TextView
+                android:id="@+id/attachment_label"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="@font/font_body"
+                android:textSize="13sp"
+                android:textColor="#80FFFFFF"
+                android:maxLines="1"
+                android:ellipsize="middle" />
+
+            <Button
+                android:id="@+id/attachment_clear"
+                style="?android:attr/borderlessButtonStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="0dp"
+                android:fontFamily="@font/font_body"
+                android:text="✕"
+                android:textSize="15sp"
+                android:contentDescription="Remove the attached photo"
+                android:textColor="#FFFFFF" />
+        </LinearLayout>
+
+        <!-- Compose row: attach, the text field, send. -->
+        <LinearLayout
+            android:id="@+id/compose_row"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:fontFamily="@font/font_body"
-            android:text="➜"
-            android:textSize="18sp"
-            android:textColor="#FFFFFF" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <!-- Attach a photo. Borderless bright-white glyph, the same
+                 treatment the send affordance gets — no filled pill, no vector
+                 icon. Opens the Android photo picker, which needs NO storage
+                 permission: the operator picks one photo and the app is given
+                 access to that one item and nothing else. -->
+            <Button
+                android:id="@+id/attach_button"
+                style="?android:attr/borderlessButtonStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="0dp"
+                android:layout_marginEnd="4dp"
+                android:fontFamily="@font/font_body"
+                android:text="⊕"
+                android:textSize="18sp"
+                android:contentDescription="Attach a photo"
+                android:textColor="#FFFFFF" />
+
+            <EditText
+                android:id="@+id/compose_input"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="Message"
+                android:textColor="#E6FFFFFF"
+                android:textColorHint="#80FFFFFF"
+                android:fontFamily="@font/font_body"
+                android:background="#18181B"
+                android:padding="10dp"
+                android:inputType="textShortMessage"
+                android:maxLines="4" />
+
+            <Button
+                android:id="@+id/send_button"
+                style="?android:attr/borderlessButtonStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:fontFamily="@font/font_body"
+                android:text="➜"
+                android:textSize="18sp"
+                android:textColor="#FFFFFF" />
+        </LinearLayout>
     </LinearLayout>
 
 </LinearLayout>

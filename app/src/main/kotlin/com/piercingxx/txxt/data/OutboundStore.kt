@@ -72,4 +72,55 @@ object OutboundStore {
         messages.upsert(message)
         message.id
     }
+
+    /**
+     * Persists an outgoing **MMS** (a photo attachment) as a read,
+     * not-yet-sent row, and returns the message id.
+     *
+     * Identical in shape to [persistOutgoingSms] — same lock, same
+     * find-or-create, same `sent = false` pending-send contract — except the
+     * transport, which is what makes this a separate entry point rather than a
+     * boolean parameter: the transport is the one field downstream code
+     * branches on. Two places read it:
+     *
+     *  - [com.piercingxx.txxt.service.RebootReconcile] does **not** re-drive a
+     *    pending MMS row. The media lives in a staged cache copy that a reboot
+     *    may legitimately have reclaimed, and re-driving the row through the
+     *    SMS path would transmit a *different message* than the operator
+     *    composed (an empty-caption photo would go out as an empty SMS). The
+     *    row is left pending, visibly unsent, rather than turned into
+     *    something it is not.
+     *  - [com.piercingxx.txxt.ui.ThreadMessagePresenter] renders an outgoing
+     *    MMS row with a blank body as a text-first `[photo]` line, so a photo
+     *    sent with no caption is a visible row in the thread and not a blank
+     *    one.
+     *
+     * [body] is normally empty: a caption composed alongside a photo travels
+     * as its own SMS row (`PhotoAttachment.plan`), because the send pipeline's
+     * MMS entry point carries media only. The parameter exists so this store
+     * stays a faithful persist of whatever the caller actually sent.
+     */
+    suspend fun persistOutgoingMms(
+        conversations: ConversationDao,
+        messages: MessageDao,
+        address: String,
+        body: String = "",
+    ): Long = InboundStore.withPersistenceLock {
+        val conversationId = InboundStore.findOrCreateConversationLocked(conversations, address)
+        // Sending into an archived thread unarchives it (InboundStore rule).
+        conversations.unarchive(conversationId)
+        val message = MessageEntity(
+            id = InboundStore.freshMessageId(messages),
+            conversationId = conversationId,
+            direction = MessageDirection.OUTGOING.name,
+            transport = MessageTransport.MMS.name,
+            body = body,
+            timestampMillis = System.currentTimeMillis(),
+            senderAddress = null,
+            isRead = true,
+            sent = false,
+        )
+        messages.upsert(message)
+        message.id
+    }
 }
