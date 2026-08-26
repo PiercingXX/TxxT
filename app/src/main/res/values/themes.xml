@@ -9,7 +9,7 @@
   contract are defined in one place; the names mirror the ThemeTokens fields
   (T1): background, surface, text, muted, line, accent, accentOn.
 -->
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Themeable color attributes — the applier's runtime seam. -->
     <attr name="txxtBackground" format="color" />
@@ -26,7 +26,7 @@
       from the material dependency (build.gradle); the themeable attributes are
       bound to the default AMOLED Night token set from colors.xml.
     -->
-    <style name="Theme.TxxT" parent="Theme.Material3.DayNight.NoActionBar">
+    <style name="Theme.TxxT" parent="Theme.Material3.DayNight.NoActionBar" tools:targetApi="31">
         <item name="txxtBackground">@color/theme_background</item>
         <item name="txxtSurface">@color/theme_surface</item>
         <item name="txxtText">@color/theme_text</item>
@@ -45,6 +45,29 @@
         <item name="android:windowBackground">@color/theme_background</item>
         <item name="android:statusBarColor">@color/theme_background</item>
         <item name="android:navigationBarColor">@color/theme_background</item>
+
+        <!--
+          The Android 12+ starting window: the frame the platform draws before
+          the first activity exists. It cannot be declined, only emptied. Its
+          defaults stamp the launcher icon over a platform-derived ground, which
+          is a logo card TxxT never designed and — across the family — a
+          different one per app.
+
+          Ink ground plus a transparent icon makes it a frame of the same black
+          the window opens on. This is the ONE surface the runtime applier
+          cannot reach: the applier needs a Context and a live window, and this
+          window is drawn before either exists, so the value here is a static
+          resource and stays the AMOLED Night default under every preset. Under
+          Paper or Mist that is a dark frame ahead of a light UI — unavoidable,
+          and the family default is the right constant to be wrong with.
+
+          The icon background and branding slots are pinned transparent/null as
+          well: those are the platform's other two chances to draw a mark.
+        -->
+        <item name="android:windowSplashScreenBackground">@color/theme_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@android:color/transparent</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@android:color/transparent</item>
+        <item name="android:windowSplashScreenBrandingImage">@null</item>
     </style>
 
 </resources>
