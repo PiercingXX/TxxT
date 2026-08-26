@@ -152,7 +152,8 @@
                 android:text="⊕"
                 android:textSize="18sp"
                 android:contentDescription="Attach a photo"
-                android:textColor="#FFFFFF" />
+                android:textColor="#FFFFFF"
+                android:visibility="gone" />
 
             <EditText
                 android:id="@+id/compose_input"

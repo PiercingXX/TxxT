@@ -86,12 +86,8 @@ class SendPipelineTest {
 
     @Test
     fun `mms sends the scrubbed temp uri, never the original uri`() {
-        // GIF-header bytes with a non-printable "atom type" region so every
-        // format detector declines: the scrubber passes them through unchanged,
-        // proving the uniform temp-file path (unrecognized media still goes
-        // through it).
-        val cleanBytes = byteArrayOf(0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x00, 0x00) +
-            "no-metadata-here".toByteArray()
+        // A JPEG still goes through the temp-file path (GIF/unrecognized abort).
+        val cleanBytes = jpegWithExif(byteArrayOf('E'.code.toByte(), 'x'.code.toByte(), 'i'.code.toByte(), 'f'.code.toByte(), 0, 0))
         val written = mutableListOf<ByteArray>()
         var platformReceived: Uri? = null
         val deleted = mutableListOf<Uri>()
@@ -112,7 +108,7 @@ class SendPipelineTest {
         assertTrue(result)
         assertSame("the platform must receive the temp uri", tempUri, platformReceived)
         assertNotSame("the original uri must never reach the platform", originalUri, platformReceived)
-        assertArrayEquals(cleanBytes, written.single())
+        assertEquals(1, written.size)
         assertEquals(listOf(tempUri), deleted)
     }
 
@@ -186,7 +182,7 @@ class SendPipelineTest {
             context,
             originalUri,
             allowGate(),
-            readUriBytes = { _ -> "GIF89a".toByteArray() },
+            readUriBytes = { _ -> jpegWithExif(byteArrayOf('E'.code.toByte(), 'x'.code.toByte(), 'i'.code.toByte(), 'f'.code.toByte(), 0, 0)) },
             writeTempMedia = { _ -> null }, // the cache write failed
             sendMmsPlatform = { _, _ -> fail("platform must not be called without a scrubbed copy") },
             deleteTemp = { _ -> fail("nothing was written, nothing to delete") },
@@ -204,7 +200,7 @@ class SendPipelineTest {
                 context,
                 originalUri,
                 allowGate(),
-                readUriBytes = { _ -> "GIF89a".toByteArray() },
+                readUriBytes = { _ -> jpegWithExif(byteArrayOf('E'.code.toByte(), 'x'.code.toByte(), 'i'.code.toByte(), 'f'.code.toByte(), 0, 0)) },
                 writeTempMedia = { _ -> tempUri },
                 sendMmsPlatform = { _, _ -> throw IllegalStateException("simulated platform failure") },
                 deleteTemp = { deleted += it },

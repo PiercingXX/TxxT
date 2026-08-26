@@ -110,8 +110,22 @@ class MmsPduHeaderTest {
         assertNotNull(info)
         assertEquals(0x82, info!!.messageType)
         assertEquals(FROM_ADDR, info.from)
+        assertEquals("Txn000123", info.transactionId)
         assertNull(info.dateMillis)
         assertNull(info.contentType)
+    }
+
+    @Test
+    fun `notification ind extracts content location`() {
+        val pdu = bytes(0x82) +
+            bytes(0x98) + text("Txn1") +
+            fromField() +
+            bytes(0x83) + text("http://mmsc.example/m/1") +
+            bytes(0x00)
+        val info = MmsPduHeader.parse(pdu)
+        assertNotNull(info)
+        assertEquals("http://mmsc.example/m/1", info!!.contentLocation)
+        assertEquals("Txn1", info.transactionId)
     }
 
     @Test

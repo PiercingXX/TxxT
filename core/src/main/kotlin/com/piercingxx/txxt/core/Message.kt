@@ -43,6 +43,11 @@ data class Message(
      * Always `true` for incoming messages.
      */
     val isSent: Boolean = true,
+    /**
+     * MMSC Content-Location for an inbound MMS that has not been retrieved yet.
+     * Null for SMS and for MMS whose body has already been fetched.
+     */
+    val contentLocation: String? = null,
 ) {
     /** True when this is an incoming message the user has not yet read. */
     val isUnread: Boolean

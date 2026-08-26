@@ -60,7 +60,7 @@ class RebootReconcileTest {
     ) = RebootReconcile(
         loadMessages = { messages },
         loadConversations = { conversations },
-        resendPending = { message, recipient -> resend.add(message to recipient) },
+        resendPending = { message, recipient -> resend.add(message to recipient); true },
         markSent = { id -> markedSent.add(id) },
     )
 
@@ -223,6 +223,7 @@ class RebootReconcileTest {
             resendPending = { message, recipient ->
                 if (message.id == 1L) throw IllegalArgumentException("bad address")
                 resend.add(message to recipient)
+                true
             },
             markSent = { id -> markedSent.add(id) },
         )
@@ -237,6 +238,22 @@ class RebootReconcileTest {
         assertEquals(0, result.pendingSkipped)
         // pendingResent counts successful resends only (the healthy row).
         assertEquals(1, result.pendingResent)
+    }
+
+    @Test
+    fun `a resend that returns false is not marked sent`() {
+        val pending = messageEntity(1L, 1L, MessageDirection.OUTGOING, sent = false)
+        val markedSent = mutableListOf<Long>()
+        val svc = RebootReconcile(
+            loadMessages = { listOf(pending) },
+            loadConversations = { listOf(conversationEntity(1L)) },
+            resendPending = { _, _ -> false },
+            markSent = { id -> markedSent.add(id) },
+        )
+        val result = runBlocking { svc.reconcile() }
+        assertTrue(markedSent.isEmpty())
+        assertEquals(1, result.pendingFailed)
+        assertEquals(0, result.pendingResent)
     }
 
     // ---- The media rule: a pending MMS row is held, never re-driven ----

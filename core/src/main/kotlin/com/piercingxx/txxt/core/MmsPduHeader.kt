@@ -12,6 +12,10 @@ data class MmsPduInfo(
     val dateMillis: Long?,
     /** CONTENT-TYPE as text when text-representable (e.g. "application/vnd.wap.multipart.related", "text/plain"); null otherwise. */
     val contentType: String?,
+    /** X-Mms-Content-Location (the MMSC URL to retrieve); null when absent. */
+    val contentLocation: String? = null,
+    /** X-Mms-Transaction-Id; null when absent. */
+    val transactionId: String? = null,
 )
 
 /**
@@ -144,6 +148,8 @@ object MmsPduHeader {
         var from: String? = null
         var dateMillis: Long? = null
         var contentType: String? = null
+        var contentLocation: String? = null
+        var transactionId: String? = null
 
         while (pos < pdu.size) {
             val field = u(pdu, pos)
@@ -167,7 +173,17 @@ object MmsPduHeader {
                 }
                 FIELD_BCC, FIELD_CC, FIELD_TO, FIELD_SUBJECT, FIELD_RESPONSE_TEXT, FIELD_RETRIEVE_TEXT ->
                     pos = skipEncodedStringValue(pdu, pos) ?: return null
-                FIELD_TRANSACTION_ID, FIELD_MESSAGE_ID, FIELD_CONTENT_LOCATION ->
+                FIELD_CONTENT_LOCATION -> {
+                    val parsed = readTextString(pdu, pos) ?: return null
+                    pos = parsed.second
+                    if (contentLocation == null) contentLocation = parsed.first
+                }
+                FIELD_TRANSACTION_ID -> {
+                    val parsed = readTextString(pdu, pos) ?: return null
+                    pos = parsed.second
+                    if (transactionId == null) transactionId = parsed.first
+                }
+                FIELD_MESSAGE_ID ->
                     pos = skipNullTerminated(pdu, pos) ?: return null
                 FIELD_MESSAGE_CLASS ->
                     pos = skipMessageClass(pdu, pos) ?: return null
@@ -185,7 +201,16 @@ object MmsPduHeader {
             }
         }
 
-        return MmsPduInfo(messageType, from, dateMillis, contentType)
+        return MmsPduInfo(messageType, from, dateMillis, contentType, contentLocation, transactionId)
+    }
+
+    /** Text-string: null-terminated printable US-ASCII. Empty yields null text without failing. */
+    private fun readTextString(pdu: ByteArray, start: Int): Pair<String?, Int>? {
+        val terminator = indexOfNul(pdu, start) ?: return null
+        val decoded = decodeStrictUtf8(pdu, start, terminator) ?: return null
+        val text = decoded.takeIf { it.isNotEmpty() && isPrintableAscii(it) }
+            ?: return if (decoded.isEmpty()) Pair(null, terminator + 1) else null
+        return Pair(text, terminator + 1)
     }
 
     /** Unsigned octet read, null past the end. */

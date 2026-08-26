@@ -15,11 +15,11 @@ package com.piercingxx.txxt.core
  * ([PngMetadataScrubber]), the image scrubber ([ImageMetadataScrubber]) for
  * JPEG input, or the video scrubber ([VideoMetadataScrubber]) for MP4/MOV
  * input. It returns `null` when the format is recognized but its structure is
- * malformed (fail-closed: the caller must NOT send — corrupt input never
- * leaves the device with metadata intact). Input in an unrecognized format is
- * returned unchanged: there is no known container to strip from it. Like the
- * scrubbers it delegates to, this is pure Kotlin with zero `android.*` imports
- * so it is JVM-testable without a device (docs/PRIVACY.md §4).
+ * malformed, **and** when the format is a still image we cannot strip
+ * (HEIF/HEIC, WebP, GIF): fail-closed, the caller must NOT send — there is no
+ * guarantee the metadata is gone. Like the scrubbers it delegates to, this is
+ * pure Kotlin with zero `android.*` imports so it is JVM-testable without a
+ * device (docs/PRIVACY.md §4).
  */
 object MetadataScrubber {
 
@@ -33,8 +33,8 @@ object MetadataScrubber {
      * time/encoder atoms removed. The media bytes themselves are never
      * re-encoded — only the metadata containers are dropped (see
      * [ImageMetadataScrubber], [PngMetadataScrubber] and
-     * [VideoMetadataScrubber]). Input that is not a recognized format is
-     * returned unchanged.
+     * [VideoMetadataScrubber]). A still-image format we cannot strip (HEIF,
+     * WebP, GIF) returns `null` so it never leaves with metadata intact.
      *
      * This is the only entry point and it is unconditional: there is no way to
      * ask for the metadata to be preserved.
@@ -42,8 +42,9 @@ object MetadataScrubber {
     fun scrub(media: ByteArray): ByteArray? = when {
         isPng(media) -> PngMetadataScrubber.scrub(media)
         isJpeg(media) -> ImageMetadataScrubber.scrub(media)
+        isHeif(media) || isWebp(media) || isGif(media) -> null
         isMp4(media) -> VideoMetadataScrubber.scrub(media)
-        else -> media
+        else -> null
     }
 
     /** A PNG begins with the 8-byte signature 0x89 'P' 'N' 'G' CR LF SUB LF. */
@@ -65,13 +66,45 @@ object MetadataScrubber {
             (media[1].toInt() and 0xFF) == 0xD8
 
     /**
-     * An MP4/MOV is a sequence of atoms; the first atom's 4-byte type must be a
-     * printable code (e.g. `ftyp`). We accept any leading atom with a printable
-     * type, matching the video scrubber's own recognition rule.
+     * An MP4/MOV begins with an `ftyp` atom. Anything else with a printable
+     * 4-byte type (a JPEG APP segment, a random GIF, …) is not video.
      */
     private fun isMp4(media: ByteArray): Boolean {
         if (media.size < 8) return false
-        val type = String(media, 4, 4, Charsets.ISO_8859_1)
-        return type.all { it.code in 0x20..0x7E }
+        return String(media, 4, 4, Charsets.ISO_8859_1) == "ftyp" && !isHeif(media)
     }
+
+    /** HEIF/HEIC/AVIF: ISO-BMFF with a HEIF-family `ftyp` brand. */
+    private fun isHeif(media: ByteArray): Boolean {
+        if (media.size < 12) return false
+        if (String(media, 4, 4, Charsets.ISO_8859_1) != "ftyp") return false
+        val brand = String(media, 8, 4, Charsets.ISO_8859_1).lowercase()
+        return brand in HEIF_BRANDS
+    }
+
+    /** WebP: `RIFF....WEBP`. */
+    private fun isWebp(media: ByteArray): Boolean =
+        media.size >= 12 &&
+            media[0] == 'R'.code.toByte() &&
+            media[1] == 'I'.code.toByte() &&
+            media[2] == 'F'.code.toByte() &&
+            media[3] == 'F'.code.toByte() &&
+            media[8] == 'W'.code.toByte() &&
+            media[9] == 'E'.code.toByte() &&
+            media[10] == 'B'.code.toByte() &&
+            media[11] == 'P'.code.toByte()
+
+    /** GIF87a / GIF89a. */
+    private fun isGif(media: ByteArray): Boolean =
+        media.size >= 6 &&
+            media[0] == 'G'.code.toByte() &&
+            media[1] == 'I'.code.toByte() &&
+            media[2] == 'F'.code.toByte() &&
+            media[3] == '8'.code.toByte() &&
+            (media[4] == '7'.code.toByte() || media[4] == '9'.code.toByte()) &&
+            media[5] == 'a'.code.toByte()
+
+    private val HEIF_BRANDS = setOf(
+        "heic", "heif", "heix", "hevc", "hevx", "mif1", "msf1", "avif",
+    )
 }

@@ -149,16 +149,33 @@ object SendPipeline {
         }
     }
 
-    /** The platform SMS manager: the API 31+ service lookup, falling back to
-     *  the deprecated static default for older OS versions (or if the lookup
-     *  returns nothing). */
-    private fun resolveSmsManager(context: Context): SmsManager =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+    /**
+     * SmsManager for the **default SMS subscription**, not an arbitrary SIM.
+     * Dual-SIM Pixels otherwise silently send on the wrong radio.
+     */
+    internal fun resolveSmsManager(context: Context): SmsManager {
+        val subId = defaultSmsSubscriptionId()
+        if (subId != INVALID_SUBSCRIPTION_ID) {
+            @Suppress("DEPRECATION")
+            val forSub = SmsManager.getSmsManagerForSubscriptionId(subId)
+            if (forSub != null) return forSub
+        }
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             context.getSystemService(SmsManager::class.java) ?: legacySmsManager()
         } else {
             legacySmsManager()
         }
+    }
 
     @Suppress("DEPRECATION")
     private fun legacySmsManager(): SmsManager = SmsManager.getDefault()
+
+    /** Exposed so a JVM test can lock the dual-SIM choice without telephony. */
+    internal fun defaultSmsSubscriptionId(): Int = try {
+        SmsManager.getDefaultSmsSubscriptionId()
+    } catch (_: Throwable) {
+        INVALID_SUBSCRIPTION_ID
+    }
+
+    private const val INVALID_SUBSCRIPTION_ID = -1
 }

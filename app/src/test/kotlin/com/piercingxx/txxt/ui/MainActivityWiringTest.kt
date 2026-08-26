@@ -158,4 +158,24 @@ class MainActivityWiringTest {
         assertFalse("API 33 already granted must not re-prompt", MainActivity.needsNotificationPermission(33, granted = true))
         assertTrue("API 33 not granted must prompt", MainActivity.needsNotificationPermission(33, granted = false))
     }
+
+    @Test
+    fun `neededRuntimePermissions asks both in one list`() {
+        val both = MainActivity.neededRuntimePermissions(
+            sdkInt = 33,
+            notificationsGranted = false,
+            contactsGranted = false,
+        )
+        assertEquals(
+            listOf(
+                android.Manifest.permission.POST_NOTIFICATIONS,
+                android.Manifest.permission.READ_CONTACTS,
+            ),
+            both,
+        )
+        assertTrue(
+            MainActivity.neededRuntimePermissions(32, notificationsGranted = false, contactsGranted = true)
+                .isEmpty(),
+        )
+    }
 }

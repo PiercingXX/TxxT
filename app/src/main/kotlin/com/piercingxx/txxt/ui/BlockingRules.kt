@@ -1,5 +1,7 @@
 package com.piercingxx.txxt.ui
 
+import com.piercingxx.txxt.core.PhoneNumbers
+
 /**
  * Pure transforms over the persisted blocking/starred settings map.
  *
@@ -52,11 +54,13 @@ object BlockingRules {
 
     /** Whether [address] is in the persisted starred-contacts set. */
     fun isStarred(map: Map<String, String>, address: String): Boolean =
-        address in entries(map, SettingsBlockingStore.KEY_STARRED_CONTACTS)
+        entries(map, SettingsBlockingStore.KEY_STARRED_CONTACTS)
+            .any { PhoneNumbers.matches(address, it) }
 
     /** Whether [address] is in the persisted blocked-addresses set. */
     fun isBlocked(map: Map<String, String>, address: String): Boolean =
-        address in entries(map, SettingsBlockingStore.KEY_BLOCKED_ADDRESSES)
+        entries(map, SettingsBlockingStore.KEY_BLOCKED_ADDRESSES)
+            .any { PhoneNumbers.matches(address, it) }
 
     /**
      * Toggles [address] in the starred-contacts set. Returns the new map and

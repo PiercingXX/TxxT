@@ -21,6 +21,10 @@ import com.piercingxx.txxt.R
 import com.piercingxx.txxt.contacts.ContactNameResolver
 import com.piercingxx.txxt.data.OutboundStore
 import com.piercingxx.txxt.data.TxxTDatabase
+import com.piercingxx.txxt.service.MmsContentFetcher
+import com.piercingxx.txxt.service.MmsDownloadRetry
+import com.piercingxx.txxt.service.MmsDownloadState
+import com.piercingxx.txxt.service.MmsRetrieve
 import com.piercingxx.txxt.service.SendPipeline
 import com.piercingxx.txxt.theme.SharedPreferencesThemeKeyValueStore
 import com.piercingxx.txxt.theme.ThemeApplier
@@ -37,6 +41,9 @@ import java.io.IOException
 
 /** Intent extra: the conversation id the thread screen opens. */
 const val EXTRA_CONVERSATION_ID = "extra_conversation_id"
+
+/** Intent extra: optional compose-field prefill from `sms:?body=`. */
+const val EXTRA_PREFILL_BODY = "extra_prefill_body"
 
 /**
  * The conversation thread screen (T3).
@@ -176,7 +183,7 @@ class ThreadActivity : Activity() {
         attachmentClear = findViewById(R.id.attachment_clear)
 
         adapter = ThreadAdapter(
-            onMessageTap = ::readMessageAloud,
+            onMessageTap = ::onMessageTap,
             onMessageLongPress = ::promptMessageActions,
         )
         messageList.layoutManager = LinearLayoutManager(this)
@@ -188,8 +195,15 @@ class ThreadActivity : Activity() {
 
         sendButton.setOnClickListener { sendComposed() }
         settingsButton.setOnClickListener { openSettings() }
-        attachButton.setOnClickListener { launchPhotoPicker() }
-        attachmentClear.setOnClickListener { clearAttachment() }
+        // Photos are not a shipping feature: holding ROLE_SMS still retrieves
+        // inbound MMS on tap, but this compose bar does not send them.
+        attachButton.visibility = View.GONE
+        attachmentRow.visibility = View.GONE
+        val prefill = intent.getStringExtra(EXTRA_PREFILL_BODY)
+        if (!prefill.isNullOrBlank() && composeInput.text.isNullOrBlank()) {
+            composeInput.setText(prefill)
+            composeInput.setSelection(prefill.length)
+        }
 
         // Re-attach the photo a rotation or a saved-state restore interrupted,
         // then collect whatever an unrestored process death orphaned in the
@@ -318,6 +332,37 @@ class ThreadActivity : Activity() {
             .show()
     }
 
+    private val mmsFetcher = MmsContentFetcher()
+    private val mmsRetry = MmsDownloadRetry(
+        performDownload = { messageId ->
+            val row = database.messageDao().getById(messageId) ?: return@MmsDownloadRetry false
+            val location = row.contentLocation ?: return@MmsDownloadRetry false
+            val pdu = mmsFetcher.fetch(this@ThreadActivity, location) ?: return@MmsDownloadRetry false
+            MmsRetrieve.applyPdu(database.messageDao(), messageId, pdu)
+        },
+        onStateChange = { _, state ->
+            if (state == MmsDownloadState.FAILED) {
+                runOnUiThread {
+                    Toast.makeText(this, "MMS download failed", Toast.LENGTH_LONG).show()
+                }
+            }
+        },
+    )
+
+    /**
+     * Tap: retrieve a pending inbound MMS, otherwise read the row aloud.
+     */
+    private fun onMessageTap(message: com.piercingxx.txxt.core.Message) {
+        if (MmsRetrieve.needsRetrieve(message)) {
+            Toast.makeText(this, "Downloading…", Toast.LENGTH_SHORT).show()
+            scope.launch(Dispatchers.IO) {
+                mmsRetry.download(message.id)
+            }
+            return
+        }
+        readMessageAloud(message)
+    }
+
     /**
      * Reads a message aloud via the on-device [TextToSpeech] engine (WS13).
      *
@@ -416,9 +461,7 @@ class ThreadActivity : Activity() {
      */
     private fun sendComposed() {
         val body = composeInput.text?.toString()?.trim().orEmpty()
-        val photo = stagedPhoto
-        val steps = PhotoAttachment.plan(body, photo != null)
-        if (steps.isEmpty()) return
+        if (body.isEmpty()) return
         scope.launch(Dispatchers.Main) {
             val destination = destinationAddress()
             if (destination == null) {
@@ -429,29 +472,12 @@ class ThreadActivity : Activity() {
                 ).show()
                 return@launch
             }
-            val failures = mutableListOf<String>()
-            steps.forEach { step ->
-                when (step) {
-                    SendStep.SMS_TEXT ->
-                        if (sendTextStep(destination, body)) {
-                            composeInput.setText("")
-                        } else {
-                            failures += "message"
-                        }
-                    SendStep.MMS_PHOTO ->
-                        // `photo` is non-null whenever the plan produced this
-                        // step — plan() emits MMS_PHOTO only for hasPhoto.
-                        if (photo != null && sendPhotoStep(destination, photo)) {
-                            clearAttachment()
-                        } else {
-                            failures += "photo"
-                        }
-                }
-            }
-            if (failures.isNotEmpty()) {
+            if (sendTextStep(destination, body)) {
+                composeInput.setText("")
+            } else {
                 Toast.makeText(
                     this@ThreadActivity,
-                    "Not sent: ${failures.joinToString(" and ")}",
+                    "Not sent: message",
                     Toast.LENGTH_LONG,
                 ).show()
             }
@@ -479,40 +505,7 @@ class ThreadActivity : Activity() {
         return ok
     }
 
-    /**
-     * Persists and sends the staged photo over MMS. Returns whether the
-     * platform send was attempted with the scrubbed copy.
-     *
-     * The pipeline is handed a `file://` URI for this app's own staged copy,
-     * so the send cannot fail on an expired picker grant no matter how long the
-     * operator spent typing. [SendPipeline.sendMms] reads it, scrubs it
-     * (EXIF/XMP/IPTC — the guarantee is not optional and is not re-implemented
-     * here), and sends the scrubbed temp file; a `false` return means the gate
-     * denied, the media was unreadable, or the bytes were recognized-but-
-     * malformed and the send was aborted fail-closed.
-     *
-     * The pipeline lets a platform error propagate after cleaning up its temp
-     * file. That is caught here and reported as a failed step rather than
-     * crashing the thread screen — an SMS/MMS stack throwing (no service, a
-     * carrier config race) must surface to the operator, and the row stays
-     * pending so it is visibly unsent.
-     */
-    private suspend fun sendPhotoStep(destination: String, photo: File): Boolean {
-        val messageId = OutboundStore.persistOutgoingMms(
-            conversations = database.conversationDao(),
-            messages = database.messageDao(),
-            address = destination,
-        )
-        val ok = try {
-            SendPipeline.sendMms(this@ThreadActivity, Uri.fromFile(photo))
-        } catch (_: Exception) {
-            false
-        }
-        if (ok) database.messageDao().markSent(messageId)
-        return ok
-    }
-
-    // ---- Photo attachment ----
+    // ---- Photo attachment (staging kept for rotation; compose does not send MMS) ----
 
     /**
      * Opens the Android photo picker, restricted to images.
@@ -721,8 +714,17 @@ class ThreadActivity : Activity() {
         private const val STATE_STAGED_LABEL = "state_staged_photo_label"
 
         /** Builds a launch intent for [ThreadActivity] for the given conversation. */
-        fun launchIntent(context: android.content.Context, conversationId: Long): Intent =
+        fun launchIntent(
+            context: android.content.Context,
+            conversationId: Long,
+            prefillBody: String? = null,
+        ): Intent =
             Intent(context, ThreadActivity::class.java)
                 .putExtra(EXTRA_CONVERSATION_ID, conversationId)
+                .apply {
+                    if (!prefillBody.isNullOrBlank()) {
+                        putExtra(EXTRA_PREFILL_BODY, prefillBody)
+                    }
+                }
     }
 }

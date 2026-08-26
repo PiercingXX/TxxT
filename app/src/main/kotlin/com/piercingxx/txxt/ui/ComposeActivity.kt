@@ -91,11 +91,18 @@ class ComposeActivity(
             finish()
             return
         }
+        val prefill = intent?.data?.let { bodyFrom(it) }
 
         scope.launch {
             val conversationId = findConversation(recipient)
             if (conversationId != null) {
-                startActivity(ThreadActivity.launchIntent(this@ComposeActivity, conversationId))
+                startActivity(
+                    ThreadActivity.launchIntent(
+                        this@ComposeActivity,
+                        conversationId,
+                        prefillBody = prefill,
+                    )
+                )
             }
             finish()
         }
@@ -134,8 +141,49 @@ class ComposeActivity(
                 ?.trim()
                 ?.takeIf { it.isNotEmpty() }
 
+        /**
+         * The `body` / `sms_body` query on a SENDTO URI (browser links, share
+         * sheets). Null when the URI has no such query. Pure — JVM-testable.
+         */
+        fun bodyFrom(uri: Uri?): String? {
+            val query = uri?.schemeSpecificPart
+                ?.substringAfter('?', missingDelimiterValue = "")
+                ?.takeIf { it.isNotEmpty() }
+                ?: return null
+            query.split('&').forEach { part ->
+                val key = part.substringBefore('=').lowercase()
+                if (key == "body" || key == "sms_body") {
+                    val raw = part.substringAfter('=', missingDelimiterValue = "")
+                    val decoded = percentDecode(raw).trim()
+                    if (decoded.isNotEmpty()) return decoded
+                }
+            }
+            return null
+        }
+
         /** Builds the [ThreadActivity] launch intent for the resolved conversation. */
         fun launchIntentFor(context: Context, conversationId: Long): Intent =
             ThreadActivity.launchIntent(context, conversationId)
+
+        /** Percent-decode a query value without touching the Android Uri stub. */
+        internal fun percentDecode(raw: String): String {
+            val out = StringBuilder(raw.length)
+            var i = 0
+            while (i < raw.length) {
+                val c = raw[i]
+                if (c == '%' && i + 2 < raw.length) {
+                    val hex = raw.substring(i + 1, i + 3)
+                    val value = hex.toIntOrNull(16)
+                    if (value != null) {
+                        out.append(value.toChar())
+                        i += 3
+                        continue
+                    }
+                }
+                out.append(c)
+                i++
+            }
+            return out.toString()
+        }
     }
 }

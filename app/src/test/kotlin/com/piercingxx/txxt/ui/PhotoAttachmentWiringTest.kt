@@ -55,6 +55,21 @@ class PhotoAttachmentWiringTest {
     // ---- Layout: the affordance exists, in the compose bar's own idiom ----
 
     @Test
+    fun `the attach affordance is present in the layout but hidden - photos do not ship`() {
+        assertTrue(
+            "the compose bar still declares attach_button so the layout id is stable",
+            activityThread.contains("@+id/attach_button"),
+        )
+        val attach = activityThread.substring(activityThread.indexOf("@+id/attach_button"))
+        val declaration = attach.substring(0, attach.indexOf("/>"))
+        assertTrue(
+            "attach is gone at runtime: photos are not a shipping feature",
+            declaration.contains("android:visibility=\"gone\"") ||
+                threadActivity.contains("attachButton.visibility = View.GONE"),
+        )
+    }
+
+    @Test
     fun `the compose bar carries a borderless monochrome attach glyph`() {
         val composeBar = activityThread.substring(activityThread.indexOf("@+id/compose_bar"))
         assertTrue(
@@ -184,21 +199,17 @@ class PhotoAttachmentWiringTest {
     }
 
     @Test
-    fun `send routes text through sendSms and an attachment through sendMms`() {
+    fun `send routes text through sendSms and never pretends to send MMS`() {
         assertTrue(
             "a text-only send must still go through SendPipeline.sendSms",
             threadActivity.contains("SendPipeline.sendSms"),
         )
-        assertTrue(
-            "an attached photo must go through SendPipeline.sendMms",
+        assertFalse(
+            "the compose path must not call SendPipeline.sendMms",
             threadActivity.contains("SendPipeline.sendMms"),
         )
-        assertTrue(
-            "the routing decision must come from the pure PhotoAttachment.plan seam",
-            threadActivity.contains("PhotoAttachment.plan("),
-        )
-        assertTrue(
-            "an outgoing MMS must be persisted before it is sent",
+        assertFalse(
+            "the compose path must not persist an outgoing MMS",
             threadActivity.contains("OutboundStore.persistOutgoingMms("),
         )
     }

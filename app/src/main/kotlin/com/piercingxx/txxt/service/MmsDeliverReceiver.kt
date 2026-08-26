@@ -103,7 +103,7 @@ class MmsDeliverReceiver(
      * runs over a lazily built Room database inside `onReceive` (ComposeActivity
      * precedent: the database is never touched when a test supplies its own seam).
      */
-    private val persist: (suspend (String, Long) -> Unit)? = null,
+    private val persist: (suspend (String, Long, String?) -> Unit)? = null,
     /**
      * Posts the arrival notification for a delivered message as
      * `(context, address, body)` — the body is `""` here, because the stored
@@ -160,17 +160,18 @@ class MmsDeliverReceiver(
         val exceptionHandler = CoroutineExceptionHandler { _, _ -> }
         CoroutineScope(Dispatchers.IO + exceptionHandler).launch {
             try {
-                val store: suspend (String, Long) -> Unit =
-                    persist ?: { address, date ->
+                val store: suspend (String, Long, String?) -> Unit =
+                    persist ?: { address, date, location ->
                         val database = TxxTDatabase.instance(context)
                         InboundStore.persistInboundMmsMetadata(
                             database.conversationDao(),
                             database.messageDao(),
                             address,
                             date,
+                            contentLocation = location,
                         )
                     }
-                store(sender, dateMillis)
+                store(sender, dateMillis, info.contentLocation)
                 // Notify strictly AFTER the metadata persist succeeded: never
                 // announce a message that failed to store. Body is "" — the
                 // row is metadata-only (see class KDoc).

@@ -3,6 +3,7 @@ package com.piercingxx.txxt.ui
 import com.piercingxx.txxt.core.Message
 import com.piercingxx.txxt.core.MessageDirection
 import com.piercingxx.txxt.core.MessageTransport
+import com.piercingxx.txxt.core.MmsRetrievedContent
 
 /**
  * Horizontal alignment of a message row within the thread.
@@ -79,13 +80,14 @@ object ThreadMessagePresenter {
      * as the receive path stored it and nothing is invented about it here.
      */
     private fun bodyFor(message: Message): String =
-        if (message.direction == MessageDirection.OUTGOING &&
-            message.transport == MessageTransport.MMS &&
-            message.body.isBlank()
-        ) {
-            PhotoAttachment.PHOTO_ROW_PLACEHOLDER
-        } else {
-            message.body
+        when {
+            message.direction == MessageDirection.OUTGOING &&
+                message.transport == MessageTransport.MMS &&
+                message.body.isBlank() -> PhotoAttachment.PHOTO_ROW_PLACEHOLDER
+            message.direction == MessageDirection.INCOMING &&
+                message.transport == MessageTransport.MMS &&
+                message.body.isBlank() -> MmsRetrievedContent.MMS_PLACEHOLDER
+            else -> message.body
         }
 }
 

@@ -137,4 +137,22 @@ class PhoneNumbersTest {
         assertFalse(PhoneNumbers.matches("", ""))
         assertFalse(PhoneNumbers.matches("!!!", "5551234567"))
     }
+
+    // ---- alphanumeric senders (OTPs, carriers) ----
+
+    @Test
+    fun `alphanumeric senders key on the trimmed-lowercase token`() {
+        assertEquals("verify", PhoneNumbers.conversationKey("VERIFY"))
+        assertEquals("amazon", PhoneNumbers.conversationKey("AMAZON"))
+        assertEquals("t-mobile", PhoneNumbers.conversationKey("T-Mobile"))
+        assertEquals("", PhoneNumbers.conversationKey("!!!"))
+    }
+
+    @Test
+    fun `alphanumeric senders match case-insensitively and do not collapse together`() {
+        assertTrue(PhoneNumbers.matches("VERIFY", "verify"))
+        assertTrue(PhoneNumbers.matches("T-Mobile", "t-mobile"))
+        assertFalse(PhoneNumbers.matches("VERIFY", "AMAZON"))
+        assertFalse(PhoneNumbers.matches("VERIFY", "5551234567"))
+    }
 }

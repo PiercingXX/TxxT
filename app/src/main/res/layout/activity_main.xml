@@ -44,7 +44,31 @@
             android:textStyle="bold"
             android:textColor="#FFFFFF"
             android:text="NEW" />
+
+        <Button
+            android:id="@+id/settings_button"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:text="⚙"
+            android:textSize="18sp"
+            android:textColor="#FFFFFF" />
     </LinearLayout>
+
+    <TextView
+        android:id="@+id/role_banner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
+        android:fontFamily="@font/font_body"
+        android:textSize="13sp"
+        android:textColor="#FFFFFF"
+        android:text="TxxT is not the default SMS app. Tap to set it."
+        android:visibility="gone" />
 
     <!-- Shown instead of an empty list; MainActivity toggles visibility. -->
     <TextView
@@ -56,7 +80,7 @@
         android:fontFamily="@font/font_body"
         android:textSize="14sp"
         android:textColor="#80FFFFFF"
-        android:text="No conversations yet.\nNEW starts one."
+        android:text="No conversations yet.\nNEW starts one.\nSet TxxT as the default SMS app to receive messages."
         android:visibility="gone" />
 
     <!-- Conversation list. The runtime view ID MainActivity resolves and the

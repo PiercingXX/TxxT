@@ -164,8 +164,10 @@ Beyond the operator's explicit list, these are worth adopting. Each is a
 default-off or default-safe posture that costs little and leaks nothing.
 
 1. **MMS auto-download OFF.** Remote MMS content is fetched only on explicit
-   tap. Prevents IP disclosure, tracking-pixel fetches, and surprise data
-   usage. (Carrier MMS can be a tracking vector.)
+   tap (the tap path calls `downloadMultimediaMessage` and stores a
+   text-first body). Prevents IP disclosure, tracking-pixel fetches, and
+   surprise data usage. Holding the SMS role without that retrieve would
+   swallow carrier MMS for the whole device.
 2. **No link previews.** Never fetch a URL to render a preview — resolving it
    tells whoever hosts the link that the message was received and read. Links
    are plain text; tap to open in a browser.

@@ -3,31 +3,15 @@
 ## Compiled feature list
 
 ### Core messaging
-- SMS + MMS
-- Group MMS
-- Attachments — **photos ship**: the compose bar's `⊕` opens the Android photo
-  picker (`PickVisualMedia`, ImageOnly), which needs **no storage permission**;
-  the picked photo is staged app-private, shown as a one-line indicator that can
-  be removed without sending, and dispatched through the MMS pipeline, where the
-  metadata scrub happens. A caption typed alongside a photo is sent as its own
-  SMS — the MMS entry point carries media only, and a dropped caption would
-  misreport what was sent. Other file types are **not** wired yet.
-  - **Why staged, not referenced:** the picker's grant is one-shot and not
-    persistable, so the bytes are copied into app-private cache the moment you
-    pick. The send cannot fail on an expired grant however long you spend
-    typing. The copy is deleted when the photo is sent or removed, and copies
-    orphaned by a killed process are swept after a day.
-  - The send goes through `SendPipeline.sendMms`, which is where EXIF/XMP/IPTC
-    stripping happens (PRIVACY.md §4).
-- Emoji reactions
-- Message pinning
-- Message sorting
-- Archiving
-- Delayed sending
-- Scheduled messages
-- Quick reply from notifications
-- Swipe actions
-- **Excluded:** voice messages (never sent or received — PRIVACY.md §5)
+- **SMS, 1:1.** TxxT is an SMS client. It holds the default SMS role, which
+  also makes it the exclusive sink for carrier MMS — inbound MMS is stored as
+  a metadata row and **retrieved on tap** so those messages are not lost.
+  TxxT does **not** send photos, group MMS, or emoji reactions.
+- Conversation list: pin, archive, swipe-to-delete (confirmed), call, block,
+  star. Search.
+- Quick reply from notifications; call-screen reply persists to the thread.
+- **Excluded:** voice messages (never sent or received — PRIVACY.md §5);
+  photo send; group MMS; scheduled send; emoji reactions.
 
 ### Privacy / blocking
 - Robust blocking (unknown senders + keyword/phrase filters)
@@ -38,19 +22,21 @@
 - RCS **excluded** (the vector for receipts + typing indicators)
 - **No message bubbles in the thread UI** (text-first lines) and **no
   notification bubbles / chat-heads** — ever
-- **Metadata scrubbed** from every image/video send (EXIF/XMP/IPTC/video atoms)
+- **Metadata scrubbed** from every image/video that would be sent (fail-closed
+  for formats we cannot strip). Photo send is not wired; the scrubber is still
+  the only media path if one is added later.
 - **Starred contacts** — call-through that bypasses every suppression
 - Notification content redacted by default (sender name only)
 - MMS auto-download off (fetch on explicit tap)
 - Full posture: `PRIVACY.md`
 
 ### Backup
-- SMS export/import
-- JSON backup (matching launcher pattern)
+- Settings + blocklist JSON export to app-private storage (not messages).
+- Message JSON (`BackupJson`) exists in code but is not wired to a
+  user-visible export. History lives in `txxt.db` only.
 
 ### Accessibility
-- In-app speech-to-text
-- In-app text-to-speech
+- In-app text-to-speech (tap a message). No in-app speech-to-text (mic removed).
 
 ### Design (brand)
 - AMOLED black

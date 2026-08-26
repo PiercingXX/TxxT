@@ -83,7 +83,7 @@ class MmsDeliverReceiverTest {
             inboundFilterProvider = { inboundFilter },
             extractPdu = { pduBytes },
             mmsDeliverAction = wapPushDeliver,
-            persist = { address, date ->
+            persist = { address, date, _ ->
                 recording.persisted.add(address to date)
                 persistLatch?.countDown()
             },

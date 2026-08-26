@@ -129,6 +129,9 @@ class MainActivity : Activity(), SwipeActionCallback {
 
     private lateinit var emptyState: TextView
     private lateinit var newMessageButton: Button
+    private lateinit var settingsButton: Button
+    private lateinit var roleBanner: TextView
+    private var runtimePermissionsAsked = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -150,6 +153,8 @@ class MainActivity : Activity(), SwipeActionCallback {
         setContentView(R.layout.activity_main)
         emptyState = findViewById(R.id.empty_state)
         newMessageButton = findViewById(R.id.new_message_button)
+        settingsButton = findViewById(R.id.settings_button)
+        roleBanner = findViewById(R.id.role_banner)
 
         // The launcher's conversation-list host (activity_main.xml): the live
         // adapter plus the swipe helper (T1) over the same RecyclerView.
@@ -175,10 +180,20 @@ class MainActivity : Activity(), SwipeActionCallback {
         })
 
         newMessageButton.setOnClickListener { promptNewConversation() }
+        settingsButton.setOnClickListener {
+            startActivity(Intent(this, com.piercingxx.txxt.ui.SettingsActivity::class.java))
+        }
+        roleBanner.setOnClickListener {
+            val roleIntent = DefaultHandlerMonitor().roleRequest(this)
+            if (shouldRequestRole(roleIntent)) {
+                startActivityForResult(roleIntent!!, REQUEST_ROLE_SMS)
+            }
+        }
 
         observeConversations()
         applyTheme()
         requestDefaultHandlerGrants()
+        refreshRoleBanner()
 
         // A notification tap lands here carrying the sender: open their
         // thread. Only on a fresh launch — a recreate (rotation) re-delivers
@@ -192,6 +207,11 @@ class MainActivity : Activity(), SwipeActionCallback {
         super.onNewIntent(intent)
         // A notification tap while the launcher is already up (SINGLE_TOP).
         openThreadFromNotification(intent)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshRoleBanner()
     }
 
     /**
@@ -242,6 +262,8 @@ class MainActivity : Activity(), SwipeActionCallback {
             root.setBackgroundColor(tokens.background.toInt())
             emptyState.setTextColor(tokens.muted.toInt())
             newMessageButton.setTextColor(tokens.accent.toInt())
+            settingsButton.setTextColor(tokens.accent.toInt())
+            roleBanner.setTextColor(tokens.accent.toInt())
         }.apply()
     }
 
@@ -309,28 +331,49 @@ class MainActivity : Activity(), SwipeActionCallback {
         val roleIntent = DefaultHandlerMonitor().roleRequest(this)
         if (shouldRequestRole(roleIntent)) {
             startActivityForResult(roleIntent!!, REQUEST_ROLE_SMS)
+            return
         }
-        val notificationsGranted = ContextCompat.checkSelfPermission(
+        requestRuntimePermissions()
+    }
+
+    /**
+     * One `requestPermissions` call for every missing runtime grant. Two
+     * overlapping prompts cancel each other on Android.
+     */
+    private fun requestRuntimePermissions() {
+        if (runtimePermissionsAsked) return
+        val needed = neededRuntimePermissions(
+            sdkInt = Build.VERSION.SDK_INT,
+            notificationsGranted = ContextCompat.checkSelfPermission(
+                this, Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED,
+            contactsGranted = ContextCompat.checkSelfPermission(
+                this, Manifest.permission.READ_CONTACTS
+            ) == PackageManager.PERMISSION_GRANTED,
+        )
+        if (needed.isEmpty()) return
+        runtimePermissionsAsked = true
+        ActivityCompat.requestPermissions(
             this,
-            Manifest.permission.POST_NOTIFICATIONS
-        ) == PackageManager.PERMISSION_GRANTED
-        if (needsNotificationPermission(Build.VERSION.SDK_INT, notificationsGranted)) {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                REQUEST_POST_NOTIFICATIONS,
-            )
-        }
-        val contactsGranted = ContextCompat.checkSelfPermission(
-            this,
-            Manifest.permission.READ_CONTACTS
-        ) == PackageManager.PERMISSION_GRANTED
-        if (needsContactsPermission(contactsGranted)) {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.READ_CONTACTS),
-                REQUEST_READ_CONTACTS,
-            )
+            needed.toTypedArray(),
+            REQUEST_RUNTIME_PERMISSIONS,
+        )
+    }
+
+    private fun refreshRoleBanner() {
+        val held = DefaultHandlerMonitor(
+            onRevoked = { _ -> },
+        ).warnIfRevoked(this)
+        roleBanner.visibility = if (held) View.GONE else View.VISIBLE
+    }
+
+    @Deprecated("startActivityForResult: this screen is a plain Activity")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        @Suppress("DEPRECATION")
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_ROLE_SMS) {
+            refreshRoleBanner()
+            requestRuntimePermissions()
         }
     }
 
@@ -349,7 +392,9 @@ class MainActivity : Activity(), SwipeActionCallback {
         grantResults: IntArray,
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == REQUEST_READ_CONTACTS) {
+        if (requestCode == REQUEST_RUNTIME_PERMISSIONS ||
+            requestCode == REQUEST_READ_CONTACTS
+        ) {
             contactNames.clearCache()
             applySearchQuery(currentQuery)
         }
@@ -495,12 +540,22 @@ class MainActivity : Activity(), SwipeActionCallback {
         }
     }
 
-    /** Swipe right: delete the conversation and its messages (WS10). */
+    /** Swipe right: confirm, then delete the conversation and its messages. */
     override fun onDelete(conversationId: Long) {
-        scope.launch {
-            database.messageDao().deleteForConversation(conversationId)
-            database.conversationDao().deleteById(conversationId)
-        }
+        AlertDialog.Builder(this)
+            .setTitle("Delete this conversation?")
+            .setMessage("All messages in this thread will be removed. This cannot be undone.")
+            .setPositiveButton("Delete") { _, _ ->
+                scope.launch {
+                    database.messageDao().deleteForConversation(conversationId)
+                    database.conversationDao().deleteById(conversationId)
+                }
+            }
+            .setNegativeButton("Cancel") { _, _ ->
+                applySearchQuery(currentQuery)
+            }
+            .setOnCancelListener { applySearchQuery(currentQuery) }
+            .show()
     }
 
     /**
@@ -528,11 +583,13 @@ class MainActivity : Activity(), SwipeActionCallback {
         /** Request code for the default-SMS-handler role request. */
         const val REQUEST_ROLE_SMS = 4_001
 
-        /** Request code for the POST_NOTIFICATIONS runtime-permission prompt. */
-        const val REQUEST_POST_NOTIFICATIONS = 4_002
+        /** Request code for the combined runtime-permission prompt. */
+        const val REQUEST_RUNTIME_PERMISSIONS = 4_002
 
-        /** Request code for the READ_CONTACTS runtime-permission prompt. */
+        /** Request code for the READ_CONTACTS runtime-permission prompt (legacy). */
         const val REQUEST_READ_CONTACTS = 4_003
+
+        const val REQUEST_POST_NOTIFICATIONS = REQUEST_RUNTIME_PERMISSIONS
 
         /** Delimiter joining participant addresses in the conversations table. */
         private const val ADDRESS_DELIMITER = "\u0001"
@@ -569,5 +626,24 @@ class MainActivity : Activity(), SwipeActionCallback {
          * remains fully usable on numbers.
          */
         fun needsContactsPermission(granted: Boolean): Boolean = !granted
+
+        /**
+         * Runtime permissions to ask in a single prompt. Empty when nothing
+         * is missing. Pure — JVM-testable.
+         */
+        fun neededRuntimePermissions(
+            sdkInt: Int,
+            notificationsGranted: Boolean,
+            contactsGranted: Boolean,
+        ): List<String> {
+            val needed = mutableListOf<String>()
+            if (needsNotificationPermission(sdkInt, notificationsGranted)) {
+                needed += Manifest.permission.POST_NOTIFICATIONS
+            }
+            if (needsContactsPermission(contactsGranted)) {
+                needed += Manifest.permission.READ_CONTACTS
+            }
+            return needed
+        }
     }
 }

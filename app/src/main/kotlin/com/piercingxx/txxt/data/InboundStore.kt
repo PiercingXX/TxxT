@@ -26,17 +26,14 @@ import kotlinx.coroutines.sync.withLock
  * every message already in that thread. The mutex makes that unreachable.
  *
  * Scope: **single-participant threads only** — the SMS 1:1 model. The lookup
- * key is [PhoneNumbers.normalize] of the address (digits-only for phone
- * numbers, trimmed-lowercase for email-gateway addresses), so one
- * correspondent lands on one thread no matter how the carrier or the SENDTO
- * hand-off formatted the number ("+15551234567" and "15551234567" are the same
- * participant); the MESSAGE rows keep the raw delivered address as their
- * `senderAddress` (display fidelity). The normalized key is also a valid SMS
- * destination: bare digits are accepted by `SmsManager`, which is what makes
- * `ThreadActivity.destinationAddress()` (it reads
- * `participantAddresses` to send) safe over normalized keys. Multi-participant
- * MMS threads are deferred until the data model grows a real
- * participant-resolution story.
+ * key is [PhoneNumbers.conversationKey] of the address (digits-only for phone
+ * numbers, trimmed-lowercase for email-gateway and alphanumeric senders), so
+ * one correspondent lands on one thread no matter how the carrier or the
+ * SENDTO hand-off formatted the number. A 10-digit national form and the
+ * `+1` E.164 form of the same person share a thread via
+ * [PhoneNumbers.matches], not exact-key equality. MESSAGE rows keep the raw
+ * delivered address as their `senderAddress` (display fidelity).
+ * Multi-participant MMS threads are deferred.
  */
 object InboundStore {
 
@@ -58,12 +55,11 @@ object InboundStore {
      * form of [address], or creates it when absent.
      *
      * Single-participant threads only: the lookup key is
-     * [PhoneNumbers.normalize] of [address] — one participant, no delimiter —
-     * matching how a 1:1 SMS thread is stored
-     * (`ConversationEntity.participantAddresses` holds a delimiter-joined
-     * string for multi-participant threads, which this store never writes).
-     * On a miss the conversation is upserted with a wall-clock id (the same
-     * id scheme every other conversation row uses) and its id returned.
+     * [PhoneNumbers.conversationKey] of [address] — one participant, no
+     * delimiter. On an exact-key miss, existing rows are scanned with
+     * [PhoneNumbers.matches] so `5551234567` and `+15551234567` share a
+     * thread. On a total miss the conversation is upserted with a wall-clock
+     * id and its id returned.
      */
     suspend fun findOrCreateConversation(dao: ConversationDao, address: String): Long =
         MUTEX.withLock { findOrCreateConversationLocked(dao, address) }
@@ -79,11 +75,17 @@ object InboundStore {
         dao: ConversationDao,
         address: String,
     ): Long {
-        val key = PhoneNumbers.normalize(address)
+        val key = PhoneNumbers.conversationKey(address)
         dao.getByParticipants(key)?.let { return it.id }
+        dao.getAll().firstOrNull { existing ->
+            existing.participantAddresses.split('\u0001')
+                .filter { it.isNotBlank() }
+                .any { PhoneNumbers.matches(it, address) }
+        }?.let { return it.id }
+        val storedKey = key.ifEmpty { address.trim() }
         val conversation = ConversationEntity(
             id = freshConversationId(dao),
-            participantAddresses = key,
+            participantAddresses = storedKey,
         )
         dao.upsert(conversation)
         return conversation.id
@@ -166,6 +168,7 @@ object InboundStore {
         messages: MessageDao,
         address: String,
         dateMillis: Long,
+        contentLocation: String? = null,
     ): Long = MUTEX.withLock {
         val conversationId = findOrCreateConversationLocked(conversations, address)
         // New activity unarchives: an archived thread receiving a message must
@@ -181,6 +184,7 @@ object InboundStore {
             senderAddress = address,
             isRead = false,
             sent = true,
+            contentLocation = contentLocation,
         )
         messages.upsert(message)
         message.id

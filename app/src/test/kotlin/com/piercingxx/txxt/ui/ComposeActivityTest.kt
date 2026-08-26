@@ -108,4 +108,13 @@ class ComposeActivityTest {
             ComposeActivity.recipientFrom(uri("5551234?")),
         )
     }
+
+    @Test
+    fun `a body query is extracted and a missing body is null`() {
+        assertEquals("hello there", ComposeActivity.bodyFrom(uri("5551234?body=hello%20there")))
+        assertEquals("hi", ComposeActivity.bodyFrom(uri("+15551234567?sms_body=hi")))
+        assertNull(ComposeActivity.bodyFrom(uri("5551234")))
+        assertNull(ComposeActivity.bodyFrom(uri("5551234?subject=only")))
+        assertNull(ComposeActivity.bodyFrom(null))
+    }
 }

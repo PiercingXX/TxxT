@@ -47,4 +47,9 @@ data class MessageEntity(
      * through the send pipeline. Always `true` for incoming messages.
      */
     val sent: Boolean = true,
+    /**
+     * MMSC Content-Location for an inbound MMS waiting on tap-to-retrieve.
+     * Null once the body has been fetched, and for SMS.
+     */
+    val contentLocation: String? = null,
 )

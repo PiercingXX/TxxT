@@ -38,10 +38,34 @@ object PhoneNumbers {
      * Normalises [address] for comparison: trimmed and lowercased; if it
      * contains `@` (an email-gateway address) the trimmed-lowercase form is
      * returned verbatim, otherwise every non-digit character is stripped.
+     *
+     * Alphanumeric senders (`VERIFY`, `AMAZON`) strip to empty here — they have
+     * no digits. Use [conversationKey] as a thread / blocklist identity; this
+     * function stays digit-or-email so existing callers that want "digits only"
+     * keep that contract.
      */
     fun normalize(address: String): String {
         val trimmed = address.trim().lowercase()
         return if ('@' in trimmed) trimmed else trimmed.filter { it.isDigit() }
+    }
+
+    /**
+     * The stable identity used as a 1:1 conversation key and as the token
+     * alphanumeric senders compare with.
+     *
+     * - Email: trimmed lowercase (punctuation kept).
+     * - Phone number: digits only (same as [normalize]).
+     * - Alphanumeric sender (at least one letter, no digits, no `@`): the
+     *   trimmed-lowercase token, so `VERIFY` and `verify` are one thread.
+     * - Punctuation-only garbage: empty — no identity.
+     */
+    fun conversationKey(address: String): String {
+        val trimmed = address.trim().lowercase()
+        if (trimmed.isEmpty()) return ""
+        if ('@' in trimmed) return trimmed
+        val digits = trimmed.filter { it.isDigit() }
+        if (digits.isNotEmpty()) return digits
+        return if (trimmed.any { it.isLetter() }) trimmed else ""
     }
 
     /**
@@ -54,24 +78,32 @@ object PhoneNumbers {
      *   normalized form ends with the other (tolerates a country code on one
      *   side; the threshold keeps short codes from colliding with longer
      *   numbers).
-     * - An address that reduces to nothing (no digits, no `@`) has no identity
-     *   and never matches anything.
+     * - Both alphanumeric (no digits, at least one letter): exact
+     *   [conversationKey] equality (`VERIFY` == `verify`, never `AMAZON`).
+     * - An address that reduces to nothing (no digits, no `@`, no letter) has
+     *   no identity and never matches anything.
      */
     fun matches(a: String, b: String): Boolean {
-        val na = normalize(a)
-        val nb = normalize(b)
-        if (na.isEmpty() || nb.isEmpty()) return false
+        val ka = conversationKey(a)
+        val kb = conversationKey(b)
+        if (ka.isEmpty() || kb.isEmpty()) return false
 
-        val aIsEmail = '@' in na
-        val bIsEmail = '@' in nb
+        val aIsEmail = '@' in ka
+        val bIsEmail = '@' in kb
         if (aIsEmail || bIsEmail) {
-            // Emails: exact normalized equality, never cross-matched with numbers.
-            return aIsEmail && bIsEmail && na == nb
+            return aIsEmail && bIsEmail && ka == kb
         }
 
-        if (na == nb) return true
+        val da = ka.filter { it.isDigit() }
+        val db = kb.filter { it.isDigit() }
+        if (da.isEmpty() && db.isEmpty()) {
+            return ka == kb
+        }
+        if (da.isEmpty() || db.isEmpty()) return false
 
-        val (shorter, longer) = if (na.length <= nb.length) na to nb else nb to na
+        if (da == db) return true
+
+        val (shorter, longer) = if (da.length <= db.length) da to db else db to da
         if (shorter.length < MIN_SUFFIX_DIGITS) return false
         return longer.endsWith(shorter)
     }

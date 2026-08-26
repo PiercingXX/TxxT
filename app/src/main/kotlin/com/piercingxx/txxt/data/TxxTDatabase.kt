@@ -10,14 +10,14 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 /**
  * The app's Room database.
  *
- * Declares the two entities at [version] = 1 and exposes the DAOs. The
+ * Declares the two entities and exposes the DAOs. The
  * `app/build.gradle` kapt `room.schemaLocation` argument makes the Room
  * compiler export the schema JSON into `app/schemas/` when this class is
  * compiled.
  */
 @Database(
     entities = [ConversationEntity::class, MessageEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class TxxTDatabase : RoomDatabase() {
@@ -51,7 +51,7 @@ abstract class TxxTDatabase : RoomDatabase() {
          */
         fun build(context: Context): TxxTDatabase =
             Room.databaseBuilder(context, TxxTDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
 
         /**
@@ -62,6 +62,16 @@ abstract class TxxTDatabase : RoomDatabase() {
         private val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE messages ADD COLUMN sent INTEGER NOT NULL DEFAULT 1")
+            }
+        }
+
+        /**
+         * v2 -> v3: inbound MMS retrieve needs the MMSC Content-Location kept
+         * on the metadata row until the operator taps to fetch.
+         */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE messages ADD COLUMN contentLocation TEXT")
             }
         }
     }

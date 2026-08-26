@@ -36,6 +36,7 @@ class SettingsWiringTest {
         ).first { it.exists() }.readText()
 
     private val threadActivity: String by lazy { sourceText("ui/ThreadActivity.kt") }
+    private val mainActivity: String by lazy { sourceText("MainActivity.kt") }
     private val settingsActivity: String by lazy { sourceText("ui/SettingsActivity.kt") }
 
     // ---- Manifest registration ----
@@ -64,6 +65,10 @@ class SettingsWiringTest {
         assertTrue(
             "ThreadActivity must find the settings button",
             threadActivity.contains("settings_button"),
+        )
+        assertTrue(
+            "the conversation list must also launch SettingsActivity",
+            mainActivity.contains("SettingsActivity::class.java"),
         )
     }
 

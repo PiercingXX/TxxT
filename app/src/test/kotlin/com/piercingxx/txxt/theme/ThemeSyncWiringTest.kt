@@ -58,6 +58,13 @@ class ThemeSyncWiringTest {
     private val manifestText: String
         get() = manifest.readText()
 
+    @Test
+    fun `only piercingxx sibling packages are trusted theme senders`() {
+        assertTrue(ThemeSyncReceiver.isFamilyLauncher("com.piercingxx.launcher"))
+        assertFalse(ThemeSyncReceiver.isFamilyLauncher("com.piercingxx.txxt"))
+        assertFalse(ThemeSyncReceiver.isFamilyLauncher("com.evil.theme"))
+    }
+
     private val context: Context = mockk(relaxed = true)
 
     /** A controller over an in-memory store the receiver reports into. */
@@ -69,6 +76,7 @@ class ThemeSyncWiringTest {
             controllerFactory = { into },
             action = ThemeSyncReceiver.ACTION_THEME_CHANGED,
             extraThemeName = ThemeSyncReceiver.EXTRA_THEME_NAME,
+            acceptBroadcast = { _, _ -> true },
         )
 
     /**

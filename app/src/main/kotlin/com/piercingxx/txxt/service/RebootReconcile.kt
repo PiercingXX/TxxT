@@ -55,8 +55,10 @@ class RebootReconcile(
     /**
      * Re-drives a pending outgoing [Message] through the send pipeline to the
      * given recipient address (resolved from the conversation's participants).
+     * Returns true when the platform send was attempted; false when the gate
+     * denied (no throw) so the row stays pending.
      */
-    private val resendPending: suspend (Message, String) -> Unit,
+    private val resendPending: suspend (Message, String) -> Boolean,
     /**
      * Marks a message (by id) as sent after [resendPending] returned without
      * throwing, so the row is not re-driven on the next boot.
@@ -149,7 +151,6 @@ class RebootReconcile(
             // row — it stays pending (not marked sent) and the loop continues.
             val attempted = try {
                 resendPending(message, recipient)
-                true
             } catch (_: Exception) {
                 false
             }
@@ -157,9 +158,9 @@ class RebootReconcile(
                 pendingFailed += 1
                 return@forEach
             }
-            // Mark sent only after a resend that completed without throwing, so
-            // a failed attempt stays pending for the next boot instead of being
-            // lost — and a successful one is never re-sent on every reboot.
+            // Mark sent only after a resend the pipeline reported as attempted.
+            // A gate deny returns false without throwing — those rows stay
+            // pending for the next boot instead of looking sent.
             markSent(message.id)
             pendingResent += 1
         }

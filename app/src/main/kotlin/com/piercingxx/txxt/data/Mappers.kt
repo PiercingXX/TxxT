@@ -36,6 +36,7 @@ object Mappers {
         senderAddress = senderAddress,
         isRead = isRead,
         isSent = sent,
+        contentLocation = contentLocation,
     )
 
     /** Converts a pure [Message] into a storable [MessageEntity]. */
@@ -49,6 +50,7 @@ object Mappers {
         senderAddress = senderAddress,
         isRead = isRead,
         sent = isSent,
+        contentLocation = contentLocation,
     )
 
     // ---- Conversation (messages are stored separately, in the messages table) ----

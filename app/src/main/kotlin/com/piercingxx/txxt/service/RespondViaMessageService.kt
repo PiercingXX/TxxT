@@ -6,6 +6,13 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.IBinder
+import com.piercingxx.txxt.data.OutboundStore
+import com.piercingxx.txxt.data.TxxTDatabase
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
  * The call-screen quick-reply service (`ACTION_RESPOND_VIA_MESSAGE`).
@@ -66,18 +73,49 @@ class RespondViaMessageService(
      * computed.
      */
     private val reportResult: (Int) -> Unit = {},
+    /**
+     * Persists the outgoing reply as `(address, body) -> messageId`. Defaults
+     * to `null`, meaning the real [OutboundStore.persistOutgoingSms] runs
+     * inside [onStartCommand].
+     */
+    private val persist: (suspend (String, String) -> Long)? = null,
+    /** Marks the persisted row sent. Null = real MessageDao.markSent. */
+    private val markSent: (suspend (Long) -> Unit)? = null,
 ) : Service() {
+
+    private val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, _ -> }
+    )
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val recipient = resolveRecipient(intent?.data)
         val text = intent?.let(resolveText).orEmpty()
-
-        // The service instance is the send context; respond() itself stays
-        // pure over recipient/text/outcome so the JVM tests drive it directly.
-        reportResult(respond(recipient, text) { to, body -> send(this, to, body) })
-        stopSelf()
+        scope.launch {
+            try {
+                if (recipient.isNullOrBlank() || text.isBlank()) {
+                    reportResult(RESULT_IO_ERROR)
+                    return@launch
+                }
+                val database by lazy { TxxTDatabase.instance(this@RespondViaMessageService) }
+                val persistStep = persist ?: { address, body ->
+                    OutboundStore.persistOutgoingSms(
+                        database.conversationDao(),
+                        database.messageDao(),
+                        address,
+                        body,
+                    )
+                }
+                val markSentStep = markSent ?: { id -> database.messageDao().markSent(id) }
+                val messageId = persistStep(recipient, text)
+                val ok = send(this@RespondViaMessageService, recipient, text)
+                if (ok) markSentStep(messageId)
+                reportResult(if (ok) RESULT_OK else RESULT_IO_ERROR)
+            } finally {
+                stopSelf()
+            }
+        }
         return START_NOT_STICKY
     }
 

@@ -300,6 +300,7 @@ class InboundStoreTest {
 
         val messageId = InboundStore.persistInboundMmsMetadata(
             conversations, messages, "+15559998888", date,
+            contentLocation = "http://mmsc.example/m/1",
         )
 
         val stored = messages.rows.getValue(messageId)
@@ -313,7 +314,40 @@ class InboundStoreTest {
         assertEquals("+15559998888", stored.senderAddress)
         assertEquals(false, stored.isRead)
         assertEquals(true, stored.sent)
+        assertEquals("http://mmsc.example/m/1", stored.contentLocation)
     }
+    @Test
+    fun `ten-digit national and plus-one E164 share one conversation`() = runBlocking {
+        val conversations = FakeConversationDao()
+        val messages = FakeMessageDao()
+
+        InboundStore.persistInboundSms(
+            conversations, messages, "555-123-4567", "national", 1_700_000_000_000L,
+        )
+        InboundStore.persistInboundSms(
+            conversations, messages, "+15551234567", "e164", 1_700_000_000_001L,
+        )
+
+        assertEquals(1, conversations.rows.size)
+    }
+
+    @Test
+    fun `alphanumeric senders land on separate conversations`() = runBlocking {
+        val conversations = FakeConversationDao()
+        val messages = FakeMessageDao()
+
+        InboundStore.persistInboundSms(
+            conversations, messages, "VERIFY", "code 1", 1_700_000_000_000L,
+        )
+        InboundStore.persistInboundSms(
+            conversations, messages, "AMAZON", "code 2", 1_700_000_000_001L,
+        )
+
+        assertEquals(2, conversations.rows.size)
+        val keys = conversations.rows.values.map { it.participantAddresses }.toSet()
+        assertEquals(setOf("verify", "amazon"), keys)
+    }
+
     @Test
     fun `an inbound message unarchives its conversation`() = runBlocking {
         val conversations = FakeConversationDao()

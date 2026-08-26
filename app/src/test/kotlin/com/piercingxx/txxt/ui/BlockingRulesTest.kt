@@ -71,6 +71,23 @@ class BlockingRulesTest {
     }
 
     @Test
+    fun `starred and blocked membership is format-tolerant`() {
+        val starred = BlockingRules.withEntry(
+            emptyMap(),
+            starredKey,
+            "15551234567",
+        )
+        assertTrue(BlockingRules.isStarred(starred, "+15551234567"))
+        val blocked = BlockingRules.withEntry(
+            emptyMap(),
+            blockedKey,
+            "AMAZON",
+        )
+        assertTrue(BlockingRules.isBlocked(blocked, "amazon"))
+        assertFalse(BlockingRules.isBlocked(blocked, "VERIFY"))
+    }
+
+    @Test
     fun `a produced map drives the real store and live filter`() {
         val map = BlockingRules.withEntry(emptyMap(), blockedKey, "+15550001111")
         SettingsBlockingStore.fromMap(map).loadAndApply()

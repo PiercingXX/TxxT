@@ -69,15 +69,12 @@ class ThreadMessagePresenterTest {
     }
 
     @Test
-    fun `an inbound MMS body is never invented over`() {
-        // The substitution is scoped to OUTGOING on purpose: this app only ever
-        // sends photos, but an inbound MMS could carry anything, so its body is
-        // left exactly as the receive path stored it.
+    fun `an inbound MMS with an empty body renders as a tap-to-retrieve line`() {
         val row = present(
             message(id = 8L, direction = MessageDirection.INCOMING, body = "")
                 .copy(transport = MessageTransport.MMS),
         )
-        assertEquals("", row.body)
+        assertEquals(com.piercingxx.txxt.core.MmsRetrievedContent.MMS_PLACEHOLDER, row.body)
     }
 
     @Test

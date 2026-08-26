@@ -15,8 +15,8 @@ import org.junit.Test
  * `keepMetadata`, no `preserveMetadata`, and no boolean that skips the scrub.
  *
  * Also locks the fail-closed contract at the dispatch level: a recognized but
- * malformed container returns `null` (the caller must not send), while an
- * unrecognized format is returned unchanged.
+ * malformed container returns `null` (the caller must not send), and an
+ * unrecognized still-image format (GIF, WebP, HEIF) also returns `null`.
  *
  * Synthetic JPEG, PNG and MP4/MOV payloads are constructed in Kotlin — minimal
  * but structurally valid containers with metadata embedded — because no real
@@ -187,10 +187,16 @@ class ScrubberApiTest {
     }
 
     @Test
-    fun `unrecognized format passes through non-null and unchanged`() {
+    fun `unrecognized still image fails closed`() {
         val gif = "GIF89a" + "\u00A9nothing-to-strip-here".repeat(2)
         val bytes = gif.toByteArray(Charsets.ISO_8859_1)
-        assertArrayEquals(bytes, MetadataScrubber.scrub(bytes))
+        assertNull(MetadataScrubber.scrub(bytes))
+        val webp = byteArrayOf(
+            'R'.code.toByte(), 'I'.code.toByte(), 'F'.code.toByte(), 'F'.code.toByte(),
+            0, 0, 0, 0,
+            'W'.code.toByte(), 'E'.code.toByte(), 'B'.code.toByte(), 'P'.code.toByte(),
+        )
+        assertNull(MetadataScrubber.scrub(webp))
     }
 
     // --- helpers ---------------------------------------------------------

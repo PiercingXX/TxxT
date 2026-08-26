@@ -226,6 +226,27 @@
              platform's in-call UI starts this service to send a canned reply;
              SEND_RESPOND_VIA_MESSAGE is signature-held by the system, so only
              the platform can start it. The reply goes through SendPipeline. -->
+        <!-- Writable cache URI for SmsManager.downloadMultimediaMessage. The
+             telephony process writes the retrieved PDU here; grantUriPermission
+             is issued per download. Not exported. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.mms"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/mms_file_paths" />
+        </provider>
+
+        <receiver
+            android:name=".service.MmsDownloadedReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.piercingxx.txxt.action.MMS_DOWNLOADED" />
+            </intent-filter>
+        </receiver>
+
         <service
             android:name=".service.RespondViaMessageService"
             android:exported="true"
