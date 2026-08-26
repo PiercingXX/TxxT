@@ -51,8 +51,10 @@ object NotificationPosture {
         starred: Boolean,
         globalPosture: Posture,
         overrides: Map<String, Override> = emptyMap(),
+        muted: Boolean = false,
     ): Posture {
         if (starred) return Posture.NOTIFY
+        if (muted) return Posture.SUPPRESS
         val override = overrides[sender] ?: Override.UNSET
         return if (override != Override.UNSET) {
             Posture.valueOf(override.name)

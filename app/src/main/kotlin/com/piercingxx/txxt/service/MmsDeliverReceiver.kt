@@ -188,6 +188,10 @@ class MmsDeliverReceiver(
                                 starred = NotificationPrefs.isStarred(ctx, from),
                                 globalPosture = NotificationPrefs.globalPosture(ctx),
                                 channelId = NotificationPrefs.channelId(ctx),
+                                muted = com.piercingxx.txxt.data.ConversationMute.isMuted(
+                                    TxxTDatabase.instance(ctx).conversationDao(),
+                                    from,
+                                ),
                             )
                         }
                     }

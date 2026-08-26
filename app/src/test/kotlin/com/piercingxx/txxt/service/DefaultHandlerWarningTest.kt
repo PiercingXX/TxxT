@@ -32,9 +32,14 @@ class DefaultHandlerWarningTest {
 
     private val context: Context = mockk(relaxed = true)
 
-    private fun monitor(defaultPackage: String?, onRevoked: () -> Unit): DefaultHandlerMonitor =
+    private fun monitor(
+        defaultPackage: String?,
+        onRevoked: () -> Unit,
+        roleHeld: Boolean? = null,
+    ): DefaultHandlerMonitor =
         DefaultHandlerMonitor(
             defaultSmsPackage = { _ -> defaultPackage },
+            roleHeld = { _ -> roleHeld },
             onRevoked = { _ -> onRevoked() },
         )
 
@@ -62,6 +67,20 @@ class DefaultHandlerWarningTest {
 
         assertFalse("a missing default handler must report the app is not the default", result)
         assertTrue("the missing role must be warned loudly, never silent", warned)
+    }
+
+    @Test
+    fun `a held ROLE_SMS counts even when the legacy default-sms package is null`() {
+        var warned = false
+        val monitor = monitor(
+            defaultPackage = null,
+            onRevoked = { warned = true },
+            roleHeld = true,
+        )
+
+        assertTrue(monitor.isHeld(context))
+        assertTrue(monitor.warnIfRevoked(context))
+        assertFalse(warned)
     }
 
     @Test

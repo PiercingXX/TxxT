@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  TxxT NEW-conversation recipient picker.
+
+  Text-first on AMOLED black (docs/DESIGN.md §"Conversation list"): a search
+  field that accepts a name OR a number, and a RecyclerView of matching
+  contacts. The previous phone-pad dialog could not type letters, so a
+  saved contact was unreachable from NEW. No contact cards, no avatar
+  tiles — name over number, the same row language as the conversation list.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/new_conversation_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#000000"
+    android:fitsSystemWindows="true">
+
+    <TextView
+        android:id="@+id/new_conversation_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="4dp"
+        android:fontFamily="@font/font_body"
+        android:textSize="15sp"
+        android:textStyle="bold"
+        android:textColor="#E6FFFFFF"
+        android:text="New message" />
+
+    <!-- inputType=text is load-bearing: TYPE_CLASS_PHONE was the bug that
+         made NEW a number-only field. iconifiedByDefault=false keeps the
+         field open so typing a name is the first action, not a tap on a
+         collapsed search icon. -->
+    <SearchView
+        android:id="@+id/recipient_search"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:queryHint="Name or number"
+        android:iconifiedByDefault="false"
+        android:inputType="text"
+        android:imeOptions="actionGo" />
+
+    <TextView
+        android:id="@+id/empty_state"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="24dp"
+        android:gravity="center"
+        android:fontFamily="@font/font_body"
+        android:textSize="14sp"
+        android:textColor="#80FFFFFF"
+        android:text="Type a name or number."
+        android:visibility="gone" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recipient_list"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="12dp"
+        android:clipToPadding="false" />
+
+</LinearLayout>

@@ -50,6 +50,21 @@ class DefaultHandlerMonitor(
         Telephony.Sms.getDefaultSmsPackage(context)
     },
     /**
+     * Whether [RoleManager.ROLE_SMS] is held, or `null` when RoleManager is
+     * not the authority (API <29). On current GrapheneOS the role is the
+     * source of truth; `Telephony.Sms.getDefaultSmsPackage` still reads the
+     * old `SMS_DEFAULT_APPLICATION` setting, which can be null while the
+     * role is held — that is why the in-app banner lied.
+     */
+    private val roleHeld: (Context) -> Boolean? = { context ->
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            context.getSystemService(RoleManager::class.java)
+                ?.isRoleHeld(RoleManager.ROLE_SMS)
+        } else {
+            null
+        }
+    },
+    /**
      * Called exactly once when [warnIfRevoked] finds this app is no longer the
      * default SMS handler, so the revocation is surfaced instead of silently
      * swallowed. Defaults to a user-visible [Toast].
@@ -89,15 +104,25 @@ class DefaultHandlerMonitor(
     /**
      * Whether this app is currently the default SMS handler.
      *
-     * Returns `true` when the platform's default-SMS package is this app's
-     * package name. When it is not (the role was revoked), calls [onRevoked]
+     * RoleManager is authoritative on API 29+. The legacy default-SMS package
+     * is only consulted when RoleManager is absent (API <29) or returned
+     * nothing.
+     */
+    fun isHeld(context: Context): Boolean {
+        roleHeld(context)?.let { return it }
+        return defaultSmsPackage(context) == context.packageName
+    }
+
+    /**
+     * Whether this app is currently the default SMS handler.
+     *
+     * Returns `true` when the role is held. When it is not, calls [onRevoked]
      * (so the app "warns loudly") and returns `false`.
      */
     fun warnIfRevoked(context: Context): Boolean {
-        val default = defaultSmsPackage(context)
-        val isDefault = default == context.packageName
-        if (!isDefault) onRevoked(context)
-        return isDefault
+        val held = isHeld(context)
+        if (!held) onRevoked(context)
+        return held
     }
 
     /**

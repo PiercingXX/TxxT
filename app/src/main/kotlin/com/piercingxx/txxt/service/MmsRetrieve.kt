@@ -37,14 +37,32 @@ object MmsRetrieve {
      * deleted (never stored). Other content becomes a text-first body and
      * clears [contentLocation] so a second tap reads aloud. Pure over the DAO.
      */
-    suspend fun applyPdu(messages: MessageDao, messageId: Long, pdu: ByteArray): Boolean {
+    suspend fun applyPdu(
+        messages: MessageDao,
+        messageId: Long,
+        pdu: ByteArray,
+        saveImage: ((ByteArray, String) -> String?)? = null,
+    ): Boolean {
         val row = messages.getById(messageId) ?: return false
         val parsed = MmsRetrievedContentParser.parse(pdu)
         if (parsed.dropUnstored) {
             messages.deleteById(messageId)
             return true
         }
-        messages.upsert(row.copy(body = parsed.body, contentLocation = null))
+        val imageBytes = parsed.imageBytes
+        val mime = parsed.imageMime
+        val path = if (imageBytes != null && mime != null) {
+            saveImage?.invoke(imageBytes, mime)
+        } else {
+            null
+        }
+        messages.upsert(
+            row.copy(
+                body = parsed.body,
+                contentLocation = null,
+                mediaPath = path ?: row.mediaPath,
+            )
+        )
         return true
     }
 }

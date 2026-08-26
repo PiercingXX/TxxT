@@ -62,6 +62,7 @@ object ThreadMessagePresenter {
             emphasis = emphasis,
             body = bodyFor(message),
             timestampMillis = message.timestampMillis,
+            mediaPath = message.mediaPath,
         )
     }
 
@@ -99,4 +100,5 @@ data class ThreadRow(
     val emphasis: ThreadEmphasis,
     val body: String,
     val timestampMillis: Long,
+    val mediaPath: String? = null,
 )

@@ -9,8 +9,11 @@ import android.provider.OpenableColumns
 import android.speech.tts.TextToSpeech
 import android.view.View
 import android.view.WindowManager
+import android.app.AlertDialog
 import android.widget.Button
 import android.widget.EditText
+import android.widget.GridLayout
+import android.widget.SearchView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.PickVisualMediaRequest
@@ -90,6 +93,10 @@ class ThreadActivity : Activity() {
     private lateinit var attachmentRow: View
     private lateinit var attachmentLabel: TextView
     private lateinit var attachmentClear: Button
+    private lateinit var emojiButton: Button
+    private lateinit var threadSearch: SearchView
+    private var allMessages: List<com.piercingxx.txxt.core.Message> = emptyList()
+    private var threadQuery: String = ""
 
     /**
      * The staged copy of the picked photo, or null when nothing is attached.
@@ -181,6 +188,10 @@ class ThreadActivity : Activity() {
         attachmentRow = findViewById(R.id.attachment_row)
         attachmentLabel = findViewById(R.id.attachment_label)
         attachmentClear = findViewById(R.id.attachment_clear)
+        emojiButton = findViewById(R.id.emoji_button)
+        emojiButton.text = EmojiPalette.PICKER_GLYPH
+        EmojiTypeface.apply(emojiButton)
+        threadSearch = findViewById(R.id.thread_search)
 
         adapter = ThreadAdapter(
             onMessageTap = ::onMessageTap,
@@ -195,10 +206,24 @@ class ThreadActivity : Activity() {
 
         sendButton.setOnClickListener { sendComposed() }
         settingsButton.setOnClickListener { openSettings() }
-        // Photos are not a shipping feature: holding ROLE_SMS still retrieves
-        // inbound MMS on tap, but this compose bar does not send them.
-        attachButton.visibility = View.GONE
-        attachmentRow.visibility = View.GONE
+        attachButton.setOnClickListener { launchPhotoPicker() }
+        attachmentClear.setOnClickListener { clearAttachment() }
+        emojiButton.setOnClickListener { showEmojiPicker() }
+        threadTitle.setOnLongClickListener {
+            copyThreadNumber()
+            true
+        }
+        EmojiTypeface.apply(composeInput)
+        threadSearch.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
+            override fun onQueryTextSubmit(query: String?): Boolean {
+                applyThreadSearch(query.orEmpty())
+                return true
+            }
+            override fun onQueryTextChange(newText: String?): Boolean {
+                applyThreadSearch(newText.orEmpty())
+                return true
+            }
+        })
         val prefill = intent.getStringExtra(EXTRA_PREFILL_BODY)
         if (!prefill.isNullOrBlank() && composeInput.text.isNullOrBlank()) {
             composeInput.setText(prefill)
@@ -251,6 +276,7 @@ class ThreadActivity : Activity() {
             composeInput.setBackgroundColor(surface)
             sendButton.setTextColor(accent)
             settingsButton.setTextColor(accent)
+            emojiButton.setTextColor(accent)
             // The attach and remove glyphs are affordances, so they take the
             // accent exactly as send and settings do — borderless, no tint.
             attachButton.setTextColor(accent)
@@ -300,11 +326,12 @@ class ThreadActivity : Activity() {
      */
     private fun promptMessageActions(message: com.piercingxx.txxt.core.Message) {
         android.app.AlertDialog.Builder(this)
-            .setItems(arrayOf("Copy", "Read aloud", "Delete")) { _, which ->
+            .setItems(arrayOf("Copy message", "Copy number", "Read aloud", "Delete")) { _, which ->
                 when (which) {
                     0 -> copyMessage(message)
-                    1 -> readMessageAloud(message)
-                    2 -> confirmDeleteMessage(message)
+                    1 -> copyThreadNumber()
+                    2 -> readMessageAloud(message)
+                    3 -> confirmDeleteMessage(message)
                 }
             }
             .setNegativeButton("Cancel", null)
@@ -338,7 +365,19 @@ class ThreadActivity : Activity() {
             val row = database.messageDao().getById(messageId) ?: return@MmsDownloadRetry false
             val location = row.contentLocation ?: return@MmsDownloadRetry false
             val pdu = mmsFetcher.fetch(this@ThreadActivity, location) ?: return@MmsDownloadRetry false
-            MmsRetrieve.applyPdu(database.messageDao(), messageId, pdu)
+            MmsRetrieve.applyPdu(
+                database.messageDao(),
+                messageId,
+                pdu,
+                saveImage = { bytes, mime ->
+                    val dir = File(filesDir, "mms")
+                    if (!dir.exists()) dir.mkdirs()
+                    val ext = if (mime.contains("png")) "png" else "jpg"
+                    val file = File(dir, "$messageId.$ext")
+                    file.writeBytes(bytes)
+                    file.absolutePath
+                },
+            )
         },
         onStateChange = { _, state ->
             if (state == MmsDownloadState.FAILED) {
@@ -418,7 +457,8 @@ class ThreadActivity : Activity() {
             ThreadMessageLoader(database.messageDao(), conversationId)
                 .messages()
                 .collect { messages ->
-                    adapter.submit(messages)
+                    allMessages = messages
+                    adapter.submit(ThreadSearchFilter.filter(messages, threadQuery))
                     // A visible thread reads its incoming messages: clear their
                     // unread flag so the launcher's badge and any UNREAD_FIRST
                     // ordering settle. Gated on [started] (a backgrounded
@@ -461,7 +501,9 @@ class ThreadActivity : Activity() {
      */
     private fun sendComposed() {
         val body = composeInput.text?.toString()?.trim().orEmpty()
-        if (body.isEmpty()) return
+        val photo = stagedPhoto
+        val steps = PhotoAttachment.plan(body, photo != null)
+        if (steps.isEmpty()) return
         scope.launch(Dispatchers.Main) {
             val destination = destinationAddress()
             if (destination == null) {
@@ -472,12 +514,27 @@ class ThreadActivity : Activity() {
                 ).show()
                 return@launch
             }
-            if (sendTextStep(destination, body)) {
-                composeInput.setText("")
-            } else {
+            val failures = mutableListOf<String>()
+            steps.forEach { step ->
+                when (step) {
+                    SendStep.SMS_TEXT ->
+                        if (sendTextStep(destination, body)) {
+                            composeInput.setText("")
+                        } else {
+                            failures += "message"
+                        }
+                    SendStep.MMS_PHOTO ->
+                        if (photo != null && sendPhotoStep(destination, photo)) {
+                            clearAttachment()
+                        } else {
+                            failures += "photo"
+                        }
+                }
+            }
+            if (failures.isNotEmpty()) {
                 Toast.makeText(
                     this@ThreadActivity,
-                    "Not sent: message",
+                    "Not sent: ${failures.joinToString(" and ")}",
                     Toast.LENGTH_LONG,
                 ).show()
             }
@@ -505,7 +562,71 @@ class ThreadActivity : Activity() {
         return ok
     }
 
-    // ---- Photo attachment (staging kept for rotation; compose does not send MMS) ----
+    private suspend fun sendPhotoStep(destination: String, photo: File): Boolean {
+        val messageId = OutboundStore.persistOutgoingMms(
+            conversations = database.conversationDao(),
+            messages = database.messageDao(),
+            address = destination,
+        )
+        val ok = try {
+            SendPipeline.sendMms(
+                this@ThreadActivity,
+                Uri.fromFile(photo),
+                destination = destination,
+            )
+        } catch (_: Exception) {
+            false
+        }
+        if (ok) {
+            val row = database.messageDao().getById(messageId)
+            if (row != null) {
+                database.messageDao().upsert(row.copy(mediaPath = photo.absolutePath, sent = true))
+            } else {
+                database.messageDao().markSent(messageId)
+            }
+        }
+        return ok
+    }
+
+    private fun applyThreadSearch(query: String) {
+        threadQuery = query
+        adapter.submit(ThreadSearchFilter.filter(allMessages, query))
+    }
+
+    private fun copyThreadNumber() {
+        scope.launch {
+            val number = destinationAddress() ?: return@launch
+            val clipboard = getSystemService(CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                ?: return@launch
+            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("number", number))
+            Toast.makeText(this@ThreadActivity, "Copied $number", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun showEmojiPicker() {
+        val grid = GridLayout(this).apply {
+            columnCount = 8
+            setPadding(16, 16, 16, 16)
+        }
+        val dialog = AlertDialog.Builder(this).setView(grid).create()
+        EmojiPalette.glyphs.forEach { glyph ->
+            val cell = TextView(this).apply {
+                text = glyph
+                textSize = 22f
+                setPadding(12, 12, 12, 12)
+                EmojiTypeface.apply(this)
+                setOnClickListener {
+                    val start = composeInput.selectionStart.coerceAtLeast(0)
+                    composeInput.text?.insert(start, glyph)
+                    dialog.dismiss()
+                }
+            }
+            grid.addView(cell)
+        }
+        dialog.show()
+    }
+
+    // ---- Photo attachment ----
 
     /**
      * Opens the Android photo picker, restricted to images.

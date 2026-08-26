@@ -4,7 +4,9 @@ import android.content.Context
 import android.net.Uri
 import android.os.Build
 import android.telephony.SmsManager
+import androidx.core.content.FileProvider
 import com.piercingxx.txxt.core.MetadataScrubber
+import com.piercingxx.txxt.core.MmsSendReq
 import java.io.File
 import java.io.IOException
 
@@ -102,6 +104,8 @@ object SendPipeline {
         context: Context,
         contentUri: Uri,
         gate: PermissionGate = PermissionGate(),
+        destination: String = "",
+        caption: String = "",
         readUriBytes: (Uri) -> ByteArray? = { uri ->
             try {
                 context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
@@ -112,15 +116,7 @@ object SendPipeline {
             }
         },
         writeTempMedia: (ByteArray) -> Uri? = { bytes ->
-            try {
-                val file = File.createTempFile("mms-", ".scrubbed", context.cacheDir)
-                file.writeBytes(bytes)
-                Uri.fromFile(file)
-            } catch (_: IOException) {
-                null
-            } catch (_: SecurityException) {
-                null
-            }
+            writePduFile(context, bytes)
         },
         sendMmsPlatform: (Context, Uri) -> Unit = { ctx, uri ->
             // locationUrl null = use the device default MMSC; configOverrides
@@ -128,10 +124,9 @@ object SendPipeline {
             // request a read report (`docs/PRIVACY.md:23`).
             resolveSmsManager(ctx).sendMultimediaMessage(ctx, uri, null, null, null)
         },
-        deleteTemp: (Uri) -> Unit = { uri ->
-            if (uri.scheme == "file") {
-                uri.path?.let { path -> File(path).delete() }
-            }
+        deleteTemp: (Uri) -> Unit = { },
+        composePdu: (String, ByteArray, String) -> ByteArray? = { to, image, text ->
+            MmsSendReq.compose(to, image, MmsSendReq.mimeOf(image), text)
         },
     ): Boolean {
         if (!gate.canSend(context)) return false
@@ -139,14 +134,42 @@ object SendPipeline {
         // Fail closed: a recognized-but-malformed structure must not be sent —
         // there is no guarantee its metadata is gone.
         val scrubbed = MetadataScrubber.scrub(bytes) ?: return false
+        val payload = if (destination.isNotBlank()) {
+            composePdu(destination, scrubbed, caption) ?: return false
+        } else {
+            scrubbed
+        }
         var tempUri: Uri? = null
         try {
-            tempUri = writeTempMedia(scrubbed) ?: return false
+            tempUri = writeTempMedia(payload) ?: return false
             sendMmsPlatform(context, tempUri)
             return true
         } finally {
             tempUri?.let(deleteTemp)
         }
+    }
+
+    private fun writePduFile(context: Context, bytes: ByteArray): Uri? = try {
+        val dir = File(context.cacheDir, "mms")
+        if (!dir.exists()) dir.mkdirs()
+        val file = File.createTempFile("send-", ".pdu", dir)
+        file.writeBytes(bytes)
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.mms", file)
+        val grant = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+            android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        listOf("com.android.phone", "com.android.mms", "com.android.telephony").forEach { pkg ->
+            try {
+                context.grantUriPermission(pkg, uri, grant)
+            } catch (_: SecurityException) {
+            }
+        }
+        uri
+    } catch (_: IOException) {
+        null
+    } catch (_: SecurityException) {
+        null
+    } catch (_: IllegalArgumentException) {
+        null
     }
 
     /**

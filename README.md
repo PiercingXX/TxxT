@@ -4,9 +4,9 @@
 A private SMS client for Android. Holds the system SMS role on a Pixel 6
 running GrapheneOS. Text-first, AMOLED black, Space Mono / JetBrains Mono, same
 stack as the rest of the phone suite. The features are ordinary; what makes it
-worth building is which of them ship switched off. Photo send is not a
-product; inbound MMS is retrieved on tap because the default SMS app is the
-only sink for carrier MMS.
+worth building is which of them ship switched off. Photos go as MMS (scrubbed
+on send, fetched on tap). The body face is JetBrains Mono Nerd Font Mono, so
+the compose palette is monochrome Nerd glyphs rather than colour emoji.
 
 There is no screenshot in this repo and there won't be one. Every activity sets
 `FLAG_SECURE`, so `screencap` returns a black rectangle. scripts > screenshots
@@ -45,7 +45,7 @@ numbers, never blank rows.
 Send is a monospace `➜` — a real codepoint from the bundled JetBrains Mono, not
 a vector icon and not colour emoji. Filled buttons became borderless
 bright-white type: a white pill on AMOLED black is a flashlight, a white word
-is a label. No dictation mic. No photo attach.
+is a label. Attach is `⊕`. Emoji from a small palette. No dictation mic.
 
 ## Status 🧪
 

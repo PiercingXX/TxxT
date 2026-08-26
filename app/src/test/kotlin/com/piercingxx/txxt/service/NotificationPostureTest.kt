@@ -67,6 +67,32 @@ class NotificationPostureTest {
     }
 
     @Test
+    fun `muted unstarred senders are suppressed`() {
+        assertEquals(
+            Posture.SUPPRESS,
+            NotificationPosture.decide(
+                sender = "alice",
+                starred = false,
+                globalPosture = Posture.REDACTED,
+                muted = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `starred senders still notify when the thread is muted`() {
+        assertEquals(
+            Posture.NOTIFY,
+            NotificationPosture.decide(
+                sender = "alice",
+                starred = true,
+                globalPosture = Posture.REDACTED,
+                muted = true,
+            ),
+        )
+    }
+
+    @Test
     fun `unstarred senders without an override fall back to the global posture`() {
         assertEquals(
             Posture.REDACTED,

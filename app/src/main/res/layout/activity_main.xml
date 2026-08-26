@@ -31,9 +31,10 @@
             android:layout_weight="1"
             android:queryHint="Search conversations" />
 
-        <!-- New-conversation affordance: prompts for a number and opens (or
-             creates) its thread. Text-first — a monospace word, not an icon,
-             and borderless: a bright-white word on the ground, no filled pill. -->
+        <!-- New-conversation affordance: opens the recipient picker (name or
+             number) and then the thread. Text-first — a monospace word, not
+             an icon, and borderless: a bright-white word on the ground, no
+             filled pill. -->
         <Button
             android:id="@+id/new_message_button"
             style="?android:attr/borderlessButtonStyle"

@@ -64,6 +64,12 @@
             android:textColor="#FFFFFF" />
     </LinearLayout>
 
+    <SearchView
+        android:id="@+id/thread_search"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:queryHint="Search this thread" />
+
     <!-- Message list. Flat text-first rows, never bubbles. -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/message_list"
@@ -152,8 +158,19 @@
                 android:text="⊕"
                 android:textSize="18sp"
                 android:contentDescription="Attach a photo"
-                android:textColor="#FFFFFF"
-                android:visibility="gone" />
+                android:textColor="#FFFFFF" />
+
+            <Button
+                android:id="@+id/emoji_button"
+                style="?android:attr/borderlessButtonStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="0dp"
+                android:layout_marginEnd="4dp"
+                android:text=""
+                android:textSize="18sp"
+                android:contentDescription="Insert emoji"
+                android:textColor="#FFFFFF" />
 
             <EditText
                 android:id="@+id/compose_input"
@@ -163,10 +180,9 @@
                 android:hint="Message"
                 android:textColor="#E6FFFFFF"
                 android:textColorHint="#80FFFFFF"
-                android:fontFamily="@font/font_body"
                 android:background="#18181B"
                 android:padding="10dp"
-                android:inputType="textShortMessage"
+                android:inputType="textShortMessage|textMultiLine"
                 android:maxLines="4" />
 
             <Button

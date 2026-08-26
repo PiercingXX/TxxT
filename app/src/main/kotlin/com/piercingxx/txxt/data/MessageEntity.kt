@@ -52,4 +52,6 @@ data class MessageEntity(
      * Null once the body has been fetched, and for SMS.
      */
     val contentLocation: String? = null,
+    /** Absolute path of a retrieved or outgoing photo; null when none. */
+    val mediaPath: String? = null,
 )

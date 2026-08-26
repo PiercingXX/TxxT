@@ -29,6 +29,8 @@ data class ConversationFlags(
     val isPinned: Boolean = false,
     /** Whether the conversation is archived (hidden from the main list). */
     val isArchived: Boolean = false,
+    /** Whether notifications for this thread are suppressed (starred still notifies). */
+    val isMuted: Boolean = false,
     /** The sort order applied to the conversation list. */
     val sortOrder: ConversationSortOrder = ConversationSortOrder.PINNED_FIRST,
 ) {
@@ -43,6 +45,10 @@ data class ConversationFlags(
 
     /** Returns a copy with the conversation unarchived. */
     fun unarchive(): ConversationFlags = copy(isArchived = false)
+
+    fun mute(): ConversationFlags = copy(isMuted = true)
+
+    fun unmute(): ConversationFlags = copy(isMuted = false)
 
     /** Returns a copy with the given sort order applied. */
     fun withSortOrder(order: ConversationSortOrder): ConversationFlags =

@@ -23,6 +23,8 @@ data class ConversationEntity(
     val isPinned: Boolean = false,
     /** Whether the conversation is archived (hidden from the main list). */
     val isArchived: Boolean = false,
+    /** Whether notifications for this thread are suppressed (starred still notifies). */
+    val isMuted: Boolean = false,
     /** The sort order applied to the conversation list, as a `core` enum name. */
     val sortOrder: String = "PINNED_FIRST",
 )

@@ -3,15 +3,14 @@
 ## Compiled feature list
 
 ### Core messaging
-- **SMS, 1:1.** TxxT is an SMS client. It holds the default SMS role, which
-  also makes it the exclusive sink for carrier MMS — inbound MMS is stored as
-  a metadata row and **retrieved on tap** so those messages are not lost.
-  TxxT does **not** send photos, group MMS, or emoji reactions.
-- Conversation list: pin, archive, swipe-to-delete (confirmed), call, block,
-  star. Search.
+- **SMS, 1:1**, plus **photo send/receive** over MMS (scrubbed on send,
+  retrieved on tap). Group MMS still out.
+- Conversation list: pin, mute, archive, swipe-to-delete (confirmed), call,
+  copy number, block, star. Search the list and search inside a thread.
+- Emoji in the compose bar (palette) and in message bodies (system fallback).
 - Quick reply from notifications; call-screen reply persists to the thread.
 - **Excluded:** voice messages (never sent or received — PRIVACY.md §5);
-  photo send; group MMS; scheduled send; emoji reactions.
+  group MMS; scheduled send; SMS “reactions”.
 
 ### Privacy / blocking
 - Robust blocking (unknown senders + keyword/phrase filters)

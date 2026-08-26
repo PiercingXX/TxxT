@@ -12,6 +12,8 @@ data class Conversation(
     /** Addresses of the remote participants (empty for a self-only thread). */
     val participantAddresses: Set<String>,
     val messages: List<Message> = emptyList(),
+    /** True when this thread is muted (no notification unless starred). */
+    val isMuted: Boolean = false,
 ) {
     init {
         require(messages.all { it.conversationId == id }) {

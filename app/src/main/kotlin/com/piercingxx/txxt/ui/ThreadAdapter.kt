@@ -4,7 +4,9 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.graphics.BitmapFactory
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
@@ -105,6 +107,18 @@ class ThreadAdapter(
 
             body.text = row.body
             timestamp.text = formatTimestamp(row.timestampMillis)
+            EmojiTypeface.apply(body)
+            val photo = itemView.findViewById<View>(R.id.message_photo) as? ImageView
+            val path = row.mediaPath
+            if (photo != null) {
+                if (!path.isNullOrBlank() && java.io.File(path).isFile) {
+                    photo.visibility = View.VISIBLE
+                    photo.setImageBitmap(BitmapFactory.decodeFile(path))
+                } else {
+                    photo.visibility = View.GONE
+                    photo.setImageDrawable(null)
+                }
+            }
             applyAlignment(rowContainer, body, timestamp, row.alignment)
             body.setTextColor(when (row.emphasis) {
                 // Sent = signal-white inverted emphasis; received = muted slate.

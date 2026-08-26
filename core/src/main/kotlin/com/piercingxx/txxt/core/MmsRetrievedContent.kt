@@ -13,6 +13,8 @@ package com.piercingxx.txxt.core
 data class MmsRetrievedContent(
     val body: String,
     val dropUnstored: Boolean,
+    val imageBytes: ByteArray? = null,
+    val imageMime: String? = null,
 ) {
     companion object {
         const val PHOTO_PLACEHOLDER = "[photo]"
@@ -37,12 +39,63 @@ object MmsRetrievedContentParser {
         if (audioOnly) {
             return MmsRetrievedContent(body = "", dropUnstored = true)
         }
+        val image = extractImage(pdu)
         val body = when {
             !text.isNullOrBlank() -> text.trim()
-            types.any { it.startsWith("image/") } -> MmsRetrievedContent.PHOTO_PLACEHOLDER
+            image != null || types.any { it.startsWith("image/") } ->
+                MmsRetrievedContent.PHOTO_PLACEHOLDER
             else -> MmsRetrievedContent.MMS_PLACEHOLDER
         }
-        return MmsRetrievedContent(body = body, dropUnstored = false)
+        return MmsRetrievedContent(
+            body = body,
+            dropUnstored = false,
+            imageBytes = image?.second,
+            imageMime = image?.first,
+        )
+    }
+
+    /** JPEG SOI…EOI or PNG signature…IEND, if present in the PDU. */
+    internal fun extractImage(pdu: ByteArray): Pair<String, ByteArray>? {
+        val jpeg = indexOf(pdu, byteArrayOf(0xFF.toByte(), 0xD8.toByte()))
+        if (jpeg >= 0) {
+            val eoi = lastIndexOf(pdu, byteArrayOf(0xFF.toByte(), 0xD9.toByte()))
+            if (eoi > jpeg) {
+                return "image/jpeg" to pdu.copyOfRange(jpeg, eoi + 2)
+            }
+        }
+        val pngSig = byteArrayOf(
+            0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+        )
+        val png = indexOf(pdu, pngSig)
+        if (png >= 0) {
+            val iend = lastIndexOf(pdu, "IEND".toByteArray(Charsets.ISO_8859_1))
+            if (iend > png) {
+                return "image/png" to pdu.copyOfRange(png, (iend + 8).coerceAtMost(pdu.size))
+            }
+        }
+        return null
+    }
+
+    private fun indexOf(haystack: ByteArray, needle: ByteArray): Int {
+        if (needle.isEmpty() || haystack.size < needle.size) return -1
+        outer@ for (i in 0..haystack.size - needle.size) {
+            for (j in needle.indices) {
+                if (haystack[i + j] != needle[j]) continue@outer
+            }
+            return i
+        }
+        return -1
+    }
+
+    private fun lastIndexOf(haystack: ByteArray, needle: ByteArray): Int {
+        if (needle.isEmpty() || haystack.size < needle.size) return -1
+        outer@ for (i in (haystack.size - needle.size) downTo 0) {
+            for (j in needle.indices) {
+                if (haystack[i + j] != needle[j]) continue@outer
+            }
+            return i
+        }
+        return -1
     }
 
     /**

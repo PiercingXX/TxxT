@@ -189,12 +189,17 @@ class SmsDeliverReceiver(
                             // and a starred sender bypasses suppression
                             // (docs/PRIVACY.md §6) — never the hardcoded
                             // defaults.
+                            val database = TxxTDatabase.instance(ctx)
                             NotificationService(ctx).postMessageNotification(
                                 sender = from,
                                 body = text,
                                 starred = NotificationPrefs.isStarred(ctx, from),
                                 globalPosture = NotificationPrefs.globalPosture(ctx),
                                 channelId = NotificationPrefs.channelId(ctx),
+                                muted = com.piercingxx.txxt.data.ConversationMute.isMuted(
+                                    database.conversationDao(),
+                                    from,
+                                ),
                             )
                         }
                     }

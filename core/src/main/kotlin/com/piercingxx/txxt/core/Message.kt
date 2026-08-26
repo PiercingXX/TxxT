@@ -48,6 +48,8 @@ data class Message(
      * Null for SMS and for MMS whose body has already been fetched.
      */
     val contentLocation: String? = null,
+    /** Absolute path of a retrieved or outgoing photo on disk; null when none. */
+    val mediaPath: String? = null,
 ) {
     /** True when this is an incoming message the user has not yet read. */
     val isUnread: Boolean

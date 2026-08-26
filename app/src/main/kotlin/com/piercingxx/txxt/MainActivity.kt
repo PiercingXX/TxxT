@@ -5,15 +5,12 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.text.InputType
 import android.view.View
 import android.view.WindowManager
 import android.widget.Button
-import android.widget.EditText
 import android.widget.SearchView
 import android.widget.TextView
 import android.widget.Toast
@@ -36,6 +33,7 @@ import com.piercingxx.txxt.ui.ConversationListAdapter
 import com.piercingxx.txxt.ui.ConversationListLoader
 import com.piercingxx.txxt.ui.ConversationSearchFilter
 import com.piercingxx.txxt.ui.ConversationSwipeHelper
+import com.piercingxx.txxt.ui.NewConversationActivity
 import com.piercingxx.txxt.ui.SwipeActionCallback
 import com.piercingxx.txxt.ui.ThreadActivity
 import kotlinx.coroutines.CoroutineScope
@@ -55,8 +53,9 @@ import kotlinx.coroutines.launch
  * messages tables into sorted, archive-filtered `core` [Conversation]s, and
  * every emission re-applies the current search query before submitting to
  * [ConversationListAdapter]. Tapping a row opens its [ThreadActivity]; the NEW
- * affordance prompts for a number and opens (or creates) that thread; swiping
- * left archives, swiping right deletes (WS10).
+ * affordance opens [NewConversationActivity] so a thread can start from a
+ * contact name or a typed number; swiping left archives, swiping right
+ * deletes (WS10).
  */
 class MainActivity : Activity(), SwipeActionCallback {
 
@@ -273,25 +272,13 @@ class MainActivity : Activity(), SwipeActionCallback {
     }
 
     /**
-     * The NEW affordance: prompts for a phone number, finds or creates its
-     * conversation through [InboundStore] (the same collision-safe path inbound
-     * delivery and the SENDTO hand-off use), and opens the thread.
+     * The NEW affordance: opens the recipient picker so a thread can start
+     * from a saved contact or a typed number. The phone-pad dialog this
+     * used to be could not type letters, so a contact was unreachable from
+     * NEW.
      */
     private fun promptNewConversation() {
-        val input = EditText(this).apply {
-            hint = "Phone number"
-            inputType = InputType.TYPE_CLASS_PHONE
-            typeface = Typeface.MONOSPACE
-        }
-        AlertDialog.Builder(this)
-            .setTitle("New message")
-            .setView(input)
-            .setPositiveButton("Open") { _, _ ->
-                val address = input.text?.toString()?.trim().orEmpty()
-                if (address.isNotEmpty()) openNewConversation(address)
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
+        startActivity(Intent(this, NewConversationActivity::class.java))
     }
 
     /** Finds or creates the conversation for [address] and opens its thread. */
@@ -361,9 +348,7 @@ class MainActivity : Activity(), SwipeActionCallback {
     }
 
     private fun refreshRoleBanner() {
-        val held = DefaultHandlerMonitor(
-            onRevoked = { _ -> },
-        ).warnIfRevoked(this)
+        val held = DefaultHandlerMonitor().isHeld(this)
         roleBanner.visibility = if (held) View.GONE else View.VISIBLE
     }
 
@@ -440,6 +425,7 @@ class MainActivity : Activity(), SwipeActionCallback {
                 .split(ADDRESS_DELIMITER)
                 .firstOrNull { it.isNotBlank() }
             val pinLabel = if (entity.isPinned) "Unpin" else "Pin"
+            val muteLabel = if (entity.isMuted) "Unmute" else "Mute"
             val starLabel = if (
                 address != null && BlockingRules.isStarred(blockingMap(), address)
             ) "Unstar" else "Star"
@@ -455,14 +441,24 @@ class MainActivity : Activity(), SwipeActionCallback {
                     ) { address -> contactNames.labelFor(address) }
                 )
                 .setItems(
-                    arrayOf(pinLabel, starLabel, "Call", "Block sender", "Archive")
+                    arrayOf(
+                        pinLabel,
+                        muteLabel,
+                        starLabel,
+                        "Copy number",
+                        "Call",
+                        "Block sender",
+                        "Archive",
+                    )
                 ) { _, which ->
                     when (which) {
                         0 -> togglePinned(conversationId)
-                        1 -> address?.let { toggleStarred(it) }
-                        2 -> onCall(conversationId)
-                        3 -> address?.let { confirmBlockSender(it) }
-                        4 -> onArchive(conversationId)
+                        1 -> toggleMuted(conversationId, !entity.isMuted)
+                        2 -> address?.let { toggleStarred(it) }
+                        3 -> address?.let { copyNumber(it) }
+                        4 -> onCall(conversationId)
+                        5 -> address?.let { confirmBlockSender(it) }
+                        6 -> onArchive(conversationId)
                     }
                 }
                 .setNegativeButton("Cancel", null)
@@ -519,6 +515,25 @@ class MainActivity : Activity(), SwipeActionCallback {
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    private fun toggleMuted(conversationId: Long, muted: Boolean) {
+        scope.launch {
+            val dao = database.conversationDao()
+            dao.getById(conversationId)?.let { dao.update(it.copy(isMuted = muted)) }
+            Toast.makeText(
+                this@MainActivity,
+                if (muted) "Muted" else "Unmuted",
+                Toast.LENGTH_SHORT,
+            ).show()
+        }
+    }
+
+    private fun copyNumber(address: String) {
+        val clipboard = getSystemService(CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+            ?: return
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("number", address))
+        Toast.makeText(this, "Copied $address", Toast.LENGTH_SHORT).show()
     }
 
     /** Flips a conversation's persisted pinned flag (PINNED_FIRST ordering). */

@@ -35,21 +35,25 @@
     <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.WRITE_SMS" />
 
-    <!-- Contact-name resolution. READ-ONLY, LOCAL-ONLY, and the app stays fully
-         usable without it. TxxT reads the system contacts provider — the same
-         store the dialer reads; there is no separate dialer-private contact
-         list — through ContactsContract.PhoneLookup to turn a raw number into
-         the name the operator saved for it (contacts/ContactNameResolver.kt).
-         Without it every saved contact renders as a bare number.
+    <!-- Contact-name resolution AND the NEW-conversation recipient picker.
+         READ-ONLY, LOCAL-ONLY, and the app stays fully usable without it.
+         TxxT reads the system contacts provider — the same store the dialer
+         reads; there is no separate dialer-private contact list — in two
+         ways: ContactsContract.PhoneLookup to turn a raw number into the
+         name the operator saved for it (contacts/ContactNameResolver.kt),
+         and CommonDataKinds.Phone to list saved numbers so NEW can search
+         by contact name (contacts/ContactDirectory.kt). Without it every
+         saved contact renders as a bare number and NEW is number-entry only.
 
          What this permission does NOT license: no write (no CONTACTS write
          permission is declared, so nothing in the contacts database can be
-         changed) and no enrichment — the lookup is a local provider query
+         changed) and no enrichment — both queries are local provider reads
          against contacts the operator saved themselves, never a fetch to
          decorate an unknown number (docs/PRIVACY.md §8.3 "no reverse-lookup,
          no contact enrichment"; §10). Denial is a first-class path: the
-         resolver falls back to the number, never to a blank row (the
-         never-silent-failure rule the PermissionGate seams follow). -->
+         resolver falls back to the number, never to a blank row, and the
+         picker still accepts a typed number (the never-silent-failure rule
+         the PermissionGate seams follow). -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
 
     <!-- Boot-time reconcile (T2). Lets the BootReceiver run the reboot reconcile
@@ -102,6 +106,16 @@
             android:name=".ui.ThreadActivity"
             android:exported="false"
             android:label="@string/app_name" />
+
+        <!-- NEW-conversation recipient picker. Not exported: launched only by
+             MainActivity's NEW affordance. FLAG_SECURE is set in code.
+             adjustResize keeps the contact list above the keyboard so typing
+             a name and seeing matches is one motion. -->
+        <activity
+            android:name=".ui.NewConversationActivity"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:windowSoftInputMode="adjustResize|stateVisible" />
 
         <!-- Settings screen. Not exported: launched only by ThreadActivity's
              settings affordance, never by external apps. FLAG_SECURE is set in

@@ -58,14 +58,20 @@ object ConversationListPresenter {
         return ConversationRow(
             conversationId = conversation.id,
             title = title(conversation.participantAddresses, displayName),
-            snippet = latest?.body
-                ?.lineSequence()
-                ?.firstOrNull()
-                ?.trim()
-                .orEmpty(),
+            snippet = buildSnippet(latest?.body, conversation.isMuted),
             timestampMillis = conversation.latestTimestampMillis,
             unreadCount = conversation.unreadCount,
+            muted = conversation.isMuted,
         )
+    }
+
+    private fun buildSnippet(body: String?, muted: Boolean): String {
+        val line = body?.lineSequence()?.firstOrNull()?.trim().orEmpty()
+        return if (muted) {
+            if (line.isEmpty()) "muted" else "muted · $line"
+        } else {
+            line
+        }
     }
 }
 
@@ -80,4 +86,5 @@ data class ConversationRow(
     /** Epoch millis of the latest activity, or null for an empty conversation. */
     val timestampMillis: Long?,
     val unreadCount: Int,
+    val muted: Boolean = false,
 )

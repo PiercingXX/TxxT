@@ -263,12 +263,14 @@ class NotificationService(
          * [CHANNEL_ID_SILENT] via [NotificationPrefs.channelIdFor].
          */
         channelId: String = CHANNEL_ID,
+        muted: Boolean = false,
     ): Boolean {
         val posture = NotificationPosture.decide(
             sender = sender,
             starred = starred,
             globalPosture = globalPosture,
             overrides = overrides,
+            muted = muted,
         )
 
         return when (posture) {

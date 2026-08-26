@@ -89,7 +89,13 @@ class ThreadMessagePresenterTest {
         // or card field exists, so the no-bubble constraint is structural.
         val outgoing = present(message(id = 4L, direction = MessageDirection.OUTGOING))
         val incoming = present(message(id = 5L, direction = MessageDirection.INCOMING))
-        assertEquals(setOf("alignment", "emphasis", "body", "timestampMillis"), outgoing::class.java.declaredFields.map { it.name }.toSet())
-        assertEquals(setOf("alignment", "emphasis", "body", "timestampMillis"), incoming::class.java.declaredFields.map { it.name }.toSet())
+        assertEquals(
+            setOf("alignment", "emphasis", "body", "timestampMillis", "mediaPath"),
+            outgoing::class.java.declaredFields.map { it.name }.toSet(),
+        )
+        assertEquals(
+            setOf("alignment", "emphasis", "body", "timestampMillis", "mediaPath"),
+            incoming::class.java.declaredFields.map { it.name }.toSet(),
+        )
     }
 }

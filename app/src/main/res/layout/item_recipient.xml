@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  TxxT recipient-picker row.
+
+  A text-first line, never a card (docs/DESIGN.md §"Conversation list",
+  docs/PRIVACY.md §2): contact name (or the typed number) on the first
+  line, the destination number below. Emphasis from the white-opacity
+  ramp, never hue — no avatar tile.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingTop="10dp"
+    android:paddingBottom="10dp"
+    android:paddingStart="4dp"
+    android:paddingEnd="4dp">
+
+    <TextView
+        android:id="@+id/recipient_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:fontFamily="@font/font_body"
+        android:textSize="15sp"
+        android:textStyle="bold"
+        android:textColor="#E6FFFFFF"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+    <TextView
+        android:id="@+id/recipient_subtitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:fontFamily="@font/font_body"
+        android:textSize="13sp"
+        android:textColor="#80FFFFFF"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+</LinearLayout>

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   BRAND-GUIDE.md §4: monospace IS the identity. Space Mono for display,
-  JetBrains Mono for body/UI.
+  JetBrains Mono Nerd Font Mono for body/UI (same metrics, extra glyphs).
 
   Both faces now ship as real TTFs in res/font/ (§12.1 type ramp). The
   indirection stays, as same-type font aliases: layouts reference

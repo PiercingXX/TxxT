@@ -37,6 +37,7 @@ object Mappers {
         isRead = isRead,
         isSent = sent,
         contentLocation = contentLocation,
+        mediaPath = mediaPath,
     )
 
     /** Converts a pure [Message] into a storable [MessageEntity]. */
@@ -51,6 +52,7 @@ object Mappers {
         isRead = isRead,
         sent = isSent,
         contentLocation = contentLocation,
+        mediaPath = mediaPath,
     )
 
     // ---- Conversation (messages are stored separately, in the messages table) ----
@@ -59,6 +61,7 @@ object Mappers {
     fun ConversationEntity.toConversation(): Conversation = Conversation(
         id = id,
         participantAddresses = decodeAddresses(participantAddresses),
+        isMuted = isMuted,
     )
 
     /** Converts a stored [ConversationEntity] plus its loaded messages into a pure [Conversation]. */
@@ -75,6 +78,7 @@ object Mappers {
         isStarred = isStarred,
         isPinned = flags.isPinned,
         isArchived = flags.isArchived,
+        isMuted = isMuted,
         sortOrder = flags.sortOrder.name,
     )
 
@@ -84,6 +88,7 @@ object Mappers {
     fun ConversationEntity.toFlags(): ConversationFlags = ConversationFlags(
         isPinned = isPinned,
         isArchived = isArchived,
+        isMuted = isMuted,
         sortOrder = ConversationSortOrder.valueOf(sortOrder),
     )
 
@@ -92,6 +97,7 @@ object Mappers {
         entity.copy(
             isPinned = isPinned,
             isArchived = isArchived,
+            isMuted = isMuted,
             sortOrder = sortOrder.name,
         )
 
