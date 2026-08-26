@@ -3,11 +3,17 @@
 
 Checks, per the WS16 contract (contracts/TxxT.md):
   - README.md exists
-  - it states the no-INTERNET claim as fact
   - it states the no-analytics / no-crash-reporting claim as fact
   - it states the local-first posture as fact
+  - it states the privacy-leaks-are-opt-in default posture as fact
 
-Exits 0 on success, 1 on any failure.
+Deliberately NOT checked: any "no network / nothing leaves the device" claim.
+The app handles SMS and MMS, which traverse the carrier network by definition,
+and MMS in particular moves over carrier data through the system messaging
+stack. A missing INTERNET permission means this process opens no sockets of its
+own; it does not mean the operator's messages stay on the handset, and the
+README must not imply otherwise. The claims below are the ones the product can
+actually honour.
 """
 
 import os
@@ -30,8 +36,6 @@ def main():
     with open(README, "r", encoding="utf-8") as f:
         content = f.read()
 
-    check("INTERNET" in content and "no `INTERNET` permission" in content,
-          "README states the no-INTERNET permission claim")
     check("no analytics" in content and "no crash reporting" in content,
           "README states the no-analytics / no-crash-reporting claim")
     check("Local-first" in content,

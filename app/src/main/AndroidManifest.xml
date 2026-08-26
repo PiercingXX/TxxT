@@ -35,6 +35,23 @@
     <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.WRITE_SMS" />
 
+    <!-- Contact-name resolution. READ-ONLY, LOCAL-ONLY, and the app stays fully
+         usable without it. TxxT reads the system contacts provider — the same
+         store the dialer reads; there is no separate dialer-private contact
+         list — through ContactsContract.PhoneLookup to turn a raw number into
+         the name the operator saved for it (contacts/ContactNameResolver.kt).
+         Without it every saved contact renders as a bare number.
+
+         What this permission does NOT license: no write (no CONTACTS write
+         permission is declared, so nothing in the contacts database can be
+         changed) and no enrichment — the lookup is a local provider query
+         against contacts the operator saved themselves, never a fetch to
+         decorate an unknown number (docs/PRIVACY.md §8.3 "no reverse-lookup,
+         no contact enrichment"; §10). Denial is a first-class path: the
+         resolver falls back to the number, never to a blank row (the
+         never-silent-failure rule the PermissionGate seams follow). -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+
     <!-- Boot-time reconcile (T2). Lets the BootReceiver run the reboot reconcile
          (rebuild unread counts, re-drive pending sends) when the device finishes
          booting. -->
@@ -50,8 +67,10 @@
          (docs/PRIVACY.md §5). The pure DictationInsert seam survives for a
          future entry point — declaring the mic again is part of re-wiring one.
 
-         Deliberately NO INTERNET permission. TxxT never talks to a network;
-         keeping this absent makes that claim verifiable. -->
+         Every permission above carries the comment that justifies it, and
+         scripts/verify_privacy_claims.py asserts the built APK's list matches
+         this one exactly — so a permission cannot arrive through a library's
+         manifest merge, and cannot outlive the feature it was added for. -->
 
     <!-- NoActionBar: the surfaces are full-bleed AMOLED black text-first
          layouts (docs/DESIGN.md) — no title bar may sit above them. Theme.TxxT
@@ -176,7 +195,8 @@
         <!-- Theme auto-sync (T5). Exported so the xx-launcher (a separate app)
              can send its theme-change broadcast; the receiver routes the carried
              preset name through the manual-wins precedence rule and T6's applier
-             re-applies the theme. Local only — no INTERNET permission. -->
+             re-applies the theme. Local only — an on-device broadcast
+             between two apps on the same handset. -->
         <receiver
             android:name=".theme.ThemeSyncReceiver"
             android:exported="true">

@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
-"""Verify the T2 privacy claims on the built APK.
+"""Verify the T2 permission claims on the built APK.
 
-The README (T1) states the WS16 privacy posture as fact. This script proves it
-against the built artifact, not the source manifest: it builds the debug APK
-with the wired toolchain and dumps the APK's actual permission list with
-`aapt2 dump permissions` — the exact machine-checkable command the README
-points at.
+The README (T1) states the WS16 posture as fact. This script proves it against
+the built artifact, not the source manifest: it builds the debug APK with the
+wired toolchain and dumps the APK's actual permission list with
+`aapt2 dump permissions`.
+
+The point of the check is that the shipped permission list is EXACTLY the set
+the manifest justifies, one comment per permission — no permission arrives by
+accident (a transitive library manifest merge is the usual way one does), and
+none survives the feature that motivated it (RECORD_AUDIO did not).
 
 Claims verified on the built APK:
-  - the APK declares NO INTERNET permission (cannot reach a network)
-  - the APK declares NO ACCESS_NETWORK_STATE (no network-state observation)
-  - the APK's permission set is EXACTLY the privacy-preserving set the manifest
-    declares: the default-SMS-handler role, POST_NOTIFICATIONS, the SMS/MMS
-    runtime permissions, and RECEIVE_BOOT_COMPLETED — nothing more
+  - the APK's permission set is EXACTLY the set the manifest declares: the
+    default-SMS-handler role, POST_NOTIFICATIONS, the SMS/MMS runtime
+    permissions, READ_CONTACTS, and RECEIVE_BOOT_COMPLETED — nothing more
   - the application is not backup-enabled (allowBackup=false), backing the
     local-first posture (nothing silently pushed to cloud backup)
 
@@ -38,6 +40,11 @@ EXPECTED_PERMISSIONS = {
     "android.permission.SEND_SMS",
     "android.permission.READ_SMS",
     "android.permission.WRITE_SMS",
+    # Contact-name resolution: ContactsContract.PhoneLookup turns a number into
+    # the name the operator saved for it (contacts/ContactNameResolver.kt).
+    # READ only — a contacts WRITE permission is asserted absent below, because
+    # naming a sender never requires modifying the contacts database.
+    "android.permission.READ_CONTACTS",
     "android.permission.RECEIVE_BOOT_COMPLETED",
     # NOTE: no RECORD_AUDIO. WS13 declared the mic for the compose bar's
     # dictation button; the compose-bar rework deleted that button — its only
@@ -45,12 +52,11 @@ EXPECTED_PERMISSIONS = {
     # ask for a mic it cannot use.
 }
 
-# Permissions that would contradict the no-network privacy posture.
-NETWORK_PERMISSIONS = {
-    "android.permission.INTERNET",
-    "android.permission.ACCESS_NETWORK_STATE",
-    "android.permission.ACCESS_WIFI_STATE",
-    "android.permission.CHANGE_NETWORK_STATE",
+# Permissions the app must never acquire: it reads contacts to name a sender
+# and has no business editing the operator's address book.
+FORBIDDEN_PERMISSIONS = {
+    "android.permission.WRITE_CONTACTS",
+    "android.permission.GET_ACCOUNTS",
 }
 
 
@@ -121,10 +127,11 @@ def main():
 
     declared = set(re.findall(r"uses-permission: name='([^']+)'", perms_out))
 
-    # --- the no-network posture must hold on the built artifact ---
-    leaked = NETWORK_PERMISSIONS & declared
-    check(not leaked,
-          "APK declares no network permission (INTERNET / ACCESS_NETWORK_STATE)")
+    # --- the contacts read must not have grown into a write ---
+    forbidden = FORBIDDEN_PERMISSIONS & declared
+    check(not forbidden,
+          "APK declares no contacts write / account permission "
+          f"(found {sorted(forbidden)})")
 
     # --- the permission set must be exactly the privacy-preserving set ---
     # AGP auto-generates one synthetic signature-level permission for
@@ -133,7 +140,7 @@ def main():
     # Strip it, then the declared set must equal the manifest's set exactly.
     synthetic = {"com.piercingxx.txxt.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"}
     check(declared - synthetic == EXPECTED_PERMISSIONS,
-          "APK permission set is exactly the declared privacy-preserving set "
+          "APK permission set is exactly the declared, justified set "
           f"(got {sorted(declared)})")
 
     # --- local-first: backups are disabled on the built artifact ---

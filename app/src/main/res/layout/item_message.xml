@@ -4,9 +4,13 @@
 
   A text-first line, never a chat bubble (docs/DESIGN.md §"Conversation
   thread", docs/PRIVACY.md §2 — "nothing ever bubbles"). Alignment is driven by
-  layout_gravity: inbound LEFT, outbound RIGHT (ThreadMessagePresenter maps
-  direction → alignment). There is deliberately NO bubble/card background and NO
-  rounded-corner drawable — the row is bare text on AMOLED black.
+  the message column's layout_gravity inside this FrameLayout: inbound LEFT,
+  outbound RIGHT (ThreadMessagePresenter maps direction → alignment, and
+  ThreadAdapter.applyAlignment writes it onto the column's LayoutParams on
+  every bind). The start value below is the inbound default; it is NOT the
+  live value — a bound row always carries the direction's own gravity.
+  There is deliberately NO bubble/card background and NO rounded-corner
+  drawable — the row is bare text on AMOLED black.
 -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
@@ -18,6 +22,7 @@
         android:id="@+id/message_row"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_gravity="start"
         android:orientation="vertical">
 
         <!-- Message body. Emphasis comes from the white-opacity ramp, never hue:

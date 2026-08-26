@@ -1,5 +1,5 @@
 # TxxT
-> SMS that can't phone home — the manifest is the proof, not the marketing.
+> An SMS client whose defaults are the product.
 
 A private SMS/MMS client for Android. Holds the system SMS role on a Pixel 6
 running GrapheneOS. Text-first, AMOLED black, Space Mono / JetBrains Mono, same
@@ -12,19 +12,32 @@ would.
 
 ## Privacy posture — stated as fact 🔒
 
-TxxT has **no `INTERNET` permission**. The manifest does not declare it, so the
-app cannot reach a network. That is machine-checkable:
+There is no analytics and no crash reporting. No telemetry, no tracking pixel,
+no ads, no Play Services, no remote fetch, no link preview, no network contact
+enrichment. Nothing is added to a message on its way out and nothing is phoned
+in about how the app is used.
+
+The app is an SMS/MMS client, so messages themselves travel over the carrier
+network — that is what sending a text is. What this repo commits to is the
+narrower, checkable thing: TxxT itself contacts no service of its own, and the
+permission list is exactly the set the code uses, one justifying comment per
+permission in the manifest. That is machine-checkable:
 
 ```
 aapt2 dump permissions app/build/outputs/apk/debug/app-debug.apk
 ```
 
 `scripts/verify_privacy_claims.py` runs exactly that command and fails if the
-permission ever appears.
+built APK's permission set drifts from the declared one — in either direction,
+so a permission that arrives through a library's manifest merge is a failure,
+and so is one that outlives the feature it was added for.
 
-There is no analytics and no crash reporting. No telemetry, no tracking pixel,
-no remote fetch, no link preview, no network contact enrichment. Nothing leaves
-the device.
+**Contact names.** TxxT reads the system contacts provider — the same list the
+dialer shows — through `ContactsContract.PhoneLookup`, so a saved contact
+appears by name instead of a bare number in the conversation list, the thread
+header, and notifications. `READ_CONTACTS` is read-only (no contacts write
+permission is declared), the lookup is a local provider query, and declining the
+permission is a supported end state: numbers, never blank rows.
 
 **Local-first.** Messages, contacts, and settings live on the device. Theme sync
 with XX-Launcher is a local broadcast. Backup is a local JSON export
@@ -94,8 +107,8 @@ Tests, run today, all green:
 | Module | Tests |
 |---|---|
 | `:core` (pure JVM, zero `android.*` imports) | 248 |
-| `:app` | 461 |
-| **Total** | **709** |
+| `:app` | 530 |
+| **Total** | **778** |
 
 `core/` holds the message and state-machine domain with no Android imports, so
 the logic that has to be correct is testable without a device.

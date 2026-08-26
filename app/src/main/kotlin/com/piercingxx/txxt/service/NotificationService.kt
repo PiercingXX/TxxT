@@ -12,6 +12,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.RemoteInput
 import com.piercingxx.txxt.MainActivity
+import com.piercingxx.txxt.contacts.ContactNameResolver
 import com.piercingxx.txxt.data.OutboundStore
 import com.piercingxx.txxt.data.TxxTDatabase
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -141,6 +142,26 @@ class NotificationService(
     },
 
     /**
+     * Resolves the sender address to the name saved for it in the system
+     * contacts provider, falling back to the address
+     * ([ContactNameResolver.labelFor]) — so a notification from a saved
+     * contact is titled with their name rather than a raw number.
+     *
+     * A resolver is built per posted notification rather than held process-wide
+     * because this service is itself constructed per inbound message (the
+     * deliver receivers do `NotificationService(ctx)` inline), so there is no
+     * longer-lived instance to hang a cache on. That is at most one contacts
+     * query per arriving message, which is nothing next to the persist and the
+     * `NotificationManager` round trip it sits between — unlike a list bind,
+     * which is why the LIST path caches and this one does not need to.
+     *
+     * Injectable so a JVM unit test can pin the title without a provider.
+     */
+    private val displayName: (String) -> String = { sender ->
+        ContactNameResolver(context).labelFor(sender)
+    },
+
+    /**
      * Posts the built notification. Defaults to the system [NotificationManager].
      */
     private val postNotification: (Int, NotificationCompat.Builder) -> Unit = { id, builder ->
@@ -254,13 +275,17 @@ class NotificationService(
             NotificationPosture.Posture.SUPPRESS -> false
             NotificationPosture.Posture.REDACTED,
             NotificationPosture.Posture.NOTIFY -> {
-                val title = NotificationPolicy.notificationTitle(sender)
+                // The contact lookup is resolved ONCE and handed to both policy
+                // calls: title and redacted text must name the sender the same
+                // way, and a single resolution also means a single (cached)
+                // provider consultation per posted notification.
+                val title = NotificationPolicy.notificationTitle(sender, displayName)
                 // NOTIFY (opt-in) reveals the message body; REDACTED (default)
                 // shows only the redacted content — never the body.
                 val text = if (posture == NotificationPosture.Posture.NOTIFY) {
                     body
                 } else {
-                    NotificationPolicy.redactedContent(sender)
+                    NotificationPolicy.redactedContent(sender, displayName)
                 }
 
                 val builder = makeBuilder(channelId)

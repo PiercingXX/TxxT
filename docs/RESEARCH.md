@@ -79,7 +79,7 @@ swipe actions.
 
 **Privacy/blocking:** robust blocking (unknown senders + keyword/phrase
 filters), blocklist export/import, lock-screen privacy options,
-**fully offline (no Internet permission)**.
+**no analytics, no crash reporting, no ads, no Play Services**.
 
 **Backup:** SMS export/import (and JSON backup, matching the launcher).
 

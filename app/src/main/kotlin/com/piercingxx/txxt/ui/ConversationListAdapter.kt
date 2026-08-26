@@ -33,6 +33,18 @@ class ConversationListAdapter(
     private val onConversationTap: (ConversationRow) -> Unit = {},
     /** Invoked on a long-press, so the launcher can offer pin/archive. */
     private val onConversationLongPress: (ConversationRow) -> Unit = {},
+    /**
+     * Resolves a participant address to the name saved for it in the system
+     * contacts provider, falling back to the address itself
+     * (`contacts/ContactNameResolver.labelFor`). Defaults to identity so the
+     * adapter stays constructible — and JVM-testable — without a `Context`.
+     *
+     * **Applied at [submit] time, not at bind time.** Rows are built once per
+     * Room emission and reused across binds, so a scroll never touches the
+     * contacts provider at all; combined with the resolver's own LRU, a full
+     * list costs at most one provider query per distinct address, ever.
+     */
+    private val displayName: (String) -> String = { it },
 ) : RecyclerView.Adapter<ConversationListAdapter.RowHolder>() {
 
     private val rows = mutableListOf<ConversationRow>()
@@ -57,7 +69,7 @@ class ConversationListAdapter(
     /** Replaces the displayed conversations with [conversations] and refreshes. */
     fun submit(conversations: List<Conversation>) {
         rows.clear()
-        conversations.mapTo(rows) { ConversationListPresenter.present(it) }
+        conversations.mapTo(rows) { ConversationListPresenter.present(it, displayName) }
         if (attached) notifyDataSetChanged()
     }
 

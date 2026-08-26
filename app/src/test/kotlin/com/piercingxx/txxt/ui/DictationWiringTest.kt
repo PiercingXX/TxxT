@@ -46,13 +46,15 @@ class DictationWiringTest {
 
     // ---- Manifest posture ----
 
-    @Test
-    fun `the manifest still declares no INTERNET permission`() {
-        assertTrue(
-            "TxxT must never declare INTERNET — everything stays on-device",
-            !manifestText.contains("android.permission.INTERNET"),
-        )
-    }
+    // NOTE: this box used to also assert the manifest declares no INTERNET
+    // permission, framed as "everything stays on-device". That framing was
+    // struck: TxxT sends and receives SMS/MMS, which traverse the carrier
+    // network through the system messaging stack, so the absence of INTERNET
+    // means this process opens no sockets of its own — not that messages stay
+    // on the handset. The manifest still declares no INTERNET, and the exact
+    // permission set is machine-checked against the BUILT APK by
+    // scripts/verify_privacy_claims.py; what is gone is the overstated claim,
+    // not the posture.
 
     @Test
     fun `the manifest declares no RECORD_AUDIO permission`() {

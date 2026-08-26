@@ -7,10 +7,12 @@ import android.speech.tts.TextToSpeech
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
+import android.widget.TextView
 import android.widget.Toast
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.piercingxx.txxt.R
+import com.piercingxx.txxt.contacts.ContactNameResolver
 import com.piercingxx.txxt.data.OutboundStore
 import com.piercingxx.txxt.data.TxxTDatabase
 import com.piercingxx.txxt.service.SendPipeline
@@ -47,6 +49,15 @@ class ThreadActivity : Activity() {
     private lateinit var composeInput: EditText
     private lateinit var sendButton: Button
     private lateinit var settingsButton: Button
+    private lateinit var threadTitle: TextView
+
+    /**
+     * Resolves the thread's participant numbers to their saved contact names
+     * (the system contacts provider — the dialer's list). Held on the instance
+     * so the header and any later refresh share one cache; `by lazy` because a
+     * `Context` is only valid after `onCreate`.
+     */
+    private val contactNames: ContactNameResolver by lazy { ContactNameResolver(this) }
 
     /**
      * The on-device text-to-speech engine (WS13 read-aloud). Created in
@@ -102,6 +113,7 @@ class ThreadActivity : Activity() {
         composeInput = findViewById(R.id.compose_input)
         sendButton = findViewById(R.id.send_button)
         settingsButton = findViewById(R.id.settings_button)
+        threadTitle = findViewById(R.id.thread_title)
 
         adapter = ThreadAdapter(
             onMessageTap = ::readMessageAloud,
@@ -117,6 +129,7 @@ class ThreadActivity : Activity() {
         sendButton.setOnClickListener { sendComposed() }
         settingsButton.setOnClickListener { openSettings() }
         observeMessages()
+        showThreadTitle()
 
         // T6 wire-in: the running thread screen reaches the theme applier, which
         // reads the effective theme from the controller and paints this screen's
@@ -153,7 +166,33 @@ class ThreadActivity : Activity() {
             composeInput.setBackgroundColor(surface)
             sendButton.setTextColor(accent)
             settingsButton.setTextColor(accent)
+            // The header is type, not chrome: it takes the theme's text token,
+            // not the accent — the accent stays reserved for the affordances.
+            threadTitle.setTextColor(text)
         }.apply()
+    }
+
+    /**
+     * Fills the header with who this thread is with.
+     *
+     * The participant addresses go through the SAME title function the
+     * conversation list uses ([ConversationListPresenter.title]) and the same
+     * contact resolution, so the row the operator tapped and the screen it
+     * opened cannot disagree about the contact's name. The DB read is off the
+     * main thread's critical path (the activity scope); resolution itself is
+     * cached, and every fallback — no permission, no contact, no participants
+     * — still yields text, so the header is never blank.
+     */
+    private fun showThreadTitle() {
+        scope.launch {
+            val addresses = database.conversationDao().getById(conversationId)
+                ?.participantAddresses
+                ?.split(ADDRESS_DELIMITER)
+                ?.filter { it.isNotBlank() }
+                .orEmpty()
+            threadTitle.text =
+                ConversationListPresenter.title(addresses) { contactNames.labelFor(it) }
+        }
     }
 
     /** Opens the settings screen (WS12 T5) from the thread's settings affordance. */
@@ -328,11 +367,19 @@ class ThreadActivity : Activity() {
     private suspend fun destinationAddress(): String? {
         val conversation = database.conversationDao().getById(conversationId)
         return conversation?.participantAddresses
-            ?.split("\u0001")
+            ?.split(ADDRESS_DELIMITER)
             ?.firstOrNull { it.isNotBlank() }
     }
 
     companion object {
+        /**
+         * Delimiter joining participant addresses in the conversations table
+         * (the launcher's constant of the same name). Named here rather than
+         * inlined so the send path and the header split on provably the same
+         * character.
+         */
+        private const val ADDRESS_DELIMITER = "\u0001"
+
         /** Builds a launch intent for [ThreadActivity] for the given conversation. */
         fun launchIntent(context: android.content.Context, conversationId: Long): Intent =
             Intent(context, ThreadActivity::class.java)

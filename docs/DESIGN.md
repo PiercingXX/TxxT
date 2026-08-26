@@ -32,8 +32,11 @@ operator declined to answer the pivotal design question and asked me to proceed.
    swipe-to-schedule. Minimize taps.
 5. **Theme presets.** Replicate the launcher's seven-preset pattern rather than
    a single theme.
-6. **Local-first.** No Internet permission. Everything (send, receive, search,
-   backup) works offline.
+6. **Local-first.** Everything the app itself does — search, backup, themes,
+   settings, contact-name resolution — happens on the device against local
+   storage and local providers. TxxT contacts no service of its own. (Sending
+   and receiving a message goes over the carrier network; that is what SMS/MMS
+   is, and the app does not pretend otherwise.)
 7. **Privacy by default.** Read/typing receipts, MMS smart features, and
    notification bubbles are off; metadata is scrubbed on every send; starred
    contacts always get through. The full posture is `PRIVACY.md` — read it
@@ -88,8 +91,10 @@ tokens and rules in `INSPIRATION.md` §1.
   `android.*` imports, so they are JVM-testable without a device.
 - **Target:** GrapheneOS Pixel 9, sideloaded APK.
 - **No Google services** (no Play Services, no Firebase, no push).
-- **No `INTERNET` permission** — a verifiable privacy claim (pattern from
-  Nope-Mode; checkable with `aapt2 dump permissions`).
+- **A justified permission list** — every declared permission carries the
+  manifest comment that motivates it, and `scripts/verify_privacy_claims.py`
+  fails if the built APK's set drifts from it in either direction (checkable
+  with `aapt2 dump permissions`).
 - **Gboard compatible** — standard text fields work with any IME, Gboard
   included; no special integration needed.
 

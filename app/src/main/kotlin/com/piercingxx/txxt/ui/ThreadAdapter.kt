@@ -4,6 +4,7 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
@@ -86,6 +87,16 @@ class ThreadAdapter(
          * inflated `item_message.xml` view — body and timestamp text, alignment
          * gravity (inbound START / outbound END), and emphasis text colour from
          * the white-opacity ramp (sent signal-white, received muted).
+         *
+         * **The alignment bug this closes.** This used to set
+         * `rowContainer.gravity` and nothing else, so every message rendered on
+         * the same side. `View.setGravity` on a `LinearLayout` positions that
+         * layout's CHILDREN inside its own box; `message_row` is
+         * `wrap_content`, so its box is already exactly as wide as its widest
+         * child and the setting had nothing to move. What decides which SIDE of
+         * the row the column sits on is `layout_gravity` — a property of the
+         * child's `LayoutParams` in its parent (`item_message.xml`'s
+         * `FrameLayout`), which only [applyAlignment] below writes.
          */
         fun defaultBindRow(itemView: View, row: ThreadRow) {
             val body = itemView.findViewById<TextView>(R.id.message_body)
@@ -94,15 +105,71 @@ class ThreadAdapter(
 
             body.text = row.body
             timestamp.text = formatTimestamp(row.timestampMillis)
-            rowContainer.gravity = when (row.alignment) {
-                ThreadAlignment.LEFT -> Gravity.START
-                ThreadAlignment.RIGHT -> Gravity.END
-            }
+            applyAlignment(rowContainer, body, timestamp, row.alignment)
             body.setTextColor(when (row.emphasis) {
                 // Sent = signal-white inverted emphasis; received = muted slate.
                 ThreadEmphasis.SENT -> 0xFFE6FFFFFF.toInt()
                 ThreadEmphasis.RECEIVED -> 0xFF80FFFFFF.toInt()
             })
+        }
+
+        /**
+         * Puts the message column on its side of the row: outbound (the
+         * operator's own sent messages) right, inbound (the sender) left.
+         *
+         * Three writes, at three different scopes, all of them needed:
+         *  1. **`layoutParams.gravity`** — WHERE THE COLUMN SITS in the parent
+         *     `FrameLayout`. This is the one that actually moves the message,
+         *     and it is what the old binding was missing. `LayoutParams` are
+         *     read by the PARENT during layout, so the mutated object is
+         *     re-assigned through the setter, which is what marks the view
+         *     dirty (`requestLayout`); mutating the field alone can leave the
+         *     row painted at its stale position until something else forces a
+         *     pass.
+         *  2. **`rowContainer.gravity`** — where the body/timestamp sit inside
+         *     that column, so an outbound timestamp hugs the right edge of the
+         *     text rather than its left.
+         *  3. **`body.gravity` / `timestamp.gravity`** — where the wrapped
+         *     lines of a multi-line body sit inside the TextView, whose
+         *     `wrap_content` width is the longest line.
+         *
+         * **Every write happens on BOTH branches, unconditionally.** Rows are
+         * recycled: a holder that last showed an outbound message is handed
+         * straight to an inbound one, so an alignment applied only in the
+         * outbound case would leave the inbound message wearing the previous
+         * item's side. The `when` maps every [ThreadAlignment] to a gravity and
+         * the same three writes run either way — there is no "leave it as it
+         * was" path.
+         */
+        fun applyAlignment(
+            rowContainer: LinearLayout,
+            body: TextView,
+            timestamp: TextView,
+            alignment: ThreadAlignment,
+        ) {
+            val gravity = layoutGravityFor(alignment)
+
+            // (1) The load-bearing one: the column's side of the row.
+            val params = rowContainer.layoutParams as? FrameLayout.LayoutParams
+            if (params != null && params.gravity != gravity) {
+                params.gravity = gravity
+                rowContainer.layoutParams = params
+            }
+            // (2) and (3): alignment WITHIN the column and within each line box.
+            rowContainer.gravity = gravity
+            body.gravity = gravity
+            timestamp.gravity = gravity
+        }
+
+        /**
+         * The `layout_gravity` value for a row alignment. START/END rather than
+         * LEFT/RIGHT so the thread mirrors correctly under an RTL locale (the
+         * manifest sets `supportsRtl`); pure over its input, so the
+         * direction → side mapping is JVM-testable without inflating a view.
+         */
+        fun layoutGravityFor(alignment: ThreadAlignment): Int = when (alignment) {
+            ThreadAlignment.LEFT -> Gravity.START
+            ThreadAlignment.RIGHT -> Gravity.END
         }
 
         /**

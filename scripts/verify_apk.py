@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Verify the T5 built APK carries the WS1 privacy posture.
+"""Verify the T5 built APK carries the WS1 permission posture.
 
 Runs `./gradlew assembleDebug` (using the wired toolchain) and then inspects
-the resulting APK with `aapt2 dump badging` to assert it does NOT declare the
-INTERNET permission and DOES declare the default-SMS-handler role and
-POST_NOTIFICATIONS — proving the built artifact matches the manifest's privacy
-contract.
+the resulting APK with `aapt2 dump badging` to assert it declares the
+default-SMS-handler role and POST_NOTIFICATIONS — proving the built artifact
+carries the role the app needs to function as the SMS handler.
 
 Exits 0 on success, 1 on any failure.
 """
@@ -81,13 +80,10 @@ def main():
     aapt2 = os.path.join(sdk_dir, "build-tools", "34.0.0", "aapt2")
     check(os.path.exists(aapt2), f"aapt2 exists at {aapt2}")
 
-    # --- dump badging and assert the privacy posture ---
+    # --- dump badging and assert the declared permission posture ---
     rc, badging = run([aapt2, "dump", "badging", APK])
     check(rc == 0, "aapt2 dump badging exits 0")
 
-    check("uses-permission: name='android.permission.INTERNET'"
-          not in badging,
-          "APK does not declare the INTERNET permission")
     check("uses-permission: name='android.permission.role.SMS'"
           in badging,
           "APK declares the default-SMS-handler role")

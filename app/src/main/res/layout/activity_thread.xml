@@ -22,16 +22,34 @@
     android:background="#000000"
     android:fitsSystemWindows="true">
 
-    <!-- Top bar: the settings affordance lives top-right, off the compose bar,
-         so the compose row stays input + send only. -->
+    <!-- Top bar: the thread's title on the left, the settings affordance
+         top-right and off the compose bar, so the compose row stays input +
+         send only. -->
     <LinearLayout
         android:id="@+id/top_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:gravity="end|center_vertical"
+        android:gravity="center_vertical"
         android:paddingStart="12dp"
         android:paddingEnd="4dp">
+
+        <!-- Who this thread is with. ThreadActivity fills it with the
+             participant's saved contact name (ContactNameResolver via
+             ConversationListPresenter.title) and falls back to the raw number
+             when there is no contact or no permission — so this line is never
+             blank. Text-first: a title line, not an action bar. -->
+        <TextView
+            android:id="@+id/thread_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:fontFamily="@font/font_body"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:textColor="#E6FFFFFF"
+            android:maxLines="1"
+            android:ellipsize="end" />
 
         <!-- Settings affordance: opens the settings screen (WS12 T5).
              Borderless — a white glyph, no filled background. -->

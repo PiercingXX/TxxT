@@ -3,9 +3,10 @@
 
 Checks, per the WS1 contract:
   - app/src/main/AndroidManifest.xml exists
-  - it does NOT contain an android.permission.INTERNET permission
   - it declares the default-SMS-handler role (android.permission.role.SMS)
   - it declares POST_NOTIFICATIONS
+  - it declares READ_CONTACTS (contact-name resolution) and does NOT declare a
+    contacts WRITE permission — the lookup is read-only
 
 Exits 0 on success, 1 on any failure.
 """
@@ -31,12 +32,17 @@ def main():
     with open(MANIFEST, "r", encoding="utf-8") as f:
         content = f.read()
 
-    check("android.permission.INTERNET" not in content,
-          "manifest does not declare the INTERNET permission")
     check("android.permission.role.SMS" in content,
           "manifest declares the default-SMS-handler role")
     check("android.permission.POST_NOTIFICATIONS" in content,
           "manifest declares POST_NOTIFICATIONS")
+    # Contact-name resolution (ContactsContract.PhoneLookup) needs the read
+    # permission and nothing more: TxxT names a number from the operator's
+    # saved contacts and never writes to the contacts database.
+    check("android.permission.READ_CONTACTS" in content,
+          "manifest declares READ_CONTACTS for contact-name resolution")
+    check("android.permission.WRITE_CONTACTS" not in content,
+          "manifest does not declare a contacts write permission (read-only)")
 
     print("T3 manifest verification passed.")
 

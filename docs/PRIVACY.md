@@ -129,7 +129,9 @@ TxxT's background theme follows the **xx-launcher**'s active theme automatically
 - **Contract:** the launcher publishes its active theme; TxxT subscribes. The
   named presets are the brand guide §3.3 set — AMOLED Night, Graphite, Forest
   Night, Ocean Drift, Burgundy, Paper, Mist.
-- **Local only** — no `INTERNET` permission is added; sync is on-device.
+- **Local only** — the sync is an on-device broadcast between two apps on the
+  same handset; nothing about the theme is fetched from or published to a
+  service.
 - **Mechanism (to confirm against the launcher's actual source):** the
   launcher repo is not on disk to verify, so this is a spec, not a measured
   fact. Preferred: the launcher **broadcasts an intent** on theme change
@@ -151,12 +153,13 @@ default-off or default-safe posture that costs little and leaks nothing.
 1. **MMS auto-download OFF.** Remote MMS content is fetched only on explicit
    tap. Prevents IP disclosure, tracking-pixel fetches, and surprise data
    usage. (Carrier MMS can be a tracking vector.)
-2. **No link previews.** Never fetch a URL to render a preview — it leaks the
-   link and needs `INTERNET`. Links are plain text; tap to open in a browser.
+2. **No link previews.** Never fetch a URL to render a preview — resolving it
+   tells whoever hosts the link that the message was received and read. Links
+   are plain text; tap to open in a browser.
 3. **No contact avatars from network.** Avatars are local monograms or nothing.
    No reverse-lookup, no contact enrichment.
-4. **No analytics / no crash reporting.** Covered by the no-`INTERNET` claim;
-   state it as fact, not aspiration.
+4. **No analytics / no crash reporting.** No analytics SDK, no crash reporter,
+   no ads, no Play Services dependency. State it as fact, not aspiration.
 5. **`FLAG_SECURE`** on thread + conversation-list activities — no screenshots,
    no recents preview, no screen recording of content.
 6. **Biometric app lock** (optional, default off — but available) with a
@@ -187,3 +190,39 @@ default-off or default-safe posture that costs little and leaks nothing.
 5. **"Bubble" interpretation (§2):** confirmed by the operator as **no message
    bubbles in the thread UI** (text-first rendering) **and** no notification
    bubbles/chat-heads. Resolved — not open.
+
+---
+
+## 10. Contact names — a read-only, local lookup
+
+TxxT resolves a sender's number to the name the operator saved for them, so a
+known contact reads as a name in the conversation list, the thread header, and
+notifications instead of a bare number.
+
+- **Source: the system contacts provider.** `ContactsContract` IS the dialer's
+  contact list — there is no separate dialer-private store — so reading it is
+  what makes TxxT and the dialer agree about who someone is.
+- **Mechanism: `PhoneLookup.CONTENT_FILTER_URI`.** The provider performs the
+  carrier-specific number matching itself (country codes, trunk prefixes, short
+  codes). TxxT deliberately does **not** hand-roll normalisation and
+  string-compare against `Phone.NUMBER`; that re-implements the platform's
+  matching rules badly and fails on exactly the formatting variance real
+  carriers produce.
+- **Read-only.** `READ_CONTACTS` is declared; no contacts *write* permission is,
+  and nothing in the app modifies the contacts database.
+  `scripts/verify_privacy_claims.py` asserts both — the read is in the expected
+  set, the write is in the forbidden set.
+- **No enrichment.** The lookup is a local provider query against contacts the
+  operator saved themselves. Nothing is fetched to decorate an unknown number,
+  which is the same posture as §8.3 ("no reverse-lookup, no contact
+  enrichment").
+- **Declining is a supported end state, not an error.** Without the grant every
+  surface falls back to the number — never a blank row, never a crash. The same
+  fallback covers a number with no matching contact, a contact with no name, and
+  a provider that throws (a permission revoked mid-session). This follows the
+  never-silent-failure rule the `PermissionGate` seams already carry.
+- **Cached, not re-queried.** `contacts/ContactNameResolver` holds a bounded LRU
+  keyed on the digit-normalised address so a list scroll never touches the
+  provider. Answers are cached; failures to *ask* are not, so granting the
+  permission later takes effect immediately rather than being masked by a cache
+  full of numbers.

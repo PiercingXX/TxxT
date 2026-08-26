@@ -21,6 +21,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.piercingxx.txxt.contacts.ContactNameResolver
 import com.piercingxx.txxt.core.Conversation
 import com.piercingxx.txxt.data.InboundStore
 import com.piercingxx.txxt.data.TxxTDatabase
@@ -103,13 +104,27 @@ class MainActivity : Activity(), SwipeActionCallback {
         CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     /**
+     * Resolves participant numbers to the names saved in the system contacts
+     * provider — the store the dialer reads — so a saved contact shows as a
+     * name instead of a raw number. Held on the instance (not rebuilt per
+     * submit) because the resolver OWNS the LRU cache that keeps the provider
+     * off the list-refresh path; a fresh instance per refresh would be a cold
+     * cache and a query storm. `by lazy` because a `Context` is only valid
+     * after `onCreate`.
+     */
+    private val contactNames: ContactNameResolver by lazy { ContactNameResolver(this) }
+
+    /**
      * The conversation-list adapter. Stable-id rows (the swipe helper reads
      * `viewHolder.itemId` as the conversation id); a tapped row opens its
-     * thread.
+     * thread. The `displayName` seam is a lambda, not `contactNames::labelFor`,
+     * so this field initialiser does not force the lazy resolver (and its
+     * `Context`) before `onCreate` has run.
      */
     private val adapter = ConversationListAdapter(
         onConversationTap = { row -> openThread(row.conversationId) },
         onConversationLongPress = { row -> promptRowActions(row.conversationId) },
+        displayName = { address -> contactNames.labelFor(address) },
     )
 
     private lateinit var emptyState: TextView
@@ -267,10 +282,17 @@ class MainActivity : Activity(), SwipeActionCallback {
     }
 
     /**
-     * Asks for the two grants the manifest cannot self-grant (the manifest
-     * comment at `app/src/main/AndroidManifest.xml:14-16` promises both):
-     * the default-SMS-handler role and the API 33+ POST_NOTIFICATIONS runtime
-     * permission.
+     * Asks for the grants the manifest cannot self-grant (the manifest
+     * comment at `app/src/main/AndroidManifest.xml:14-16` promises them):
+     * the default-SMS-handler role, the API 33+ POST_NOTIFICATIONS runtime
+     * permission, and READ_CONTACTS.
+     *
+     * READ_CONTACTS rides along here rather than getting its own moment
+     * because it is asked for the same reason as the others — the launcher is
+     * the first surface the operator sees, and the conversation list it is
+     * about to paint is exactly what the permission improves. Declining is a
+     * supported end state, not an error: [ContactNameResolver] falls back to
+     * the number, so the list stays fully usable and no row goes blank.
      *
      * The SMS role goes through [DefaultHandlerMonitor.roleRequest], which is
      * honest about the platform: on API 29+ it returns the system
@@ -298,6 +320,38 @@ class MainActivity : Activity(), SwipeActionCallback {
                 arrayOf(Manifest.permission.POST_NOTIFICATIONS),
                 REQUEST_POST_NOTIFICATIONS,
             )
+        }
+        val contactsGranted = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.READ_CONTACTS
+        ) == PackageManager.PERMISSION_GRANTED
+        if (needsContactsPermission(contactsGranted)) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.READ_CONTACTS),
+                REQUEST_READ_CONTACTS,
+            )
+        }
+    }
+
+    /**
+     * Repaints the list once the operator answers the READ_CONTACTS prompt.
+     *
+     * Both answers need this, not just the grant: every label the resolver
+     * cached before the prompt was computed under the OLD answer, so the cache
+     * is dropped and the visible list is re-submitted through the presenter.
+     * Without it a grant would show names only after the next Room emission —
+     * which, on a quiet phone, could be hours.
+     */
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_READ_CONTACTS) {
+            contactNames.clearCache()
+            applySearchQuery(currentQuery)
         }
     }
 
@@ -345,7 +399,16 @@ class MainActivity : Activity(), SwipeActionCallback {
                 address != null && BlockingRules.isStarred(blockingMap(), address)
             ) "Unstar" else "Star"
             AlertDialog.Builder(this@MainActivity)
-                .setTitle(entity.participantAddresses.replace(ADDRESS_DELIMITER, ", "))
+                // Same title the row shows: resolved through the contacts
+                // provider, so the dialog does not regress to a bare number
+                // for a contact the list just named.
+                .setTitle(
+                    com.piercingxx.txxt.ui.ConversationListPresenter.title(
+                        entity.participantAddresses
+                            .split(ADDRESS_DELIMITER)
+                            .filter { it.isNotBlank() },
+                    ) { address -> contactNames.labelFor(address) }
+                )
                 .setItems(
                     arrayOf(pinLabel, starLabel, "Call", "Block sender", "Archive")
                 ) { _, which ->
@@ -468,6 +531,9 @@ class MainActivity : Activity(), SwipeActionCallback {
         /** Request code for the POST_NOTIFICATIONS runtime-permission prompt. */
         const val REQUEST_POST_NOTIFICATIONS = 4_002
 
+        /** Request code for the READ_CONTACTS runtime-permission prompt. */
+        const val REQUEST_READ_CONTACTS = 4_003
+
         /** Delimiter joining participant addresses in the conversations table. */
         private const val ADDRESS_DELIMITER = "\u0001"
 
@@ -487,5 +553,21 @@ class MainActivity : Activity(), SwipeActionCallback {
          */
         fun needsNotificationPermission(sdkInt: Int, granted: Boolean): Boolean =
             sdkInt >= Build.VERSION_CODES.TIRAMISU && !granted
+
+        /**
+         * Whether the launcher should raise the READ_CONTACTS prompt. Pure over
+         * its input — JVM-testable, and stated as its own named decision (the
+         * [needsNotificationPermission] precedent) so the ask/no-ask rule is
+         * testable without an Activity.
+         *
+         * Unlike POST_NOTIFICATIONS there is no API floor: READ_CONTACTS has
+         * been a runtime permission since API 23 and `minSdk` is 24, so the
+         * only question is whether it is already held. Re-prompting after a
+         * denial is accepted for a sideloaded single-user app (the same
+         * decision the SMS-role request makes); the platform stops showing the
+         * dialog after the operator picks "don't ask again", and the app
+         * remains fully usable on numbers.
+         */
+        fun needsContactsPermission(granted: Boolean): Boolean = !granted
     }
 }

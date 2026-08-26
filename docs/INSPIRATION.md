@@ -9,7 +9,7 @@ Sources read this session (paths on disk):
 | Repo | Path | What it gives TxxT |
 |---|---|---|
 | `piercingxx-branding` | `/media/Working-Storage/GitHub/piercingxx-branding` | The brand system itself — colors, type, mark, voice, new-project checklist |
-| `Nope-Mode` | `/media/Working-Storage/GitHub/Skippy-Project/Nope-Mode` | Cleanroom discipline, no-`INTERNET` privacy claim, Views+viewBinding stack, package layout, failure-mode table |
+| `Nope-Mode` | `/media/Working-Storage/GitHub/Skippy-Project/Nope-Mode` | Cleanroom discipline, machine-checked permission posture, Views+viewBinding stack, package layout, failure-mode table |
 | `xx-vitals` | `/media/Working-Storage/GitHub/Skippy-Project/xx-vitals` | How the brand tokens reshape a real UI, one-accent rule, Compose stack, "X's layout, PiercingXX's skin" cleanroom approach |
 
 ---
@@ -113,13 +113,21 @@ copying palette/type/icons is not (expression).
 
 ---
 
-## 3. The no-`INTERNET` privacy claim (from `Nope-Mode`)
+## 3. The machine-checked permission posture (from `Nope-Mode`)
 
-Nope-Mode declares **no `INTERNET` permission** and that is a verifiable
-privacy claim (`aapt2 dump permissions`). TxxT's feature list already says
-fully offline — this is the same posture. Keep `INTERNET` out of the manifest;
-it is the single strongest privacy statement an app can make and it is
-machine-checkable.
+What is worth borrowing from Nope-Mode is not a slogan but a discipline: the
+permission list is small, every entry carries the manifest comment that
+justifies it, and a script re-derives the list from the **built APK**
+(`aapt2 dump permissions`) so drift is a test failure rather than a code review
+someone has to remember to do.
+
+A note on what such a check does and does not prove, because it is easy to
+overclaim: a missing permission means this *process* cannot do that thing
+itself. TxxT is an SMS/MMS client, and messages travel over the carrier network
+through the system messaging stack by definition — so "the app declares no
+network permission" must never be dressed up as "nothing leaves the device".
+State the narrow, true thing: TxxT contacts no service of its own, and its
+permission list is exactly what the code uses.
 
 ---
 
@@ -171,7 +179,7 @@ Both repos ship a failure-mode table (§14 / §10). TxxT should too. Draft rows:
 - **xx-vitals' Compose choice** — that app needed animated rings/charts; TxxT
   is list + text-first lines (no message bubbles — PRIVACY.md §2), so Views
   matches the launcher and keeps the stack uniform.
-- **xx-vitals' server/Postgres** — TxxT is fully offline (no `INTERNET`), so
+- **xx-vitals' server/Postgres** — TxxT keeps its own data on the device, so
   there is no server. Backup is local JSON, matching the launcher.
 - **Nope-Mode's device-owner MDM role** — irrelevant to a messaging app.
 - **`nope-mode/res/values/brand_colors.xml`** — it is **stale** (predates the
@@ -190,6 +198,6 @@ Both repos ship a failure-mode table (§14 / §10). TxxT should too. Draft rows:
    message body. Tabular figures. Fonts shipped in `res/font/`.
 3. **One accent per screen:** the compose "send" affordance, the active tab,
    the unread indicator — never two competing accents.
-4. **No `INTERNET` permission:** verifiable privacy claim.
+4. **A small, justified permission list:** machine-checked against the built APK.
 5. **Icon:** underlined-XX logomark on an Ink tile.
 6. **Voice:** calm product register in-app, dry maker register in README/commits.

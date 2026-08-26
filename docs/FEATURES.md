@@ -20,7 +20,7 @@
 - Robust blocking (unknown senders + keyword/phrase filters)
 - Blocklist export/import
 - Lock-screen privacy options (sender only / content / nothing)
-- Fully offline — no Internet permission
+- No analytics, no crash reporting, no ads, no Play Services
 - Read/typing receipts, delivery reports, MMS smart features **off by default**
 - RCS **excluded** (the vector for receipts + typing indicators)
 - **No message bubbles in the thread UI** (text-first lines) and **no
@@ -80,8 +80,8 @@
 11. **Backup scope:** messages only, or settings/blocklist too?
 
 ### Privacy / permissions
-12. **Internet permission:** confirm zero (fully offline)? Any feature that
-    needs network (e.g. contact avatars from a service)?
+12. **Network-touching features:** any feature that would reach a service of
+    its own (e.g. contact avatars fetched from a directory)?
 13. **Lock-screen privacy:** sender-only / content / nothing — which default?
     **Resolved: sender-only** — notification content is redacted by default
     (PRIVACY.md §3).
@@ -118,8 +118,9 @@ The three PiercingXX repos were read this session and their findings are in
   `res/font/`. Monospace is the identity.
 - **Q4 icon grid:** minimal glyphs only; the underlined-XX logomark on an Ink
   tile for the app icon.
-- **Q12 internet:** confirm zero — no `INTERNET` permission, matching Nope-Mode.
-  It is a machine-checkable privacy claim.
+- **Q12 network-touching features:** none. Contact names come from the local
+  `ContactsContract` provider (PRIVACY.md §10), never from a directory service;
+  avatars are local monograms or nothing (PRIVACY.md §8.3).
 - **Q14 language:** Kotlin confirmed. **Stack:** Views + viewBinding (not
   Compose), Room + Gson, pure-Kotlin core — all from the sibling repos.
 - **Q15 package:** `com.piercingxx.txxt` per the brand naming system.

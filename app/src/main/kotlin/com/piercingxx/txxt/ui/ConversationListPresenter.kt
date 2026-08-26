@@ -19,21 +19,45 @@ object ConversationListPresenter {
     const val UNTITLED = "(no recipient)"
 
     /**
+     * The row/thread title for a set of participant [addresses].
+     *
+     * Each address is passed through [displayName] first, so a saved contact
+     * shows as the name the operator gave them instead of a raw number
+     * (`contacts/ContactNameResolver`). The seam is a plain lambda defaulting
+     * to identity, which is what keeps this file free of `android.*` imports
+     * and JVM-testable: the presenter decides the *shape* of a title (join
+     * order, separator, the untitled marker), the caller supplies the
+     * *resolution*.
+     *
+     * A resolver that returns blank for an address falls back to the address —
+     * a row must never render an empty title (see the resolver's never-blank
+     * contract). Shared with the thread screen's header so the list and the
+     * thread cannot disagree about what a conversation is called.
+     */
+    fun title(
+        addresses: Collection<String>,
+        displayName: (String) -> String = { it },
+    ): String = addresses
+        .joinToString(", ") { address -> displayName(address).ifBlank { address } }
+        .ifEmpty { UNTITLED }
+
+    /**
      * Maps a conversation to its list-row view state.
      *
-     * The title joins the participant addresses; the snippet is the FIRST line
-     * of the latest message's body (a multi-line body must not blow the row
-     * open), trimmed; the unread count comes straight from the model's
-     * derivation. An empty conversation presents an empty snippet and a null
-     * timestamp.
+     * The title joins the participant addresses (resolved through
+     * [displayName], see [title]); the snippet is the FIRST line of the latest
+     * message's body (a multi-line body must not blow the row open), trimmed;
+     * the unread count comes straight from the model's derivation. An empty
+     * conversation presents an empty snippet and a null timestamp.
      */
-    fun present(conversation: Conversation): ConversationRow {
+    fun present(
+        conversation: Conversation,
+        displayName: (String) -> String = { it },
+    ): ConversationRow {
         val latest = conversation.latestMessage
         return ConversationRow(
             conversationId = conversation.id,
-            title = conversation.participantAddresses
-                .joinToString(", ")
-                .ifEmpty { UNTITLED },
+            title = title(conversation.participantAddresses, displayName),
             snippet = latest?.body
                 ?.lineSequence()
                 ?.firstOrNull()
