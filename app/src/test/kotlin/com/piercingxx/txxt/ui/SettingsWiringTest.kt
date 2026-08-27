@@ -10,7 +10,7 @@ import java.io.File
  * Asserts the settings screen wiring (WS12 T5): the manifest registers
  * SettingsActivity, ThreadActivity's settings affordance launches it (the real
  * call site — the running app reaches the screen), and SettingsActivity sets
- * FLAG_SECURE and persists the SettingsStore through SharedPreferences.
+ * persists the SettingsStore through SharedPreferences.
  *
  * Following the established manifest/source-reading pattern (ThreadWiringTest,
  * ReceiverManifestTest), the Android intent/activity dispatch itself is not
@@ -75,9 +75,9 @@ class SettingsWiringTest {
     // ---- SettingsActivity wiring ----
 
     @Test
-    fun `SettingsActivity sets FLAG_SECURE and persists the store through SharedPreferences`() {
-        assertTrue(
-            "SettingsActivity must set FLAG_SECURE in code",
+    fun `SettingsActivity persists the store through SharedPreferences`() {
+        assertFalse(
+            "FLAG_SECURE blacks screenshots; the operator asked to capture the app",
             settingsActivity.contains("FLAG_SECURE"),
         )
         assertTrue(

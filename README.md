@@ -8,10 +8,6 @@ worth building is which of them ship switched off. Photos go as MMS (scrubbed
 on send, fetched on tap). The body face is JetBrains Mono Nerd Font Mono, so
 the compose palette is monochrome Nerd glyphs rather than colour emoji.
 
-There is no screenshot in this repo and there won't be one. Every activity sets
-`FLAG_SECURE`, so `screencap` returns a black rectangle. scripts > screenshots
-anyway — `scripts/verify_*.py` prove more than a picture would.
-
 ## Privacy posture — stated as fact 🔒
 
 There is no analytics and no crash reporting. No telemetry, no tracking pixel,

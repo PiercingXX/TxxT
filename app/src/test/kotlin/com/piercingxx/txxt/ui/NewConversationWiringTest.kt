@@ -15,7 +15,7 @@ import java.io.File
  * [ThreadActivity].
  *
  * Instantiating the Activity is not JVM-testable without Robolectric (not
- * in the offline cache), so launch/layout/FLAG_SECURE are locked by reading
+ * in the offline cache), so launch/layout are locked by reading
  * the source — the [ThreadWiringTest] / [SettingsWiringTest] pattern. The
  * adapter's bind seam is driven behaviourally.
  */
@@ -89,8 +89,11 @@ class NewConversationWiringTest {
     }
 
     @Test
-    fun `the picker sets FLAG_SECURE and uses the contacts directory`() {
-        assertTrue("NewConversationActivity must set FLAG_SECURE in code", picker.contains("FLAG_SECURE"))
+    fun `the picker uses the contacts directory`() {
+        assertFalse(
+            "FLAG_SECURE blacks screenshots; the operator asked to capture the app",
+            picker.contains("FLAG_SECURE"),
+        )
         assertTrue(
             "NewConversationActivity must list contacts through ContactDirectory",
             picker.contains("ContactDirectory(this)"),

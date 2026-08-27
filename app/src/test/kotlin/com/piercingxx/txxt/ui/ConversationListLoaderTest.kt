@@ -139,4 +139,40 @@ class ConversationListLoaderTest {
 
         assertEquals(listOf(2L, 3L, 1L), loaded.map { it.id })
     }
+
+    @Test
+    fun `inbound MMS stubs are not attached as conversation messages`() = runBlocking {
+        val loaded = loaderOver(
+            conversations = listOf(conversation(1L)),
+            messages = listOf(
+                message(10L, conversationId = 1L, timestampMillis = 1_000L, body = "hello"),
+                MessageEntity(
+                    id = 11L,
+                    conversationId = 1L,
+                    direction = "INCOMING",
+                    transport = "MMS",
+                    body = "",
+                    timestampMillis = 2_000L,
+                    senderAddress = "+15550001111",
+                    isRead = false,
+                    sent = true,
+                ),
+                MessageEntity(
+                    id = 12L,
+                    conversationId = 1L,
+                    direction = "INCOMING",
+                    transport = "MMS",
+                    body = "[MMS]",
+                    timestampMillis = 3_000L,
+                    senderAddress = "+15550001111",
+                    isRead = false,
+                    sent = true,
+                ),
+            ),
+        ).conversations().first()
+
+        assertEquals(listOf(10L), loaded.single().messages.map { it.id })
+        assertEquals("hello", loaded.single().latestMessage?.body)
+        assertEquals(1, loaded.single().unreadCount)
+    }
 }

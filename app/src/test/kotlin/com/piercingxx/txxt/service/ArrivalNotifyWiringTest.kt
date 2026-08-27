@@ -1,5 +1,6 @@
 package com.piercingxx.txxt.service
 
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -19,11 +20,20 @@ class ArrivalNotifyWiringTest {
         ).first { it.exists() }.readText()
 
     @Test
-    fun `both deliver receivers post through ArrivalNotify`() {
+    fun `arrival notify skips a sender whose thread is already on screen`() {
+        val arrival = source("service/ArrivalNotify.kt")
+        assertTrue(arrival.contains("ViewedThread.isOpenFor(sender)"))
+    }
+
+    @Test
+    fun `sms deliver posts through ArrivalNotify and inbound MMS does not`() {
         val sms = source("service/SmsDeliverReceiver.kt")
         val mms = source("service/MmsDeliverReceiver.kt")
         assertTrue(sms.contains("ArrivalNotify.post("))
-        assertTrue(mms.contains("ArrivalNotify.post("))
+        assertFalse(
+            "inbound MMS is dropped unstored — no arrival notification",
+            mms.contains("ArrivalNotify.post("),
+        )
     }
 
     @Test

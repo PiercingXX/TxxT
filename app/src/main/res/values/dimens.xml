@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Physical left/right inset from the bezel. Do not put this on a
+         fitsSystemWindows root: that flag overwrites padding with system
+         insets and would drop the 1.5mm at runtime. -->
+    <dimen name="txxt_edge_inset">1.5mm</dimen>
+</resources>

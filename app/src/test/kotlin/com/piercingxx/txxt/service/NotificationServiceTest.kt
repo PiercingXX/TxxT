@@ -29,11 +29,13 @@ class NotificationServiceTest {
 
     private var capturedId: Int = -1
     private var postCalled = false
+    private val cancelledIds = mutableListOf<Int>()
     private var mockBuilder: NotificationCompat.Builder? = null
 
     private fun resetCaptures() {
         capturedId = -1
         postCalled = false
+        cancelledIds.clear()
         mockBuilder = null
     }
 
@@ -60,6 +62,7 @@ class NotificationServiceTest {
                 postCalled = true
                 capturedId = id
             },
+            cancelNotification = { id -> cancelledIds.add(id) },
         )
     }
 
@@ -171,6 +174,16 @@ class NotificationServiceTest {
         val svc = makeService()
         svc.postMessageNotification(sender = "Alice", body = "Hi")
         verify { mockBuilder!!.setContentIntent(any()) }
+    }
+
+    @Test
+    fun `dismiss cancels the per-sender notification id`() {
+        val svc = makeService()
+        svc.dismiss(listOf("Alice", "Bob", ""))
+        assertEquals(
+            listOf(svc.notificationId("Alice"), svc.notificationId("Bob")),
+            cancelledIds,
+        )
     }
 
     @Test

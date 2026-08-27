@@ -96,10 +96,10 @@ class MmsDeliverReceiverTest {
     private fun pushIntent(): Intent =
         spyk(Intent()).apply { every { action } returns wapPushDeliver }
 
-    // ---- STORE ----
+    // ---- DROP (inbound MMS is not a message) ----
 
     @Test
-    fun `a parsed notification persists metadata once`() {
+    fun `a parsed notification stores nothing and does not notify`() {
         val recording = Recording()
         val persisted = CountDownLatch(1)
         val notified = CountDownLatch(1)
@@ -107,33 +107,14 @@ class MmsDeliverReceiverTest {
 
         rcv.onReceive(context, pushIntent())
 
-        assertTrue(persisted.await(5, TimeUnit.SECONDS))
-        assertEquals(1, recording.persisted.size)
-        assertEquals("+15551234567", recording.persisted.single().first)
-        assertEquals(knownDateSeconds * 1000L, recording.persisted.single().second)
+        assertFalse(persisted.await(200, TimeUnit.MILLISECONDS))
+        assertFalse(notified.await(200, TimeUnit.MILLISECONDS))
+        assertTrue(recording.persisted.isEmpty())
+        assertTrue(recording.notified.isEmpty())
     }
 
     @Test
-    fun `a stored MMS notifies exactly once with an empty body after persisting`() {
-        // The row is metadata-only — no content is ever fetched here — so the
-        // notification seam is handed body="" (under the default REDACTED
-        // posture the visible text derives from the sender alone anyway; see
-        // MmsDeliverReceiver's class KDoc for the honest NOTIFY-posture limit).
-        val recording = Recording()
-        val persisted = CountDownLatch(1)
-        val notified = CountDownLatch(1)
-        val rcv = receiver(recording = recording, persistLatch = persisted, notifyLatch = notified)
-
-        rcv.onReceive(context, pushIntent())
-
-        assertTrue(persisted.await(5, TimeUnit.SECONDS))
-        assertTrue(notified.await(5, TimeUnit.SECONDS))
-        assertEquals(1, recording.notified.size)
-        assertEquals("+15551234567" to "", recording.notified.single())
-    }
-
-    @Test
-    fun `a PLMN-suffixed FROM is stripped before storing`() {
+    fun `a PLMN-suffixed FROM is still not stored`() {
         val recording = Recording()
         val persisted = CountDownLatch(1)
         val rcv = receiver(
@@ -144,8 +125,9 @@ class MmsDeliverReceiverTest {
 
         rcv.onReceive(context, pushIntent())
 
-        assertTrue(persisted.await(5, TimeUnit.SECONDS))
-        assertEquals(listOf<Pair<String, Long>>("+15551234567" to (knownDateSeconds * 1000L)), recording.persisted)
+        assertFalse(persisted.await(200, TimeUnit.MILLISECONDS))
+        assertTrue(recording.persisted.isEmpty())
+        assertTrue(recording.notified.isEmpty())
     }
 
     // ---- fail closed ----

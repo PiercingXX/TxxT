@@ -45,7 +45,7 @@ object MmsRetrieve {
     ): Boolean {
         val row = messages.getById(messageId) ?: return false
         val parsed = MmsRetrievedContentParser.parse(pdu)
-        if (parsed.dropUnstored) {
+        if (parsed.dropUnstored || parsed.body == MmsRetrievedContent.MMS_PLACEHOLDER) {
             messages.deleteById(messageId)
             return true
         }

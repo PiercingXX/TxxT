@@ -7,8 +7,9 @@ package com.piercingxx.txxt.core
  * TxxT does not send photos and does not render a gallery. It **does** fetch
  * the PDU when the operator taps an inbound MMS, so holding `ROLE_SMS` does
  * not swallow carrier mail. The summary is text-first: a text part if one
- * exists, `[photo]` for image-only, `[MMS]` otherwise. Audio-only retrieve
- * is dropped (PRIVACY.md §5).
+ * exists, `[photo]` for image-only. Anything else (including a parse that
+ * cannot prove text or an image) is dropped unstored — never a fake `[MMS]`
+ * line. Audio-only retrieve is dropped (PRIVACY.md §5).
  */
 data class MmsRetrievedContent(
     val body: String,
@@ -23,9 +24,8 @@ data class MmsRetrievedContent(
 }
 
 /**
- * Best-effort inspect of a retrieved MM PDU. Fail-open to [MmsRetrievedContent.MMS_PLACEHOLDER]
- * when the multipart cannot be walked — the bytes were fetched, so the
- * operator still sees that something arrived rather than a blank row.
+ * Best-effort inspect of a retrieved MM PDU. Unknown / empty content is
+ * dropped unstored rather than invented as `[MMS]`.
  *
  * Zero `android.*` imports; JVM-testable.
  */
@@ -44,13 +44,14 @@ object MmsRetrievedContentParser {
             !text.isNullOrBlank() -> text.trim()
             image != null || types.any { it.startsWith("image/") } ->
                 MmsRetrievedContent.PHOTO_PLACEHOLDER
-            else -> MmsRetrievedContent.MMS_PLACEHOLDER
+            else -> ""
         }
+        val dropUnstored = body.isEmpty()
         return MmsRetrievedContent(
             body = body,
-            dropUnstored = false,
-            imageBytes = image?.second,
-            imageMime = image?.first,
+            dropUnstored = dropUnstored,
+            imageBytes = if (dropUnstored) null else image?.second,
+            imageMime = if (dropUnstored) null else image?.first,
         )
     }
 

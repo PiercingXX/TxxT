@@ -98,4 +98,23 @@ class MmsRetrieveTest {
         assertTrue(MmsRetrieve.applyPdu(dao, 2L, pdu))
         assertTrue(dao.rows.isEmpty())
     }
+
+    @Test
+    fun `applyPdu deletes a retrieve that would only be an MMS placeholder`() = runBlocking {
+        val dao = FakeMessageDao()
+        dao.upsert(
+            MessageEntity(
+                id = 3L,
+                conversationId = 1L,
+                direction = MessageDirection.INCOMING.name,
+                transport = MessageTransport.MMS.name,
+                body = "",
+                timestampMillis = 1L,
+                contentLocation = "http://mmsc.example/id",
+            ),
+        )
+        val pdu = "application/smil\u0000".toByteArray()
+        assertTrue(MmsRetrieve.applyPdu(dao, 3L, pdu))
+        assertTrue(dao.rows.isEmpty())
+    }
 }

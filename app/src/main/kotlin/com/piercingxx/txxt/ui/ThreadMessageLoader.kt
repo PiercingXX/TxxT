@@ -29,5 +29,7 @@ class ThreadMessageLoader(
      */
     fun messages(): Flow<List<Message>> =
         messageDao.observeForConversation(conversationId)
-            .map { entities -> entities.map { it.toMessage() } }
+            .map { entities ->
+                entities.map { it.toMessage() }.filterNot { it.isUnshownInboundMms }
+            }
 }

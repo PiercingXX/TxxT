@@ -49,6 +49,7 @@ class ConversationListLoader(
                     byConversation[entity.id]
                         .orEmpty()
                         .map { it.toMessage() }
+                        .filterNot { it.isUnshownInboundMms }
                         .sortedBy { it.timestampMillis }
                 )
             }

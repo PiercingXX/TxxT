@@ -71,8 +71,6 @@ preference.
 - Notifications show **sender name only**, never message content, by default.
 - Lock-screen privacy options (sender-only / content / nothing) default to
   **sender-only** (tightens FEATURES.md Q13 from "content" to "sender-only").
-- **No message preview** in the recents / app-switcher card
-  (`FLAG_SECURE` on the thread activity).
 - No vibration/sound for contacts who are not starred (see §6).
 
 ---
@@ -175,8 +173,8 @@ default-off or default-safe posture that costs little and leaks nothing.
    No reverse-lookup, no contact enrichment.
 4. **No analytics / no crash reporting.** No analytics SDK, no crash reporter,
    no ads, no Play Services dependency. State it as fact, not aspiration.
-5. **`FLAG_SECURE`** on thread + conversation-list activities — no screenshots,
-   no recents preview, no screen recording of content.
+5. **Screenshots and recents previews are allowed.** The operator captures
+   the app; a black rectangle is not privacy.
 6. **Biometric app lock** (optional, default off — but available) with a
    "hide content until unlocked" mode.
 7. **Block unknown senders by default.** Messages from non-contacts go to a

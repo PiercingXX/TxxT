@@ -104,4 +104,16 @@ class MessageModelTest {
         val foreign = message(id = 9L, conversationId = 99L)
         Conversation(id = 1L, participantAddresses = setOf("+15550001111"), messages = listOf(foreign))
     }
+
+    @Test
+    fun `empty inbound MMS and the MMS placeholder are unshown stubs`() {
+        val empty = message(id = 1L, transport = MessageTransport.MMS, body = "")
+        val placeholder = message(id = 2L, transport = MessageTransport.MMS, body = "[MMS]")
+        val caption = message(id = 3L, transport = MessageTransport.MMS, body = "see attached")
+        val sms = message(id = 4L, body = "")
+        assertTrue(empty.isUnshownInboundMms)
+        assertTrue(placeholder.isUnshownInboundMms)
+        assertFalse(caption.isUnshownInboundMms)
+        assertFalse(sms.isUnshownInboundMms)
+    }
 }

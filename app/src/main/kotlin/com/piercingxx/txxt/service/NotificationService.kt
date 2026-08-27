@@ -225,6 +225,15 @@ class NotificationService(
         }
         manager.notify(id, builder.build())
     },
+
+    /**
+     * Cancels a posted notification by id. Defaults to the system
+     * [NotificationManager]; injectable so a JVM unit test can observe dismiss.
+     */
+    private val cancelNotification: (Int) -> Unit = { id ->
+        (context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager)
+            ?.cancel(id)
+    },
 ) {
 
     /**
@@ -305,6 +314,17 @@ class NotificationService(
                 postNotification(id, builder)
                 true
             }
+        }
+    }
+
+    /**
+     * Removes the shade notification for each [senders] address. Opening that
+     * sender's thread is the operator reading the message; `setAutoCancel`
+     * only fires if they tapped the notification itself.
+     */
+    fun dismiss(senders: Iterable<String>) {
+        senders.forEach { sender ->
+            if (sender.isNotBlank()) cancelNotification(idFor(sender))
         }
     }
 }

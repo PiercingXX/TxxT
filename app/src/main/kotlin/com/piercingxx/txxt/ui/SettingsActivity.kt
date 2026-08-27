@@ -4,7 +4,6 @@ import android.app.Activity
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Bundle
-import android.view.WindowManager
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
@@ -39,9 +38,6 @@ import java.io.File
  * to `filesDir/[BACKUP_FILE_NAME]` behind the injectable [writeBackupText]
  * seam; restore reads through [readBackupText], applies every recognised key
  * into prefs, reloads the controls, and reports the real outcome.
- *
- * FLAG_SECURE is set in code (docs/PRIVACY.md §3) so the screen never appears
- * in recents previews or screenshots.
  *
  * The blocking button (WS12-corrective T2) load-and-applies the *persisted*
  * blocking/starred settings to the running app through the
@@ -121,12 +117,6 @@ class SettingsActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
-
-        // FLAG_SECURE in code (docs/PRIVACY.md §3): no recents preview, no screenshots.
-        window.setFlags(
-            WindowManager.LayoutParams.FLAG_SECURE,
-            WindowManager.LayoutParams.FLAG_SECURE,
-        )
 
         prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 

@@ -2,6 +2,7 @@ package com.piercingxx.txxt.service
 
 import android.content.Context
 import com.piercingxx.txxt.contacts.PhoneLookupIdentity
+import com.piercingxx.txxt.core.ViewedThread
 import com.piercingxx.txxt.data.ConversationMute
 import com.piercingxx.txxt.data.TxxTDatabase
 import java.time.LocalDateTime
@@ -19,6 +20,9 @@ import java.time.LocalDateTime
 object ArrivalNotify {
 
     suspend fun post(context: Context, sender: String, body: String) {
+        // The operator is already reading this thread — do not leave a shade
+        // tile that they then have to swipe away.
+        if (ViewedThread.isOpenFor(sender)) return
         val gate = PermissionGate()
         if (!gate.canNotify(context)) return
         val hit = PhoneLookupIdentity.lookup(context, sender)

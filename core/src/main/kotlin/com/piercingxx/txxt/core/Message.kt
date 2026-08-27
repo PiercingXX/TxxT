@@ -54,4 +54,14 @@ data class Message(
     /** True when this is an incoming message the user has not yet read. */
     val isUnread: Boolean
         get() = direction == MessageDirection.INCOMING && !isRead
+
+    /**
+     * Inbound MMS with no text and no photo. These used to render as a fake
+     * `[MMS]` line; they are not a message the operator should see.
+     */
+    val isUnshownInboundMms: Boolean
+        get() = direction == MessageDirection.INCOMING &&
+            transport == MessageTransport.MMS &&
+            mediaPath.isNullOrBlank() &&
+            (body.isBlank() || body.trim() == MmsRetrievedContent.MMS_PLACEHOLDER)
 }

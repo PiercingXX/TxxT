@@ -101,9 +101,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.TxxT">
 
-        <!-- Launcher entry. FLAG_SECURE is set in code, so the activity
-             declares nothing that would block it: no screenOrientation lock,
-             no exported without an intent-filter need. -->
+        <!-- Launcher entry. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -115,8 +113,7 @@
         </activity>
 
         <!-- Conversation thread. Not exported: launched only by MainActivity /
-             the notification content intent, never by external apps. FLAG_SECURE
-             is set in code. -->
+             the notification content intent, never by external apps. -->
         <activity
             android:name=".ui.ThreadActivity"
             android:exported="false"
@@ -124,7 +121,7 @@
             android:windowSoftInputMode="adjustResize" />
 
         <!-- NEW-conversation recipient picker. Not exported: launched only by
-             MainActivity's NEW affordance. FLAG_SECURE is set in code.
+             MainActivity's NEW affordance.
              adjustResize keeps the contact list above the keyboard so typing
              a name and seeing matches is one motion. -->
         <activity
@@ -134,16 +131,16 @@
             android:windowSoftInputMode="adjustResize|stateVisible" />
 
         <!-- Settings screen. Not exported: launched only by ThreadActivity's
-             settings affordance, never by external apps. FLAG_SECURE is set in
-             code. Persists the SettingsStore through SharedPreferences. -->
+             settings affordance, never by external apps.
+             Persists the SettingsStore through SharedPreferences. -->
         <activity
             android:name=".ui.SettingsActivity"
             android:exported="false"
             android:label="@string/title_settings" />
 
         <!-- Blocking & starred editor. Not exported: launched only by the
-             settings screen's blocking affordance. FLAG_SECURE is set in
-             code. Edits apply to the live inbound filter immediately. -->
+             settings screen's blocking affordance.
+             Edits apply to the live inbound filter immediately. -->
         <activity
             android:name=".ui.BlockingActivity"
             android:exported="false"
@@ -153,8 +150,7 @@
              Exported: other apps hand off ACTION_SENDTO compose requests with
              an sms:/smsto:/mms:/mmsto: data URI; the activity resolves the
              recipient, finds or creates the conversation, and opens the
-             thread. BROWSABLE so browser-initiated sms: links can land here.
-             FLAG_SECURE is set in code. -->
+             thread. BROWSABLE so browser-initiated sms: links can land here. -->
         <activity
             android:name=".ui.ComposeActivity"
             android:exported="true"

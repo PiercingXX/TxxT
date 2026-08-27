@@ -5,7 +5,6 @@ import android.app.AlertDialog
 import android.content.SharedPreferences
 import android.graphics.Typeface
 import android.os.Bundle
-import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -22,8 +21,6 @@ import com.piercingxx.txxt.R
  * read, and is applied to the live filter immediately via
  * [SettingsBlockingStore.loadAndApply] — a change here blocks (or stars) the
  * very next inbound message, no restart, no extra "apply" step.
- *
- * FLAG_SECURE is set in code (docs/PRIVACY.md §3), like every other screen.
  */
 class BlockingActivity : Activity() {
 
@@ -32,12 +29,6 @@ class BlockingActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_blocking)
-
-        // FLAG_SECURE in code (docs/PRIVACY.md §3): no recents preview, no screenshots.
-        window.setFlags(
-            WindowManager.LayoutParams.FLAG_SECURE,
-            WindowManager.LayoutParams.FLAG_SECURE,
-        )
 
         prefs = getSharedPreferences(SettingsActivity.PREFS_NAME, MODE_PRIVATE)
 

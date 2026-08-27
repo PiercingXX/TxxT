@@ -7,12 +7,6 @@ import com.piercingxx.txxt.block.InboundFilter
 import com.piercingxx.txxt.block.LiveInboundFilter
 import com.piercingxx.txxt.block.MessageDisposition
 import com.piercingxx.txxt.core.MmsPduHeader
-import com.piercingxx.txxt.data.InboundStore
-import com.piercingxx.txxt.data.TxxTDatabase
-import kotlinx.coroutines.CoroutineExceptionHandler
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 
 /**
  * BroadcastReceiver for the platform's **primary** inbound-MMS delivery —
@@ -23,7 +17,10 @@ import kotlinx.coroutines.launch
  * [MmsReceiver] handles the SMS_RECEIVED-era WAP_PUSH_RECEIVED path.
  *
  * Pipeline: parse the PDU header → resolve the sender → [InboundFilter] →
- * audio-drop policy → persist metadata only → arrival notification.
+ * audio-drop policy → drop. Holding `ROLE_SMS` still consumes
+ * `WAP_PUSH_DELIVER` so the OS does not hand the PDU to another app; inbound
+ * MMS is never stored or notified (a metadata-only persist used to render as
+ * a fake `[MMS]` line).
  *
  *  - **Parse failure = fail closed.** An unparseable PDU cannot prove what it
  *    carries — for all this receiver knows it is exactly the voice message
@@ -36,32 +33,8 @@ import kotlinx.coroutines.launch
  *  - Header CONTENT-TYPE is audio → [ReceivePolicy.decideAttachment] says
  *    DROP_UNSTORED: voice messages are never received, never stored, never
  *    downloaded (§5).
- *  - STORE → a metadata row is persisted through [InboundStore]
- *    (`persistInboundMmsMetadata`, body empty): MMS auto-download stays off
- *    (docs/PRIVACY.md §8.1) and remote content is fetched only on explicit tap
- *    later — never by this receiver. After the persist succeeds, the arrival
- *    notification is posted through [notify].
- *
- * **Notification honesty (body is empty on purpose):** the row this receiver
- * stores is metadata-only — the message content is never downloaded here — so
- * [notify] is handed an empty body. Under the default REDACTED posture that
- * costs nothing: the visible text is derived from the sender alone, never the
- * body. But if the posture is ever relaxed to NOTIFY, an MMS notification
- * would show empty text rather than content this receiver never had; that is
- * the honest limit of notifying before download.
- *
- * As with SMS ([SmsDeliverReceiver]), the notification fires only when
- * `POST_NOTIFICATIONS` is granted — automatic below API 33, user-gated from
- * API 33 on; denied → delivery is silent-by-permission, surfaced once via the
- * gate's Toast from this receiver's context.
- *
- * Unlike [MmsReceiver] there is **no `messageId` extra contract** on the
- * DELIVER path, so MmsDownloadRetry registration is deliberately deferred to
- * the tap-initiated download slice; nothing is registered here.
- *
- * The Room write runs off the main thread ([goAsync] + [Dispatchers.IO],
- * `pendingResult.finish()` guaranteed in `finally`, a
- * [CoroutineExceptionHandler] backstop) — BootReceiver precedent.
+ *  - Everything else is also dropped unstored: no metadata row, no arrival
+ *    notification. MMS auto-download stays off (docs/PRIVACY.md §8.1).
  */
 class MmsDeliverReceiver(
     /**
@@ -98,20 +71,16 @@ class MmsDeliverReceiver(
      */
     private val mmsDeliverAction: String = "android.provider.Telephony.WAP_PUSH_DELIVER",
     /**
-     * Persists a delivered message's metadata as `(address, dateMillis)`.
-     * Defaults to `null`, meaning the real [InboundStore.persistInboundMmsMetadata]
-     * runs over a lazily built Room database inside `onReceive` (ComposeActivity
-     * precedent: the database is never touched when a test supplies its own seam).
+     * Optional persist seam retained so existing JVM tests can inject a
+     * recorder. Production never writes: inbound MMS is dropped unstored.
      */
+    @Suppress("unused")
     private val persist: (suspend (String, Long, String?) -> Unit)? = null,
     /**
-     * Posts the arrival notification for a delivered message as
-     * `(context, address, body)` — the body is `""` here, because the stored
-     * row is metadata-only and no content was ever fetched (see class KDoc).
-     * Defaults to `null`, meaning the real posting runs:
-     * [ArrivalNotify] (permission gate, starred bypass, Business-tier silent
-     * hours from XX-Dialer). Injectable for JVM tests.
+     * Optional notify seam retained so existing JVM tests can inject a
+     * recorder. Production never notifies: inbound MMS is not a message.
      */
+    @Suppress("unused")
     private val notify: (suspend (Context, String, String) -> Unit)? = null,
 ) : BroadcastReceiver() {
 
@@ -150,38 +119,9 @@ class MmsDeliverReceiver(
             return
         }
 
-        // No DATE field in the header → fall back to the receive-time wall
-        // clock rather than dropping an otherwise-delivered message.
-        val dateMillis = info.dateMillis ?: System.currentTimeMillis()
-
-        val pendingResult = goAsync()
-        val exceptionHandler = CoroutineExceptionHandler { _, _ -> }
-        CoroutineScope(Dispatchers.IO + exceptionHandler).launch {
-            try {
-                val store: suspend (String, Long, String?) -> Unit =
-                    persist ?: { address, date, location ->
-                        val database = TxxTDatabase.instance(context)
-                        InboundStore.persistInboundMmsMetadata(
-                            database.conversationDao(),
-                            database.messageDao(),
-                            address,
-                            date,
-                            contentLocation = location,
-                        )
-                    }
-                store(sender, dateMillis, info.contentLocation)
-                // Notify strictly AFTER the metadata persist succeeded: never
-                // announce a message that failed to store. Body is "" — the
-                // row is metadata-only (see class KDoc).
-                val post: suspend (Context, String, String) -> Unit =
-                    notify ?: { ctx, from, text ->
-                        ArrivalNotify.post(ctx, from, text)
-                    }
-                post(context, sender, "")
-            } finally {
-                pendingResult.finish()
-            }
-        }
+        // Consume the broadcast (ROLE_SMS) and store nothing. A metadata-only
+        // row would surface as `[MMS]` — inbound MMS is not a message here.
+        return
     }
 
     companion object {

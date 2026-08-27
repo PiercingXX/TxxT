@@ -82,4 +82,19 @@ class ThreadMessageLoaderTest {
         assertEquals(1, batches[1].size)
         assertEquals(MessageDirection.INCOMING, batches[1].single().direction)
     }
+
+    @Test
+    fun `the loader hides inbound MMS stubs so they are not a message`() = runBlocking {
+        val dao = mockk<MessageDao>()
+        val stub = entity(id = 3L, direction = MessageDirection.INCOMING, body = "")
+            .copy(transport = MessageTransport.MMS.name)
+        val placeholder = entity(id = 4L, direction = MessageDirection.INCOMING, body = "[MMS]")
+            .copy(transport = MessageTransport.MMS.name)
+        val real = entity(id = 5L, direction = MessageDirection.INCOMING, body = "hello")
+        every { dao.observeForConversation(any()) } returns flowOf(listOf(stub, placeholder, real))
+
+        val messages = ThreadMessageLoader(dao, conversationId = 7L).messages().toList().single()
+
+        assertEquals(listOf(5L), messages.map { it.id })
+    }
 }

@@ -8,7 +8,6 @@ import android.os.Bundle
 import android.provider.OpenableColumns
 import android.speech.tts.TextToSpeech
 import android.view.View
-import android.view.WindowManager
 import android.app.AlertDialog
 import android.widget.Button
 import android.widget.EditText
@@ -23,10 +22,12 @@ import com.piercingxx.txxt.R
 import com.piercingxx.txxt.contacts.ContactNameResolver
 import com.piercingxx.txxt.data.OutboundStore
 import com.piercingxx.txxt.data.TxxTDatabase
+import com.piercingxx.txxt.core.ViewedThread
 import com.piercingxx.txxt.service.MmsContentFetcher
 import com.piercingxx.txxt.service.MmsDownloadRetry
 import com.piercingxx.txxt.service.MmsDownloadState
 import com.piercingxx.txxt.service.MmsRetrieve
+import com.piercingxx.txxt.service.NotificationService
 import com.piercingxx.txxt.service.SendPipeline
 import com.piercingxx.txxt.theme.SharedPreferencesThemeKeyValueStore
 import com.piercingxx.txxt.theme.ThemeApplier
@@ -76,9 +77,6 @@ const val EXTRA_PREFILL_BODY = "extra_prefill_body"
  * — and therefore the picker selection, the ImageOnly MIME filter and the
  * pre-Android-13 `ACTION_OPEN_DOCUMENT` fallback — is exactly the same object
  * either way.
- *
- * FLAG_SECURE is set in code (docs/PRIVACY.md §3) so the thread never appears
- * in recents previews or screenshots.
  */
 class ThreadActivity : Activity() {
 
@@ -165,15 +163,12 @@ class ThreadActivity : Activity() {
 
     private var conversationId: Long = 0L
 
+    /** Participant addresses for this thread; used to dismiss their shade tile. */
+    private var participantAddresses: List<String> = emptyList()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_thread)
-
-        // FLAG_SECURE in code (docs/PRIVACY.md §3): no recents preview, no screenshots.
-        window.setFlags(
-            WindowManager.LayoutParams.FLAG_SECURE,
-            WindowManager.LayoutParams.FLAG_SECURE,
-        )
 
         conversationId = intent.getLongExtra(EXTRA_CONVERSATION_ID, 0L)
 
@@ -213,7 +208,6 @@ class ThreadActivity : Activity() {
             true
         }
         EmojiTypeface.apply(composeInput)
-        SentenceCapitalizer.bind(composeInput)
         EmojiNerdCompose.bind(composeInput)
         threadSearch.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
             override fun onQueryTextSubmit(query: String?): Boolean {
@@ -308,8 +302,10 @@ class ThreadActivity : Activity() {
                 ?.split(ADDRESS_DELIMITER)
                 ?.filter { it.isNotBlank() }
                 .orEmpty()
+            participantAddresses = addresses
             threadTitle.text =
                 ConversationListPresenter.title(addresses) { contactNames.labelFor(it) }
+            if (started) dismissShadeNotification()
         }
     }
 
@@ -441,6 +437,9 @@ class ThreadActivity : Activity() {
     override fun onStart() {
         super.onStart()
         started = true
+        // Opening the thread is the operator reading it: drop the shade tile
+        // (auto-cancel only fires if they tapped the notification itself).
+        dismissShadeNotification()
         // Returning to a thread that accumulated unread messages while parked
         // reads them now.
         if (hasUnread) markThreadRead()
@@ -449,6 +448,7 @@ class ThreadActivity : Activity() {
     override fun onStop() {
         super.onStop()
         started = false
+        ViewedThread.close(conversationId)
     }
 
     /** Loads this conversation's messages from Room and submits them to the adapter. */
@@ -469,7 +469,10 @@ class ThreadActivity : Activity() {
                     // clause then makes the settled state a no-op instead of
                     // an invalidation loop.
                     hasUnread = messages.any { it.isUnread }
-                    if (started && hasUnread) markThreadRead()
+                    if (started) {
+                        dismissShadeNotification()
+                        if (hasUnread) markThreadRead()
+                    }
                 }
         }
     }
@@ -479,6 +482,17 @@ class ThreadActivity : Activity() {
         scope.launch(Dispatchers.Main) {
             database.messageDao().markConversationRead(conversationId)
         }
+    }
+
+    /**
+     * Drops this sender's shade notification and marks the thread as the one
+     * currently on screen so a follow-up SMS does not put the tile back.
+     */
+    private fun dismissShadeNotification() {
+        val senders = (allMessages.mapNotNull { it.senderAddress } + participantAddresses)
+            .filter { it.isNotBlank() }
+        ViewedThread.open(conversationId, senders)
+        NotificationService(this).dismiss(senders)
     }
 
     /**

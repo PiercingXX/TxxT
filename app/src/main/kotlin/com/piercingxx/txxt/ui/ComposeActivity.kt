@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.view.WindowManager
 import com.piercingxx.txxt.data.InboundStore
 import com.piercingxx.txxt.data.TxxTDatabase
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -25,10 +24,6 @@ import kotlinx.coroutines.launch
  * [InboundStore] (the same store inbound delivery uses), and hand off to
  * [ThreadActivity]. There is nothing to show when the URI carries no usable
  * recipient, so that case finishes immediately.
- *
- * FLAG_SECURE is set in code (docs/PRIVACY.md §3), exactly like
- * [ThreadActivity] and [SettingsActivity], so a compose hand-off never leaks
- * into recents previews or screenshots.
  *
  * The two decisions behind the hand-off are injectable seams (the established
  * `NotificationService` / `SmsReceiver` pattern) so the behaviour stays
@@ -78,12 +73,6 @@ class ComposeActivity(
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // FLAG_SECURE in code (docs/PRIVACY.md §3): no recents preview, no screenshots.
-        window.setFlags(
-            WindowManager.LayoutParams.FLAG_SECURE,
-            WindowManager.LayoutParams.FLAG_SECURE,
-        )
 
         val recipient = intent?.data?.let(resolveRecipient)
         if (recipient == null) {

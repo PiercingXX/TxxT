@@ -9,7 +9,6 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.View
-import android.view.WindowManager
 import android.widget.Button
 import android.widget.SearchView
 import android.widget.TextView
@@ -45,9 +44,7 @@ import kotlinx.coroutines.launch
 /**
  * Launcher activity for TxxT: the conversation list.
  *
- * Declared in the manifest with the MAIN/LAUNCHER intent-filter. FLAG_SECURE
- * is set in code (docs/PRIVACY.md §3) so the launcher never appears in recents
- * previews or screenshots.
+ * Declared in the manifest with the MAIN/LAUNCHER intent-filter.
  *
  * The list is live: [ConversationListLoader] combines the conversations and
  * messages tables into sorted, archive-filtered `core` [Conversation]s, and
@@ -134,11 +131,6 @@ class MainActivity : Activity(), SwipeActionCallback {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // FLAG_SECURE in code (docs/PRIVACY.md §3): no recents preview, no screenshots.
-        window.setFlags(
-            WindowManager.LayoutParams.FLAG_SECURE,
-            WindowManager.LayoutParams.FLAG_SECURE,
-        )
         // The real store over this app's preferences; the settings screen and
         // theme applier (T6) read the persisted manual theme / auto-sync toggle.
         themeStore = ThemeStore(

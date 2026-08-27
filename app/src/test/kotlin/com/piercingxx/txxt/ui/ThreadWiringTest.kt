@@ -5,13 +5,14 @@ import com.piercingxx.txxt.core.MessageDirection
 import com.piercingxx.txxt.core.MessageTransport
 import io.mockk.mockk
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
 /**
  * Asserts the thread screen wiring (T3): the manifest registers ThreadActivity,
- * MainActivity launches it with FLAG_SECURE, ThreadActivity drives the
+ * MainActivity launches it, ThreadActivity drives the
  * ThreadAdapter and routes the compose send through SendPipeline.sendSms, and
  * the adapter's real `onBindViewHolder` path reaches ThreadMessagePresenter.
  *
@@ -76,7 +77,7 @@ class ThreadWiringTest {
     // ---- Launch wiring ----
 
     @Test
-    fun `MainActivity launches ThreadActivity with FLAG_SECURE`() {
+    fun `MainActivity launches ThreadActivity`() {
         // The launcher opens threads through ThreadActivity.launchIntent — the
         // factory that carries EXTRA_CONVERSATION_ID (locked behaviourally in
         // `launchIntent carries the conversation id` below where applicable),
@@ -85,8 +86,8 @@ class ThreadWiringTest {
             "MainActivity must open threads via ThreadActivity.launchIntent",
             mainActivity.contains("ThreadActivity.launchIntent("),
         )
-        assertTrue(
-            "MainActivity must set FLAG_SECURE in code",
+        assertFalse(
+            "FLAG_SECURE blacks screenshots; the operator asked to capture the app",
             mainActivity.contains("FLAG_SECURE"),
         )
         assertTrue(
@@ -115,13 +116,14 @@ class ThreadWiringTest {
             "ThreadActivity must route the compose send through SendPipeline.sendSms",
             threadActivity.contains("SendPipeline.sendSms"),
         )
-        assertTrue(
-            "ThreadActivity must set FLAG_SECURE in code",
+        assertFalse(
+            "FLAG_SECURE blacks screenshots; the operator asked to capture the app",
             threadActivity.contains("FLAG_SECURE"),
         )
-        assertTrue(
-            "ThreadActivity must bind sentence capitalization on the compose field",
-            threadActivity.contains("SentenceCapitalizer.bind(composeInput)"),
+        assertFalse(
+            "the compose field must not bind SentenceCapitalizer — that watcher " +
+                "forced a capital after a symbol or number mid-sentence",
+            threadActivity.contains("SentenceCapitalizer"),
         )
         assertTrue(
             "the message list must stack from the end so new lines sit above the keyboard",
@@ -130,6 +132,18 @@ class ThreadWiringTest {
         assertTrue(
             "incoming messages must pin the viewport to the latest row",
             threadActivity.contains("pinToLatest()"),
+        )
+        assertTrue(
+            "opening a thread must dismiss that sender's shade notification",
+            threadActivity.contains("dismissShadeNotification()"),
+        )
+        assertTrue(
+            "the open thread must register as viewed so a follow-up SMS stays silent",
+            threadActivity.contains("ViewedThread.open("),
+        )
+        assertTrue(
+            "leaving the thread must clear the viewed-thread marker",
+            threadActivity.contains("ViewedThread.close("),
         )
     }
 

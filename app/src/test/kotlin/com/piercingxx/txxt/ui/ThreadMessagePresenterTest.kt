@@ -69,12 +69,12 @@ class ThreadMessagePresenterTest {
     }
 
     @Test
-    fun `an inbound MMS with an empty body renders as a tap-to-retrieve line`() {
+    fun `an inbound MMS with an empty body is not invented as a placeholder`() {
         val row = present(
             message(id = 8L, direction = MessageDirection.INCOMING, body = "")
                 .copy(transport = MessageTransport.MMS),
         )
-        assertEquals(com.piercingxx.txxt.core.MmsRetrievedContent.MMS_PLACEHOLDER, row.body)
+        assertEquals("", row.body)
     }
 
     @Test

@@ -3,7 +3,6 @@ package com.piercingxx.txxt.ui
 import com.piercingxx.txxt.core.Message
 import com.piercingxx.txxt.core.MessageDirection
 import com.piercingxx.txxt.core.MessageTransport
-import com.piercingxx.txxt.core.MmsRetrievedContent
 
 /**
  * Horizontal alignment of a message row within the thread.
@@ -77,17 +76,14 @@ object ThreadMessagePresenter {
      *
      * Deliberately narrow. It is scoped to OUTGOING because that is the row
      * this app creates and therefore the only one whose media it knows to be a
-     * photo; an inbound MMS could carry anything, so its body is left exactly
-     * as the receive path stored it and nothing is invented about it here.
+     * photo. Inbound MMS is not invented here: empty inbound MMS is not a
+     * message (see [Message.isUnshownInboundMms]) and is dropped before bind.
      */
     private fun bodyFor(message: Message): String =
         when {
             message.direction == MessageDirection.OUTGOING &&
                 message.transport == MessageTransport.MMS &&
                 message.body.isBlank() -> PhotoAttachment.PHOTO_ROW_PLACEHOLDER
-            message.direction == MessageDirection.INCOMING &&
-                message.transport == MessageTransport.MMS &&
-                message.body.isBlank() -> MmsRetrievedContent.MMS_PLACEHOLDER
             else -> message.body
         }
 }

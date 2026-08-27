@@ -4,7 +4,6 @@ import android.app.Activity
 import android.os.Bundle
 import android.text.InputType
 import android.view.View
-import android.view.WindowManager
 import android.widget.SearchView
 import android.widget.TextView
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -35,9 +34,6 @@ import kotlinx.coroutines.withContext
  * (or submitting the IME) finds or creates the conversation through
  * [InboundStore] — the same collision-safe path inbound delivery and the
  * SENDTO hand-off use — and opens [ThreadActivity].
- *
- * FLAG_SECURE is set in code (docs/PRIVACY.md §3) so the picker never
- * appears in recents previews or screenshots.
  *
  * Declining `READ_CONTACTS` is a supported end state: the list is empty
  * and the field still accepts a number.
@@ -80,10 +76,6 @@ class NewConversationActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.setFlags(
-            WindowManager.LayoutParams.FLAG_SECURE,
-            WindowManager.LayoutParams.FLAG_SECURE,
-        )
         setContentView(R.layout.activity_new_conversation)
 
         emptyState = findViewById(R.id.empty_state)

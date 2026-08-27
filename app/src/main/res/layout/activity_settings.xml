@@ -24,7 +24,9 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:padding="16dp"
+        android:layout_marginStart="@dimen/txxt_edge_inset"
+        android:layout_marginEnd="@dimen/txxt_edge_inset">
 
         <TextView
             android:layout_width="match_parent"
