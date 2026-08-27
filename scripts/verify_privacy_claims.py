@@ -50,6 +50,9 @@ EXPECTED_PERMISSIONS = {
     # permission and not network — required to receive the launcher's
     # THEME_CHANGED broadcast (sendBroadcast with this permission name).
     "com.piercingxx.xxlauncher.permission.THEME_SYNC",
+    # XX-Dialer Business-tier export: signature IPC, not network. Lets TxxT
+    # honour the same 09:00–19:00 window the dialer uses for Business contacts.
+    "com.piercingxx.xxdialer.permission.TIER_SYNC",
     # NOTE: no RECORD_AUDIO. WS13 declared the mic for the compose bar's
     # dictation button; the compose-bar rework deleted that button — its only
     # entry point — so the permission was removed with it. The APK must not

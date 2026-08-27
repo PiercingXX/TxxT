@@ -104,6 +104,21 @@ class ThreadLayoutTest {
     }
 
     @Test
+    fun `the thread activity resizes with the keyboard so the list is not covered`() {
+        val manifest = sequenceOf(
+            java.io.File("src/main/AndroidManifest.xml"),
+            java.io.File("app/src/main/AndroidManifest.xml"),
+        ).first { it.exists() }.readText()
+        val block = Regex(
+            """<activity\b[^>]*android:name="\.ui\.ThreadActivity"[\s\S]*?/>""",
+        ).find(manifest)?.value.orEmpty()
+        assertTrue(
+            "ThreadActivity must adjustResize so incoming lines stay above the IME",
+            block.contains("adjustResize"),
+        )
+    }
+
+    @Test
     fun `the compose field requests sentence capitals including the first letter`() {
         val composeBar = activityThread.substring(activityThread.indexOf("@+id/compose_bar"))
         assertTrue(

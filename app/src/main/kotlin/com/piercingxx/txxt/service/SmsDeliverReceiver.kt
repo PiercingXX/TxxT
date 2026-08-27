@@ -132,10 +132,8 @@ class SmsDeliverReceiver(
     /**
      * Posts the arrival notification for a delivered message as
      * `(context, address, body)`. Defaults to `null`, meaning the real posting
-     * runs: [PermissionGate.canNotify] gates it on `POST_NOTIFICATIONS`
-     * (denied → silent delivery + one Toast), then
-     * [NotificationService.postMessageNotification] posts under the default
-     * REDACTED posture — sender-name-only visible text, never the message body.
+     * runs through [ArrivalNotify] (permission gate, starred bypass,
+     * Business-tier silent hours from XX-Dialer).
      * Injectable so a JVM unit test can observe the notification decision
      * without touching Android's NotificationManager.
      */
@@ -182,26 +180,7 @@ class SmsDeliverReceiver(
                 // after the notification (see class KDoc flow order).
                 val post: suspend (Context, String, String) -> Unit =
                     notify ?: { ctx, from, text ->
-                        val gate = PermissionGate()
-                        if (gate.canNotify(ctx)) {
-                            // The persisted settings drive the decision: the
-                            // lock-screen privacy choice is the global posture
-                            // and a starred sender bypasses suppression
-                            // (docs/PRIVACY.md §6) — never the hardcoded
-                            // defaults.
-                            val database = TxxTDatabase.instance(ctx)
-                            NotificationService(ctx).postMessageNotification(
-                                sender = from,
-                                body = text,
-                                starred = NotificationPrefs.isStarred(ctx, from),
-                                globalPosture = NotificationPrefs.globalPosture(ctx),
-                                channelId = NotificationPrefs.channelId(ctx),
-                                muted = com.piercingxx.txxt.data.ConversationMute.isMuted(
-                                    database.conversationDao(),
-                                    from,
-                                ),
-                            )
-                        }
+                        ArrivalNotify.post(ctx, from, text)
                     }
                 post(context, sender, body)
                 if (ReceivePolicy.shouldAutoReply(

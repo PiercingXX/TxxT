@@ -123,6 +123,14 @@ class ThreadWiringTest {
             "ThreadActivity must bind sentence capitalization on the compose field",
             threadActivity.contains("SentenceCapitalizer.bind(composeInput)"),
         )
+        assertTrue(
+            "the message list must stack from the end so new lines sit above the keyboard",
+            threadActivity.contains("stackFromEnd = true"),
+        )
+        assertTrue(
+            "incoming messages must pin the viewport to the latest row",
+            threadActivity.contains("pinToLatest()"),
+        )
     }
 
     // ---- Adapter seam (behavioural: drives the real onBindViewHolder path) ----

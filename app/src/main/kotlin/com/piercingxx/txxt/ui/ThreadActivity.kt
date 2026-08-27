@@ -192,7 +192,12 @@ class ThreadActivity : Activity() {
             onMessageTap = ::onMessageTap,
             onMessageLongPress = ::promptMessageActions,
         )
-        messageList.layoutManager = LinearLayoutManager(this)
+        // stackFromEnd keeps the newest row against the compose bar. Without
+        // it, adjustResize shrinks the list from the bottom and incoming
+        // lines sit under the keyboard.
+        messageList.layoutManager = LinearLayoutManager(this).apply {
+            stackFromEnd = true
+        }
         messageList.adapter = adapter
 
         // WS13 read-aloud: the on-device TTS engine whose spoken text always
@@ -453,7 +458,9 @@ class ThreadActivity : Activity() {
                 .messages()
                 .collect { messages ->
                     allMessages = messages
+                    val follow = followingLatest()
                     adapter.submit(ThreadSearchFilter.filter(messages, threadQuery))
+                    if (follow) pinToLatest()
                     // A visible thread reads its incoming messages: clear their
                     // unread flag so the launcher's badge and any UNREAD_FIRST
                     // ordering settle. Gated on [started] (a backgrounded
@@ -586,6 +593,28 @@ class ThreadActivity : Activity() {
     private fun applyThreadSearch(query: String) {
         threadQuery = query
         adapter.submit(ThreadSearchFilter.filter(allMessages, query))
+        if (query.isBlank()) pinToLatest()
+    }
+
+    /**
+     * True when the viewport is already on (or near) the newest row, or the
+     * list has not laid out yet. Used so an incoming message scrolls into
+     * view above the keyboard without yanking someone who scrolled up to
+     * read history.
+     */
+    private fun followingLatest(): Boolean {
+        if (threadQuery.isNotBlank()) return false
+        val last = adapter.itemCount - 1
+        if (last < 0) return true
+        val lm = messageList.layoutManager as? LinearLayoutManager ?: return true
+        val lastVisible = lm.findLastVisibleItemPosition()
+        return lastVisible == RecyclerView.NO_POSITION || lastVisible >= last - 1
+    }
+
+    private fun pinToLatest() {
+        val last = adapter.itemCount - 1
+        if (last < 0) return
+        messageList.post { messageList.scrollToPosition(last) }
     }
 
     private fun copyThreadNumber() {

@@ -109,10 +109,8 @@ class MmsDeliverReceiver(
      * `(context, address, body)` — the body is `""` here, because the stored
      * row is metadata-only and no content was ever fetched (see class KDoc).
      * Defaults to `null`, meaning the real posting runs:
-     * [PermissionGate.canNotify] gates it on `POST_NOTIFICATIONS` (denied →
-     * silent delivery + one Toast), then
-     * [NotificationService.postMessageNotification] posts under the default
-     * REDACTED posture. Injectable for JVM tests.
+     * [ArrivalNotify] (permission gate, starred bypass, Business-tier silent
+     * hours from XX-Dialer). Injectable for JVM tests.
      */
     private val notify: (suspend (Context, String, String) -> Unit)? = null,
 ) : BroadcastReceiver() {
@@ -177,23 +175,7 @@ class MmsDeliverReceiver(
                 // row is metadata-only (see class KDoc).
                 val post: suspend (Context, String, String) -> Unit =
                     notify ?: { ctx, from, text ->
-                        val gate = PermissionGate()
-                        if (gate.canNotify(ctx)) {
-                            // Persisted settings drive the decision, exactly
-                            // like the SMS deliver path: lock-screen privacy
-                            // is the global posture; starred bypasses.
-                            NotificationService(ctx).postMessageNotification(
-                                sender = from,
-                                body = text,
-                                starred = NotificationPrefs.isStarred(ctx, from),
-                                globalPosture = NotificationPrefs.globalPosture(ctx),
-                                channelId = NotificationPrefs.channelId(ctx),
-                                muted = com.piercingxx.txxt.data.ConversationMute.isMuted(
-                                    TxxTDatabase.instance(ctx).conversationDao(),
-                                    from,
-                                ),
-                            )
-                        }
+                        ArrivalNotify.post(ctx, from, text)
                     }
                 post(context, sender, "")
             } finally {

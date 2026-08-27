@@ -69,6 +69,13 @@
         android:protectionLevel="signature" />
     <uses-permission android:name="com.piercingxx.xxlauncher.permission.THEME_SYNC" />
 
+    <!-- XX-Dialer's Business-tier export. Signature; declare+uses so install
+         order against the dialer does not drop the grant. -->
+    <permission
+        android:name="com.piercingxx.xxdialer.permission.TIER_SYNC"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="com.piercingxx.xxdialer.permission.TIER_SYNC" />
+
     <!-- Deliberately NO RECORD_AUDIO permission. WS13 declared it for the
          compose bar's dictation mic; the compose-bar rework deleted that
          button, and it was the feature's only entry point — ThreadActivity
@@ -113,7 +120,8 @@
         <activity
             android:name=".ui.ThreadActivity"
             android:exported="false"
-            android:label="@string/app_name" />
+            android:label="@string/app_name"
+            android:windowSoftInputMode="adjustResize" />
 
         <!-- NEW-conversation recipient picker. Not exported: launched only by
              MainActivity's NEW affordance. FLAG_SECURE is set in code.
