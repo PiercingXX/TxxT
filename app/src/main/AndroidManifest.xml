@@ -61,12 +61,8 @@
          booting. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
-    <!-- Family theme-sync. XX-Launcher sendBroadcast()s with this signature
-         permission; uses-permission is required to receive it. Declared here
-         too so install order against the launcher does not drop the grant. -->
-    <permission
-        android:name="com.piercingxx.xxlauncher.permission.THEME_SYNC"
-        android:protectionLevel="signature" />
+    <!-- Family theme-sync. XX-Launcher defines and sendBroadcast()s with this
+         signature permission; uses-permission is required to receive it. -->
     <uses-permission android:name="com.piercingxx.xxlauncher.permission.THEME_SYNC" />
 
     <!-- XX-Dialer's Business-tier export. Signature; declare+uses so install
