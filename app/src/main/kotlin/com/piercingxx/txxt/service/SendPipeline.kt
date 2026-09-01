@@ -155,14 +155,7 @@ object SendPipeline {
         val file = File.createTempFile("send-", ".pdu", dir)
         file.writeBytes(bytes)
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.mms", file)
-        val grant = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
-            android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-        listOf("com.android.phone", "com.android.mms", "com.android.telephony").forEach { pkg ->
-            try {
-                context.grantUriPermission(pkg, uri, grant)
-            } catch (_: SecurityException) {
-            }
-        }
+        MmsUriGrants.grantWrite(context, uri)
         uri
     } catch (_: IOException) {
         null

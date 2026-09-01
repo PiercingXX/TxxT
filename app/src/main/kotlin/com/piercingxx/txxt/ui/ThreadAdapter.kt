@@ -12,6 +12,7 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.piercingxx.txxt.R
 import com.piercingxx.txxt.core.Message
+import com.piercingxx.txxt.core.MmsRetrievedContent
 
 /**
  * RecyclerView adapter for the conversation thread (T3).
@@ -110,8 +111,13 @@ class ThreadAdapter(
             EmojiTypeface.apply(body)
             val photo = itemView.findViewById<View>(R.id.message_photo) as? ImageView
             val path = row.mediaPath
+            val trimmed = row.body.trim()
+            val collapsed = trimmed == MmsRetrievedContent.COLLAPSED_PHOTO_PLACEHOLDER
+            val showingPhoto = !collapsed &&
+                !path.isNullOrBlank() &&
+                java.io.File(path).isFile
             if (photo != null) {
-                if (!path.isNullOrBlank() && java.io.File(path).isFile) {
+                if (showingPhoto) {
                     photo.visibility = View.VISIBLE
                     photo.setImageBitmap(BitmapFactory.decodeFile(path))
                 } else {
@@ -119,6 +125,11 @@ class ThreadAdapter(
                     photo.setImageDrawable(null)
                 }
             }
+            val hideMarker = showingPhoto && (
+                trimmed == MmsRetrievedContent.PHOTO_PLACEHOLDER ||
+                    trimmed == PhotoAttachment.PHOTO_ROW_PLACEHOLDER
+                )
+            body.visibility = if (hideMarker) View.GONE else View.VISIBLE
             applyAlignment(rowContainer, body, timestamp, row.alignment)
             body.setTextColor(when (row.emphasis) {
                 // Sent = signal-white inverted emphasis; received = muted slate.

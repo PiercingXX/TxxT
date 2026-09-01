@@ -26,14 +26,11 @@ class ArrivalNotifyWiringTest {
     }
 
     @Test
-    fun `sms deliver posts through ArrivalNotify and inbound MMS does not`() {
+    fun `sms and mms deliver both post through ArrivalNotify`() {
         val sms = source("service/SmsDeliverReceiver.kt")
         val mms = source("service/MmsDeliverReceiver.kt")
         assertTrue(sms.contains("ArrivalNotify.post("))
-        assertFalse(
-            "inbound MMS is dropped unstored — no arrival notification",
-            mms.contains("ArrivalNotify.post("),
-        )
+        assertTrue(mms.contains("ArrivalNotify.post("))
     }
 
     @Test

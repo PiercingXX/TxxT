@@ -5,7 +5,7 @@ A private SMS client for Android. Holds the system SMS role on a Pixel 6
 running GrapheneOS. Text-first, AMOLED black, Space Mono / JetBrains Mono, same
 stack as the rest of the phone suite. The features are ordinary; what makes it
 worth building is which of them ship switched off. Photos go as MMS (scrubbed
-on send, fetched on tap). The body face is JetBrains Mono Nerd Font Mono, so
+on send, fetched on arrival, shown as `[Photo]` until tapped). The body face is JetBrains Mono Nerd Font Mono, so
 the compose palette is monochrome Nerd glyphs rather than colour emoji.
 
 ## Privacy posture — stated as fact 🔒

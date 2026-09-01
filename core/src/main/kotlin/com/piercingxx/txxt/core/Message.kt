@@ -64,4 +64,22 @@ data class Message(
             transport == MessageTransport.MMS &&
             mediaPath.isNullOrBlank() &&
             (body.isBlank() || body.trim() == MmsRetrievedContent.MMS_PLACEHOLDER)
+
+    /**
+     * Fetched inbound photo still showing the `[Photo]` marker. A tap
+     * [revealInboundPhoto]s it.
+     */
+    val isCollapsedInboundPhoto: Boolean
+        get() = direction == MessageDirection.INCOMING &&
+            transport == MessageTransport.MMS &&
+            !mediaPath.isNullOrBlank() &&
+            body.trim() == MmsRetrievedContent.COLLAPSED_PHOTO_PLACEHOLDER
+
+    /** Opens a collapsed inbound photo so the thread can render the image. */
+    fun revealInboundPhoto(): Message =
+        if (isCollapsedInboundPhoto) {
+            copy(body = MmsRetrievedContent.PHOTO_PLACEHOLDER)
+        } else {
+            this
+        }
 }

@@ -1,8 +1,10 @@
 package com.piercingxx.txxt.service
 
+import android.content.BroadcastReceiver.PendingResult
 import android.content.Context
 import android.content.Intent
 import com.piercingxx.txxt.block.InboundFilter
+import com.piercingxx.txxt.core.MmsRetrievedContent
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.spyk
@@ -22,12 +24,8 @@ import java.util.concurrent.TimeUnit
  * (extension-media), END_OF_HEADER.
  *
  * The STORE path persists on a background coroutine, so its tests await a latch
- * counted down inside the injected `persist` seam (and, where the arrival
- * notification is asserted, one counted down in the `notify` seam). Every drop
- * path (parse-null,
- * missing PDU, blocked sender, audio content type) returns before any coroutine
- * is launched, so their "nothing stored" assertions are deterministic after a
- * bounded wait.
+ * counted down inside the injected `persist` seam (and retrieve / notify
+ * seams). Every drop path returns before any coroutine is launched.
  */
 class MmsDeliverReceiverTest {
 
@@ -42,6 +40,7 @@ class MmsDeliverReceiverTest {
         from: String,
         contentType: String = "application/vnd.wap.multipart.related",
         dateSeconds: Long = knownDateSeconds,
+        contentLocation: String? = "http://mmsc.example/id",
     ): ByteArray {
         val bytes = mutableListOf<Byte>()
         // X-Mms-Message-Type value octet: 0x82 = m-notification-ind.
@@ -60,6 +59,11 @@ class MmsDeliverReceiverTest {
         for (shift in 7 downTo 0) {
             bytes.add((dateSeconds shr (shift * 8)).toByte())
         }
+        if (contentLocation != null) {
+            bytes.add(0x83.toByte())
+            bytes.addAll(contentLocation.toByteArray(Charsets.US_ASCII).toList())
+            bytes.add(0x00)
+        }
         // CONTENT-TYPE: field name 0x84, extension-media null-terminated string.
         bytes.add(0x84.toByte())
         bytes.addAll(contentType.toByteArray(Charsets.US_ASCII).toList())
@@ -68,8 +72,10 @@ class MmsDeliverReceiverTest {
     }
 
     private class Recording {
-        val persisted = mutableListOf<Pair<String, Long>>()
+        val persisted = mutableListOf<Triple<String, Long, String?>>()
+        val retrieved = mutableListOf<Pair<Long, String?>>()
         val notified = mutableListOf<Pair<String, String>>()
+        var retrieveKeeps = true
     }
 
     private fun receiver(
@@ -77,44 +83,68 @@ class MmsDeliverReceiverTest {
         pduBytes: ByteArray? = pdu(from = "+15551234567"),
         recording: Recording = Recording(),
         persistLatch: CountDownLatch? = null,
+        retrieveLatch: CountDownLatch? = null,
         notifyLatch: CountDownLatch? = null,
-    ): MmsDeliverReceiver =
-        MmsDeliverReceiver(
+    ): MmsDeliverReceiver {
+        val base = MmsDeliverReceiver(
             inboundFilterProvider = { inboundFilter },
             extractPdu = { pduBytes },
             mmsDeliverAction = wapPushDeliver,
-            persist = { address, date, _ ->
-                recording.persisted.add(address to date)
+            persist = { address, date, location ->
+                recording.persisted.add(Triple(address, date, location))
                 persistLatch?.countDown()
+                1L
+            },
+            retrieve = { _, id, location ->
+                recording.retrieved.add(id to location)
+                retrieveLatch?.countDown()
+                recording.retrieveKeeps
             },
             notify = { _, from, body ->
                 recording.notified.add(from to body)
                 notifyLatch?.countDown()
             },
         )
+        return spyk(base).also {
+            every { it.goAsync() } returns mockk<PendingResult>(relaxed = true)
+        }
+    }
 
     private fun pushIntent(): Intent =
         spyk(Intent()).apply { every { action } returns wapPushDeliver }
 
-    // ---- DROP (inbound MMS is not a message) ----
+    // ---- STORE (auto-fetch, then notify) ----
 
     @Test
-    fun `a parsed notification stores nothing and does not notify`() {
+    fun `a parsed notification persists, retrieves, and notifies`() {
         val recording = Recording()
         val persisted = CountDownLatch(1)
+        val retrieved = CountDownLatch(1)
         val notified = CountDownLatch(1)
-        val rcv = receiver(recording = recording, persistLatch = persisted, notifyLatch = notified)
+        val rcv = receiver(
+            recording = recording,
+            persistLatch = persisted,
+            retrieveLatch = retrieved,
+            notifyLatch = notified,
+        )
 
         rcv.onReceive(context, pushIntent())
 
-        assertFalse(persisted.await(200, TimeUnit.MILLISECONDS))
-        assertFalse(notified.await(200, TimeUnit.MILLISECONDS))
-        assertTrue(recording.persisted.isEmpty())
-        assertTrue(recording.notified.isEmpty())
+        assertTrue(persisted.await(5, TimeUnit.SECONDS))
+        assertTrue(retrieved.await(5, TimeUnit.SECONDS))
+        assertTrue(notified.await(5, TimeUnit.SECONDS))
+        assertEquals(1, recording.persisted.size)
+        assertEquals("+15551234567", recording.persisted.single().first)
+        assertEquals("http://mmsc.example/id", recording.persisted.single().third)
+        assertEquals(1L to "http://mmsc.example/id", recording.retrieved.single())
+        assertEquals(
+            "+15551234567" to MmsRetrievedContent.COLLAPSED_PHOTO_PLACEHOLDER,
+            recording.notified.single(),
+        )
     }
 
     @Test
-    fun `a PLMN-suffixed FROM is still not stored`() {
+    fun `a PLMN-suffixed FROM is stored under the bare number`() {
         val recording = Recording()
         val persisted = CountDownLatch(1)
         val rcv = receiver(
@@ -125,8 +155,25 @@ class MmsDeliverReceiverTest {
 
         rcv.onReceive(context, pushIntent())
 
-        assertFalse(persisted.await(200, TimeUnit.MILLISECONDS))
-        assertTrue(recording.persisted.isEmpty())
+        assertTrue(persisted.await(5, TimeUnit.SECONDS))
+        assertEquals("+15551234567", recording.persisted.single().first)
+    }
+
+    @Test
+    fun `a retrieve that drops the row does not notify`() {
+        val recording = Recording().also { it.retrieveKeeps = false }
+        val persisted = CountDownLatch(1)
+        val notified = CountDownLatch(1)
+        val rcv = receiver(
+            recording = recording,
+            persistLatch = persisted,
+            notifyLatch = notified,
+        )
+
+        rcv.onReceive(context, pushIntent())
+
+        assertTrue(persisted.await(5, TimeUnit.SECONDS))
+        assertFalse(notified.await(400, TimeUnit.MILLISECONDS))
         assertTrue(recording.notified.isEmpty())
     }
 
@@ -204,5 +251,17 @@ class MmsDeliverReceiverTest {
         assertEquals("+15551234567", MmsDeliverReceiver.cleanAddress("+15551234567/TYPE=PLMN"))
         assertEquals("+15559998888", MmsDeliverReceiver.cleanAddress("+15559998888/TYPE=IPv4"))
         assertEquals("+15550000000", MmsDeliverReceiver.cleanAddress("+15550000000"))
+    }
+
+    @Test
+    fun `production retrieve enqueues MmsRetrieveService instead of blocking goAsync`() {
+        val source = sequenceOf(
+            java.io.File("src/main/kotlin/com/piercingxx/txxt/service/MmsDeliverReceiver.kt"),
+            java.io.File("app/src/main/kotlin/com/piercingxx/txxt/service/MmsDeliverReceiver.kt"),
+        ).first { it.exists() }.readText()
+        assertTrue(
+            "WAP_PUSH_DELIVER cannot wait 90s inside goAsync; the retrieve service must be started",
+            source.contains("MmsRetrieveService.enqueue"),
+        )
     }
 }

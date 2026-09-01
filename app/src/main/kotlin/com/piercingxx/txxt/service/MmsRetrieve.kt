@@ -13,29 +13,78 @@ import com.piercingxx.txxt.core.MessageTransport
 import com.piercingxx.txxt.core.MmsRetrievedContent
 import com.piercingxx.txxt.core.MmsRetrievedContentParser
 import com.piercingxx.txxt.data.MessageDao
+import com.piercingxx.txxt.data.TxxTDatabase
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Tap-to-retrieve for inbound MMS. Auto-download stays off (PRIVACY.md §8.1);
- * holding the SMS role still requires a retrieve path so carrier MMS is not
- * swallowed.
+ * Retrieve path for inbound MMS. Photos are fetched on arrival; a failed
+ * fetch can still be retried from a tap. Voice MMS is dropped (PRIVACY.md §5).
  */
 object MmsRetrieve {
 
-    /** True when tapping the row should fetch the PDU instead of reading aloud. */
+    private val inFlight = ConcurrentHashMap<Long, Deferred<Boolean>>()
+
+    /** True when an inbound MMS still has an MMSC location and no photo on disk. */
     fun needsRetrieve(message: Message): Boolean =
         message.transport == MessageTransport.MMS &&
             message.direction == MessageDirection.INCOMING &&
             !message.contentLocation.isNullOrBlank() &&
-            message.body.isBlank()
+            message.mediaPath.isNullOrBlank()
 
     /**
-     * Applies a retrieved PDU onto the stored metadata row. Audio-only is
-     * deleted (never stored). Other content becomes a text-first body and
-     * clears [contentLocation] so a second tap reads aloud. Pure over the DAO.
+     * Fetches one inbound MMS and applies it. Concurrent callers for the same
+     * id share the in-flight retrieve so a tap during auto-download does not
+     * start a second MMSC GET.
+     */
+    suspend fun retrieveAndStore(
+        context: Context,
+        messageId: Long,
+        location: String? = null,
+    ): Boolean {
+        val created = CompletableDeferred<Boolean>()
+        val existing = inFlight.putIfAbsent(messageId, created)
+        if (existing != null) return existing.await()
+        try {
+            val ok = retrieveOnce(context, messageId, location)
+            created.complete(ok)
+            return ok
+        } catch (t: Throwable) {
+            created.complete(false)
+            if (t is CancellationException) throw t
+            return false
+        } finally {
+            inFlight.remove(messageId, created)
+        }
+    }
+
+    private suspend fun retrieveOnce(
+        context: Context,
+        messageId: Long,
+        location: String?,
+    ): Boolean {
+        val dao = TxxTDatabase.instance(context).messageDao()
+        val row = dao.getById(messageId) ?: return false
+        val existingPath = row.mediaPath
+        if (!existingPath.isNullOrBlank() && File(existingPath).isFile) return true
+        val url = location?.takeIf { it.isNotBlank() } ?: row.contentLocation
+        if (url.isNullOrBlank()) return false
+        val pdu = MmsContentFetcher().fetch(context, url) ?: return false
+        return applyPdu(dao, messageId, pdu) { bytes, mime ->
+            saveRetrievedImage(context, messageId, bytes, mime)
+        }
+    }
+
+    /**
+     * Applies a retrieved PDU onto the stored metadata row. Audio-only and
+     * empty/unknown content are deleted. An image becomes `[Photo]` plus a
+     * saved file (shown only after the operator taps). A captioned photo keeps
+     * the caption. Clears [contentLocation] once applied. An image MIME with
+     * no saved bytes is left pending so a tap can retry — it is not deleted.
      */
     suspend fun applyPdu(
         messages: MessageDao,
@@ -56,14 +105,63 @@ object MmsRetrieve {
         } else {
             null
         }
-        messages.upsert(
-            row.copy(
-                body = parsed.body,
-                contentLocation = null,
-                mediaPath = path ?: row.mediaPath,
-            )
-        )
-        return true
+        val caption = parsed.body.takeIf {
+            it.isNotBlank() &&
+                it != MmsRetrievedContent.PHOTO_PLACEHOLDER &&
+                it != MmsRetrievedContent.COLLAPSED_PHOTO_PLACEHOLDER &&
+                it != MmsRetrievedContent.MMS_PLACEHOLDER
+        }
+        when {
+            path != null -> {
+                messages.upsert(
+                    row.copy(
+                        body = caption ?: MmsRetrievedContent.COLLAPSED_PHOTO_PLACEHOLDER,
+                        contentLocation = null,
+                        mediaPath = path,
+                    )
+                )
+                return true
+            }
+            caption != null -> {
+                messages.upsert(
+                    row.copy(
+                        body = caption,
+                        contentLocation = null,
+                    )
+                )
+                return true
+            }
+            parsed.body == MmsRetrievedContent.PHOTO_PLACEHOLDER -> {
+                // Image was advertised but not saved. Keep the row + location.
+                return false
+            }
+            else -> {
+                messages.deleteById(messageId)
+                return true
+            }
+        }
+    }
+
+    /** Writes retrieved image bytes under `filesDir/mms/` and returns the path. */
+    fun saveRetrievedImage(
+        context: Context,
+        messageId: Long,
+        bytes: ByteArray,
+        mime: String,
+    ): String? = try {
+        val dir = File(context.filesDir, "mms")
+        if (!dir.exists()) dir.mkdirs()
+        val ext = when {
+            mime.contains("png") -> "png"
+            mime.contains("gif") -> "gif"
+            mime.contains("webp") -> "webp"
+            else -> "jpg"
+        }
+        val file = File(dir, "$messageId.$ext")
+        file.writeBytes(bytes)
+        file.absolutePath
+    } catch (_: Exception) {
+        null
     }
 }
 
@@ -89,7 +187,9 @@ internal object MmsDownloadWaiters {
 /** Completes the waiter for one `downloadMultimediaMessage` request. */
 class MmsDownloadedReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        val requestId = intent.getIntExtra(EXTRA_REQUEST_ID, -1)
+        val requestId = intent.getIntExtra(EXTRA_REQUEST_ID, -1).takeIf { it >= 0 }
+            ?: intent.data?.lastPathSegment?.toIntOrNull()
+            ?: -1
         val ok = resultCode == Activity.RESULT_OK
         MmsDownloadWaiters.complete(requestId, ok)
     }
@@ -131,12 +231,21 @@ class MmsContentFetcher(
             file.delete()
             return null
         }
-        val granted = try {
+        MmsUriGrants.grantWrite(context, dest)
+        val signaled = try {
             download(context, locationUrl, dest)
-        } finally {
-            // Keep the file until we read it; revoke grants after.
+        } catch (_: Exception) {
+            false
         }
-        val bytes = if (granted) readBytes(context, dest) else null
+        val bytes = when {
+            file.length() > 0L -> try {
+                file.readBytes()
+            } catch (_: Exception) {
+                null
+            }
+            signaled -> readBytes(context, dest)
+            else -> null
+        }
         file.delete()
         return bytes
     }
@@ -162,22 +271,19 @@ class MmsContentFetcher(
                 requestId,
                 Intent(context, MmsDownloadedReceiver::class.java)
                     .setAction(MmsDownloadedReceiver.ACTION)
+                    .setData(Uri.parse("txxt-mms://download/$requestId"))
                     .putExtra(MmsDownloadedReceiver.EXTRA_REQUEST_ID, requestId),
                 flags,
             )
-            val grant = Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
-                Intent.FLAG_GRANT_READ_URI_PERMISSION
-            listOf("com.android.phone", "com.android.mms", "com.android.telephony").forEach { pkg ->
-                try {
-                    context.grantUriPermission(pkg, dest, grant)
-                } catch (_: SecurityException) {
-                    // Package may be absent on this device.
-                }
+            MmsUriGrants.grantWrite(context, dest)
+            return try {
+                SendPipeline.resolveSmsManager(context)
+                    .downloadMultimediaMessage(context, locationUrl, dest, null, pending)
+                withTimeoutOrNull(DOWNLOAD_TIMEOUT_MS) { waiter.await() } ?: false
+            } catch (_: Exception) {
+                MmsDownloadWaiters.complete(requestId, false)
+                false
             }
-            SendPipeline.resolveSmsManager(context)
-                .downloadMultimediaMessage(context, locationUrl, dest, null, pending)
-            val ok = withTimeoutOrNull(DOWNLOAD_TIMEOUT_MS) { waiter.await() } ?: false
-            return ok
         }
     }
 }

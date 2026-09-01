@@ -2,6 +2,8 @@ package com.piercingxx.txxt.service
 
 import com.piercingxx.txxt.ui.LockScreenPrivacy
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -62,5 +64,27 @@ class NotificationPrefsTest {
     fun `absent or unknown alert styles fall back to the sound channel`() {
         assertEquals(CHANNEL_ID, NotificationPrefs.channelIdFor(null))
         assertEquals(CHANNEL_ID, NotificationPrefs.channelIdFor("garbage"))
+    }
+
+    @Test
+    fun `sound channel generation mints txxt_messages_vN`() {
+        assertEquals("txxt_messages_v3", NotificationPrefs.soundChannelId(3))
+        assertEquals("txxt_messages_v4", NotificationPrefs.soundChannelId(4))
+        assertEquals(
+            "txxt_messages_v4",
+            NotificationPrefs.channelIdFor(
+                com.piercingxx.txxt.ui.AlertStyle.SOUND.name,
+                generation = 4,
+            ),
+        )
+    }
+
+    @Test
+    fun `retired sound channels are v1 and other vN ids, never vibrate or silent`() {
+        assertTrue(NotificationPrefs.isRetiredSoundChannel("txxt_messages", CHANNEL_ID))
+        assertTrue(NotificationPrefs.isRetiredSoundChannel("txxt_messages_v2", CHANNEL_ID))
+        assertFalse(NotificationPrefs.isRetiredSoundChannel(CHANNEL_ID, CHANNEL_ID))
+        assertFalse(NotificationPrefs.isRetiredSoundChannel(CHANNEL_ID_VIBRATE, CHANNEL_ID))
+        assertFalse(NotificationPrefs.isRetiredSoundChannel(CHANNEL_ID_SILENT, CHANNEL_ID))
     }
 }

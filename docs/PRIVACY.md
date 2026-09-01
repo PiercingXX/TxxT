@@ -21,11 +21,11 @@ not explicitly turn on.
 | Read receipts | **OFF** | Not sent, not rendered. |
 | Typing indicators | **OFF** | Not sent, not rendered. |
 | Delivery reports | **OFF** | No `SMS_DELIVERY_REPORT` / read-report requests. |
-| MMS "smart" features | **OFF** | No auto-download, no read/typing extensions, no delivery pings. |
+| MMS "smart" features | **OFF** | No read/typing extensions, no delivery pings. Photos fetch on arrival. |
 | RCS / Jibe | **OFF / excluded** | RCS is the vector for read receipts + typing indicators. Already recommended to skip (FEATURES.md Q5). Confirmed: **excluded**. |
 | Notification bubbles / chat-heads | **OFF / never** | See §2. |
 | Notification content preview | **OFF** | See §3. |
-| MMS auto-download | **OFF** | See §4. |
+| MMS auto-download | **photos only** | Voice MMS is still dropped. See §8.1. |
 
 **Protocol reality (be honest in the build):** plain SMS/MMS has **no** read
 receipts or typing indicators at the protocol level — those are RCS/iMessage
@@ -36,14 +36,10 @@ load-bearing decision is the RCS exclusion, not per-message toggles.
 
 ### Channels and the version suffix
 
-TxxT ships its own notification sound — `app/src/main/res/raw/txxt.wav` on
-channel `txxt_messages_v2` — alongside vibrate-only and silent channels.
-
-The `_v2` is not decoration. Android freezes a notification channel's sound at
-creation and refuses to change it afterward, so shipping a new tone means
-**minting a successor channel id and deleting the predecessor** — never editing
-one in place, never reusing a retired id. Every future tone change bumps the
-version again. The suffix is an append-only counter, not an app version.
+TxxT's sound channel (`txxt_messages_v3`) uses the **phone's default
+notification sound**. Settings → Notification sound opens the system ringtone
+picker; a custom pick mints `txxt_messages_vN` because Android freezes a
+channel's sound at creation. Vibrate-only and silent channels sit alongside.
 
 ---
 
@@ -161,11 +157,11 @@ TxxT's background theme follows the **xx-launcher**'s active theme automatically
 Beyond the operator's explicit list, these are worth adopting. Each is a
 default-off or default-safe posture that costs little and leaks nothing.
 
-1. **MMS auto-download OFF.** Remote MMS content is fetched only on explicit
-   tap (the tap path calls `downloadMultimediaMessage` and stores a
-   text-first body). Prevents IP disclosure, tracking-pixel fetches, and
-   surprise data usage. Holding the SMS role without that retrieve would
-   swallow carrier MMS for the whole device.
+1. **MMS photo fetch on arrival.** Inbound photos are retrieved when the
+   notification-ind lands, then shown as `[Photo]` until the operator taps
+   the row. Voice MMS is still dropped unstored. Empty/unknown PDUs are not
+   invented as `[MMS]`. Holding the SMS role without a retrieve would swallow
+   carrier MMS for the whole device.
 2. **No link previews.** Never fetch a URL to render a preview — resolving it
    tells whoever hosts the link that the message was received and read. Links
    are plain text; tap to open in a browser.

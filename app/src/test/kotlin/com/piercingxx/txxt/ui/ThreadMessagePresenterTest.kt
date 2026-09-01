@@ -69,6 +69,16 @@ class ThreadMessagePresenterTest {
     }
 
     @Test
+    fun `an inbound Photo marker is shown as Photo until tap`() {
+        val row = present(
+            message(id = 10L, direction = MessageDirection.INCOMING, body = "[Photo]")
+                .copy(transport = MessageTransport.MMS, mediaPath = "/tmp/p.jpg"),
+        )
+        assertEquals("[Photo]", row.body)
+        assertEquals("/tmp/p.jpg", row.mediaPath)
+    }
+
+    @Test
     fun `an inbound MMS with an empty body is not invented as a placeholder`() {
         val row = present(
             message(id = 8L, direction = MessageDirection.INCOMING, body = "")

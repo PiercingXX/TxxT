@@ -4,12 +4,10 @@ package com.piercingxx.txxt.core
  * What a retrieved MMS (m-retrieve-conf) contains, for an SMS-only inbox that
  * still has to honour the default-handler retrieve contract.
  *
- * TxxT does not send photos and does not render a gallery. It **does** fetch
- * the PDU when the operator taps an inbound MMS, so holding `ROLE_SMS` does
- * not swallow carrier mail. The summary is text-first: a text part if one
- * exists, `[photo]` for image-only. Anything else (including a parse that
- * cannot prove text or an image) is dropped unstored — never a fake `[MMS]`
- * line. Audio-only retrieve is dropped (PRIVACY.md §5).
+ * Inbound photos are fetched on arrival. The thread shows `[Photo]` until the
+ * operator taps the row; then the image itself is shown. Audio-only retrieve
+ * is dropped (PRIVACY.md §5). Anything that cannot prove text or an image is
+ * dropped unstored — never a fake `[MMS]` line.
  */
 data class MmsRetrievedContent(
     val body: String,
@@ -18,7 +16,12 @@ data class MmsRetrievedContent(
     val imageMime: String? = null,
 ) {
     companion object {
+        /** Revealed inbound photo, and the outgoing photo-only marker. */
         const val PHOTO_PLACEHOLDER = "[photo]"
+
+        /** Inbound photo that has been fetched but not yet opened. */
+        const val COLLAPSED_PHOTO_PLACEHOLDER = "[Photo]"
+
         const val MMS_PLACEHOLDER = "[MMS]"
     }
 }
@@ -55,13 +58,14 @@ object MmsRetrievedContentParser {
         )
     }
 
-    /** JPEG SOI…EOI or PNG signature…IEND, if present in the PDU. */
+    /** JPEG / PNG / GIF / WebP payload, if present in the PDU. */
     internal fun extractImage(pdu: ByteArray): Pair<String, ByteArray>? {
         val jpeg = indexOf(pdu, byteArrayOf(0xFF.toByte(), 0xD8.toByte()))
         if (jpeg >= 0) {
             val eoi = lastIndexOf(pdu, byteArrayOf(0xFF.toByte(), 0xD9.toByte()))
-            if (eoi > jpeg) {
-                return "image/jpeg" to pdu.copyOfRange(jpeg, eoi + 2)
+            val end = if (eoi > jpeg) eoi + 2 else pdu.size
+            if (end > jpeg + 2) {
+                return "image/jpeg" to pdu.copyOfRange(jpeg, end)
             }
         }
         val pngSig = byteArrayOf(
@@ -70,8 +74,26 @@ object MmsRetrievedContentParser {
         val png = indexOf(pdu, pngSig)
         if (png >= 0) {
             val iend = lastIndexOf(pdu, "IEND".toByteArray(Charsets.ISO_8859_1))
-            if (iend > png) {
-                return "image/png" to pdu.copyOfRange(png, (iend + 8).coerceAtMost(pdu.size))
+            val end = if (iend > png) (iend + 8).coerceAtMost(pdu.size) else pdu.size
+            if (end > png) {
+                return "image/png" to pdu.copyOfRange(png, end)
+            }
+        }
+        val gif89 = indexOf(pdu, "GIF89a".toByteArray(Charsets.ISO_8859_1))
+        val gif87 = indexOf(pdu, "GIF87a".toByteArray(Charsets.ISO_8859_1))
+        val gif = when {
+            gif89 >= 0 && gif87 >= 0 -> minOf(gif89, gif87)
+            gif89 >= 0 -> gif89
+            else -> gif87
+        }
+        if (gif >= 0) {
+            return "image/gif" to pdu.copyOfRange(gif, pdu.size)
+        }
+        val riff = indexOf(pdu, "RIFF".toByteArray(Charsets.ISO_8859_1))
+        if (riff >= 0 && riff + 12 <= pdu.size) {
+            val tag = pdu.copyOfRange(riff + 8, riff + 12)
+            if (tag.contentEquals("WEBP".toByteArray(Charsets.ISO_8859_1))) {
+                return "image/webp" to pdu.copyOfRange(riff, pdu.size)
             }
         }
         return null

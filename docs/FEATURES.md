@@ -4,7 +4,7 @@
 
 ### Core messaging
 - **SMS, 1:1**, plus **photo send/receive** over MMS (scrubbed on send,
-  retrieved on tap). Group MMS still out.
+  fetched on arrival, shown as `[Photo]` until tapped). Group MMS still out.
 - Conversation list: pin, mute, archive, swipe-to-delete (confirmed), call,
   copy number, block, star. Search the list and search inside a thread.
 - Emoji in the compose bar (palette) and in message bodies (system fallback).
@@ -21,12 +21,11 @@
 - RCS **excluded** (the vector for receipts + typing indicators)
 - **No message bubbles in the thread UI** (text-first lines) and **no
   notification bubbles / chat-heads** — ever
-- **Metadata scrubbed** from every image/video that would be sent (fail-closed
-  for formats we cannot strip). Photo send is not wired; the scrubber is still
-  the only media path if one is added later.
+- **Metadata scrubbed** from every image/video that is sent (fail-closed
+  for formats we cannot strip).
 - **Starred contacts** — call-through that bypasses every suppression
 - Notification content redacted by default (sender name only)
-- MMS auto-download off (fetch on explicit tap)
+- MMS photos fetch on arrival and show as `[Photo]` until tapped
 - Full posture: `PRIVACY.md`
 
 ### Backup

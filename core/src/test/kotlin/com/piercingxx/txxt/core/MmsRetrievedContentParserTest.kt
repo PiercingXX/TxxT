@@ -1,5 +1,6 @@
 package com.piercingxx.txxt.core
 
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -38,5 +39,22 @@ class MmsRetrievedContentParserTest {
         val parsed = MmsRetrievedContentParser.parse(pdu)
         assertTrue(parsed.dropUnstored)
         assertEquals("", parsed.body)
+    }
+
+    @Test
+    fun `a JPEG without an EOI is still extracted`() {
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0x01, 0x02, 0x03)
+        val parsed = MmsRetrievedContentParser.parse("image/jpeg\u0000".toByteArray() + jpeg)
+        assertFalse(parsed.dropUnstored)
+        assertEquals("image/jpeg", parsed.imageMime)
+        assertArrayEquals(jpeg, parsed.imageBytes)
+    }
+
+    @Test
+    fun `a GIF payload is extracted`() {
+        val gif = "GIF89a".toByteArray(Charsets.ISO_8859_1) + byteArrayOf(0x00, 0x3B)
+        val parsed = MmsRetrievedContentParser.parse(gif)
+        assertEquals("image/gif", parsed.imageMime)
+        assertArrayEquals(gif, parsed.imageBytes)
     }
 }

@@ -75,6 +75,26 @@ class SettingsWiringTest {
     // ---- SettingsActivity wiring ----
 
     @Test
+    fun `SettingsActivity offers a notification-sound picker`() {
+        val layout = sequenceOf(
+            File("src/main/res/layout/activity_settings.xml"),
+            File("app/src/main/res/layout/activity_settings.xml"),
+        ).first { it.exists() }.readText()
+        assertTrue(
+            "settings layout must expose a notification sound button",
+            layout.contains("@+id/notification_sound_button"),
+        )
+        assertTrue(
+            "SettingsActivity must launch the system ringtone picker",
+            settingsActivity.contains("ACTION_RINGTONE_PICKER"),
+        )
+        assertTrue(
+            "a picked ringtone must bump the sound channel via NotificationPrefs.setSound",
+            settingsActivity.contains("NotificationPrefs.setSound"),
+        )
+    }
+
+    @Test
     fun `SettingsActivity persists the store through SharedPreferences`() {
         assertFalse(
             "FLAG_SECURE blacks screenshots; the operator asked to capture the app",

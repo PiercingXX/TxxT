@@ -175,4 +175,28 @@ class ConversationListLoaderTest {
         assertEquals("hello", loaded.single().latestMessage?.body)
         assertEquals(1, loaded.single().unreadCount)
     }
+
+    @Test
+    fun `inbound Photo rows stay on the conversation`() = runBlocking {
+        val loaded = loaderOver(
+            conversations = listOf(conversation(1L)),
+            messages = listOf(
+                MessageEntity(
+                    id = 20L,
+                    conversationId = 1L,
+                    direction = "INCOMING",
+                    transport = "MMS",
+                    body = "[Photo]",
+                    timestampMillis = 4_000L,
+                    senderAddress = "+15550001111",
+                    isRead = false,
+                    sent = true,
+                    mediaPath = "/tmp/20.jpg",
+                ),
+            ),
+        ).conversations().first()
+
+        assertEquals(listOf(20L), loaded.single().messages.map { it.id })
+        assertEquals("[Photo]", loaded.single().latestMessage?.body)
+    }
 }

@@ -101,18 +101,27 @@ class MmsDownloadRetryTest {
     }
 
     @Test
-    fun `a failed download stays FAILED on a later call`() {
+    fun `a later tap retries after FAILED`() {
         var calls = 0
-        val r = retry(maxAttempts = 2, performDownload = { calls++; false })
+        val r = retry(maxAttempts = 2, performDownload = { calls++; calls >= 3 })
 
         val first = runBlocking { r.download(7L) }
-        val callsAfterFirst = calls
         val second = runBlocking { r.download(7L) }
 
         assertEquals(MmsDownloadState.FAILED, first)
-        assertEquals(MmsDownloadState.FAILED, second)
-        // The terminal FAILED state is respected: the second call attempts nothing.
-        assertEquals(callsAfterFirst, calls)
+        assertEquals(MmsDownloadState.DOWNLOADED, second)
+        assertEquals(3, calls)
+    }
+
+    @Test
+    fun `a throwing download is treated as a failed attempt`() {
+        var calls = 0
+        val r = retry(maxAttempts = 2, performDownload = { calls++; error("boom") })
+
+        val state = runBlocking { r.download(7L) }
+
+        assertEquals(MmsDownloadState.FAILED, state)
+        assertEquals(2, calls)
     }
 
     @Test

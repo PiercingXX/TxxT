@@ -270,6 +270,12 @@
             </intent-filter>
         </receiver>
 
+        <!-- Holds the process while SmsManager.downloadMultimediaMessage
+             writes the PDU. Started from MmsDeliverReceiver.onReceive. -->
+        <service
+            android:name=".service.MmsRetrieveService"
+            android:exported="false" />
+
         <service
             android:name=".service.RespondViaMessageService"
             android:exported="true"

@@ -214,19 +214,22 @@ class NotificationServiceTest {
      * strand users on a dead channel) a test failure, not a field bug.
      */
     @Test
-    fun `sound channel id is the versioned successor of the retired v1 id`() {
-        assertEquals("txxt_messages_v2", CHANNEL_ID)
+    fun `sound channel id is the versioned successor of the retired ids`() {
+        assertEquals("txxt_messages_v3", CHANNEL_ID)
         assertEquals("txxt_messages", LEGACY_CHANNEL_ID_SOUND)
+        assertEquals("txxt_messages_v2", LEGACY_CHANNEL_ID_SOUND_V2)
     }
 
     @Test
-    fun `retired v1 channel id is not any live channel id`() {
-        // delete(LEGACY) at creation time must never delete a channel we still
-        // post on — the retired id has to be disjoint from all three live ids.
+    fun `retired sound channel ids are not any live channel id`() {
         val live = setOf(CHANNEL_ID, CHANNEL_ID_VIBRATE, CHANNEL_ID_SILENT)
         assertFalse(
-            "retired id must not collide with a live channel",
+            "retired v1 must not collide with a live channel",
             LEGACY_CHANNEL_ID_SOUND in live,
+        )
+        assertFalse(
+            "retired v2 must not collide with a live channel",
+            LEGACY_CHANNEL_ID_SOUND_V2 in live,
         )
     }
 

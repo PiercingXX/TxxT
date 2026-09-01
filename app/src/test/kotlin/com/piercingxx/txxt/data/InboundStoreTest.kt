@@ -293,7 +293,7 @@ class InboundStoreTest {
     // ---- persistInboundMmsMetadata ----
 
     @Test
-    fun `persistInboundMmsMetadata inserts an MMS row with an empty body`() = runBlocking {
+    fun `persistInboundMmsMetadata inserts an MMS row marked Photo`() = runBlocking {
         val conversations = FakeConversationDao()
         val messages = FakeMessageDao()
         val date = 1_700_000_000_000L
@@ -307,9 +307,7 @@ class InboundStoreTest {
         assertEquals(conversations.rows.keys.single(), stored.conversationId)
         assertEquals(MessageDirection.INCOMING.name, stored.direction)
         assertEquals(MessageTransport.MMS.name, stored.transport)
-        // Content is NEVER auto-downloaded (docs/PRIVACY.md §8.1): the delivery
-        // path stores metadata only.
-        assertEquals("", stored.body)
+        assertEquals("[Photo]", stored.body)
         assertEquals(date, stored.timestampMillis)
         assertEquals("+15559998888", stored.senderAddress)
         assertEquals(false, stored.isRead)

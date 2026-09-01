@@ -138,6 +138,14 @@ class ThreadWiringTest {
             threadActivity.contains("dismissShadeNotification()"),
         )
         assertTrue(
+            "tapping a collapsed inbound photo must reveal it",
+            threadActivity.contains("revealInboundPhoto"),
+        )
+        assertTrue(
+            "tapping a retrieved photo must launch the system viewer",
+            threadActivity.contains("ACTION_VIEW") && threadActivity.contains("launchPhoto"),
+        )
+        assertTrue(
             "the open thread must register as viewed so a follow-up SMS stays silent",
             threadActivity.contains("ViewedThread.open("),
         )

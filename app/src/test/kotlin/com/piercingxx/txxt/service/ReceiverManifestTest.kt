@@ -60,4 +60,29 @@ class ReceiverManifestTest {
     fun `the declared MMS receiver name resolves to a class`() {
         assertClassResolves("com.piercingxx.txxt.service.MmsReceiver")
     }
+
+    @Test
+    fun `the manifest declares the MMS retrieve service`() {
+        assertTrue(
+            "AndroidManifest.xml must declare MmsRetrieveService so auto-fetch keeps the process alive",
+            manifestText.contains(".service.MmsRetrieveService"),
+        )
+        assertClassResolves("com.piercingxx.txxt.service.MmsRetrieveService")
+    }
+
+    @Test
+    fun `the FileProvider exposes filesDir mms for launching retrieved photos`() {
+        val paths = sequenceOf(
+            File("src/main/res/xml/mms_file_paths.xml"),
+            File("app/src/main/res/xml/mms_file_paths.xml"),
+        ).first { it.exists() }.readText()
+        assertTrue(
+            "retrieved photos live under filesDir/mms and must be FileProvider-visible",
+            paths.contains("files-path") && paths.contains("mms/"),
+        )
+        assertTrue(
+            "outgoing staged photos live under cacheDir/attachments",
+            paths.contains("attachments/"),
+        )
+    }
 }

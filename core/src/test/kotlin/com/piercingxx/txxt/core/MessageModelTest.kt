@@ -110,10 +110,23 @@ class MessageModelTest {
         val empty = message(id = 1L, transport = MessageTransport.MMS, body = "")
         val placeholder = message(id = 2L, transport = MessageTransport.MMS, body = "[MMS]")
         val caption = message(id = 3L, transport = MessageTransport.MMS, body = "see attached")
+        val photo = message(id = 5L, transport = MessageTransport.MMS, body = "[Photo]")
         val sms = message(id = 4L, body = "")
         assertTrue(empty.isUnshownInboundMms)
         assertTrue(placeholder.isUnshownInboundMms)
         assertFalse(caption.isUnshownInboundMms)
+        assertFalse(photo.isUnshownInboundMms)
         assertFalse(sms.isUnshownInboundMms)
+    }
+
+    @Test
+    fun `a fetched inbound photo stays collapsed until reveal`() {
+        val collapsed = message(id = 6L, transport = MessageTransport.MMS, body = "[Photo]")
+            .copy(mediaPath = "/tmp/6.jpg")
+        assertTrue(collapsed.isCollapsedInboundPhoto)
+        val opened = collapsed.revealInboundPhoto()
+        assertEquals("[photo]", opened.body)
+        assertFalse(opened.isCollapsedInboundPhoto)
+        assertEquals("/tmp/6.jpg", opened.mediaPath)
     }
 }

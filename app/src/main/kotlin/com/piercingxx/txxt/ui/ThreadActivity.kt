@@ -16,14 +16,15 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.FileProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.piercingxx.txxt.R
 import com.piercingxx.txxt.contacts.ContactNameResolver
 import com.piercingxx.txxt.data.OutboundStore
 import com.piercingxx.txxt.data.TxxTDatabase
+import com.piercingxx.txxt.core.MmsRetrievedContent
 import com.piercingxx.txxt.core.ViewedThread
-import com.piercingxx.txxt.service.MmsContentFetcher
 import com.piercingxx.txxt.service.MmsDownloadRetry
 import com.piercingxx.txxt.service.MmsDownloadState
 import com.piercingxx.txxt.service.MmsRetrieve
@@ -355,25 +356,13 @@ class ThreadActivity : Activity() {
             .show()
     }
 
-    private val mmsFetcher = MmsContentFetcher()
     private val mmsRetry = MmsDownloadRetry(
         performDownload = { messageId ->
-            val row = database.messageDao().getById(messageId) ?: return@MmsDownloadRetry false
-            val location = row.contentLocation ?: return@MmsDownloadRetry false
-            val pdu = mmsFetcher.fetch(this@ThreadActivity, location) ?: return@MmsDownloadRetry false
-            MmsRetrieve.applyPdu(
-                database.messageDao(),
-                messageId,
-                pdu,
-                saveImage = { bytes, mime ->
-                    val dir = File(filesDir, "mms")
-                    if (!dir.exists()) dir.mkdirs()
-                    val ext = if (mime.contains("png")) "png" else "jpg"
-                    val file = File(dir, "$messageId.$ext")
-                    file.writeBytes(bytes)
-                    file.absolutePath
-                },
-            )
+            try {
+                MmsRetrieve.retrieveAndStore(this@ThreadActivity, messageId)
+            } catch (_: Exception) {
+                false
+            }
         },
         onStateChange = { _, state ->
             if (state == MmsDownloadState.FAILED) {
@@ -385,17 +374,74 @@ class ThreadActivity : Activity() {
     )
 
     /**
-     * Tap: retrieve a pending inbound MMS, otherwise read the row aloud.
+     * Tap: download a pending photo, reveal a collapsed `[Photo]`, open the
+     * image, otherwise read the row aloud.
      */
     private fun onMessageTap(message: com.piercingxx.txxt.core.Message) {
-        if (MmsRetrieve.needsRetrieve(message)) {
-            Toast.makeText(this, "Downloading…", Toast.LENGTH_SHORT).show()
+        if (message.isCollapsedInboundPhoto) {
             scope.launch(Dispatchers.IO) {
-                mmsRetry.download(message.id)
+                revealInboundPhoto(message.id)
+                launchPhoto(message.mediaPath)
             }
             return
         }
+        if (MmsRetrieve.needsRetrieve(message)) {
+            Toast.makeText(this, "Downloading…", Toast.LENGTH_SHORT).show()
+            scope.launch(Dispatchers.IO) {
+                val state = mmsRetry.download(message.id)
+                if (state != MmsDownloadState.DOWNLOADED) return@launch
+                revealInboundPhoto(message.id)
+                val path = database.messageDao().getById(message.id)?.mediaPath
+                launchPhoto(path)
+            }
+            return
+        }
+        if (!message.mediaPath.isNullOrBlank()) {
+            launchPhoto(message.mediaPath)
+            return
+        }
         readMessageAloud(message)
+    }
+
+    private suspend fun revealInboundPhoto(messageId: Long) {
+        val row = database.messageDao().getById(messageId) ?: return
+        if (row.mediaPath.isNullOrBlank()) return
+        if (row.body.trim() != MmsRetrievedContent.COLLAPSED_PHOTO_PLACEHOLDER) return
+        database.messageDao().upsert(
+            row.copy(body = MmsRetrievedContent.PHOTO_PLACEHOLDER),
+        )
+    }
+
+    /** Opens a retrieved photo in the system viewer. */
+    private fun launchPhoto(path: String?) {
+        if (path.isNullOrBlank()) return
+        val file = File(path)
+        if (!file.isFile) {
+            runOnUiThread {
+                Toast.makeText(this, "Photo could not be opened", Toast.LENGTH_LONG).show()
+            }
+            return
+        }
+        runOnUiThread {
+            try {
+                val uri = FileProvider.getUriForFile(
+                    this,
+                    "${packageName}.mms",
+                    file,
+                )
+                startActivity(
+                    Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(uri, "image/*")
+                        clipData = android.content.ClipData.newRawUri("photo", uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    },
+                )
+            } catch (_: ActivityNotFoundException) {
+                Toast.makeText(this, "Photo could not be opened", Toast.LENGTH_LONG).show()
+            } catch (_: Exception) {
+                Toast.makeText(this, "Photo could not be opened", Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     /**

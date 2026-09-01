@@ -2,6 +2,7 @@ package com.piercingxx.txxt.data
 
 import com.piercingxx.txxt.core.MessageDirection
 import com.piercingxx.txxt.core.MessageTransport
+import com.piercingxx.txxt.core.MmsRetrievedContent
 import com.piercingxx.txxt.core.PhoneNumbers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -155,13 +156,9 @@ object InboundStore {
     }
 
     /**
-     * Persists inbound MMS **metadata only** (transport MMS, empty body) for
-     * the sender's (find-or-created) conversation and returns the message id.
-     *
-     * The body is never populated here: MMS auto-download stays off
-     * (docs/PRIVACY.md §8.1) — remote content is fetched only on explicit tap
-     * later, never by the delivery path. The row is what makes the thread list
-     * show that something arrived before any content exists on the device.
+     * Persists an inbound MMS row for the sender's conversation and returns
+     * the message id. The body starts as `[Photo]`; the deliver receiver then
+     * fetches the PDU. A photo stays collapsed until the operator taps it.
      */
     suspend fun persistInboundMmsMetadata(
         conversations: ConversationDao,
@@ -179,7 +176,7 @@ object InboundStore {
             conversationId = conversationId,
             direction = MessageDirection.INCOMING.name,
             transport = MessageTransport.MMS.name,
-            body = "",
+            body = MmsRetrievedContent.COLLAPSED_PHOTO_PLACEHOLDER,
             timestampMillis = dateMillis,
             senderAddress = address,
             isRead = false,

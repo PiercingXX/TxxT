@@ -1,9 +1,15 @@
 package com.piercingxx.txxt.ui
 
 import android.app.Activity
+import android.app.NotificationManager
+import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
+import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
@@ -11,6 +17,8 @@ import android.widget.Spinner
 import android.widget.Switch
 import android.widget.Toast
 import com.piercingxx.txxt.R
+import com.piercingxx.txxt.service.NotificationPrefs
+import com.piercingxx.txxt.service.ensureMessageChannels
 import com.piercingxx.txxt.theme.SharedPreferencesThemeKeyValueStore
 import com.piercingxx.txxt.theme.ThemeController
 import com.piercingxx.txxt.theme.ThemeStore
@@ -60,6 +68,8 @@ class SettingsActivity : Activity() {
 
         /** Name (inside `filesDir`) of the settings backup file. */
         const val BACKUP_FILE_NAME = "txxt-settings-backup.txt"
+
+        private const val REQUEST_NOTIFICATION_SOUND = 71
     }
 
     private lateinit var prefs: SharedPreferences
@@ -186,6 +196,9 @@ class SettingsActivity : Activity() {
             persist(currentStore())
         }
 
+        findViewById<Button>(R.id.notification_sound_button).setOnClickListener {
+            pickNotificationSound()
+        }
         findViewById<Button>(R.id.backup_button).setOnClickListener { runBackup() }
         findViewById<Button>(R.id.restore_button).setOnClickListener { runRestore() }
         findViewById<Button>(R.id.blocking_button).setOnClickListener {
@@ -324,6 +337,50 @@ class SettingsActivity : Activity() {
         loadBlockingStore().loadAndApply()
 
         Toast.makeText(this, "Restored $restoredKeys keys", Toast.LENGTH_SHORT).show()
+    }
+
+    /**
+     * Opens the system ringtone picker so the operator can choose TxxT's
+     * notification sound, including the phone default. Android freezes a
+     * channel's sound at creation, so a pick bumps the channel generation.
+     */
+    private fun pickNotificationSound() {
+        val defaultUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+        val existing = NotificationPrefs.soundUri(this)
+        val picker = Intent(RingtoneManager.ACTION_RINGTONE_PICKER)
+            .putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_NOTIFICATION)
+            .putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "Notification sound")
+            .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+            .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+            .putExtra(RingtoneManager.EXTRA_RINGTONE_DEFAULT_URI, defaultUri)
+            .putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, existing)
+        try {
+            startActivityForResult(picker, REQUEST_NOTIFICATION_SOUND)
+        } catch (_: ActivityNotFoundException) {
+            openSystemChannelSettings()
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQUEST_NOTIFICATION_SOUND || resultCode != RESULT_OK) return
+        @Suppress("DEPRECATION")
+        val uri: Uri? = data?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+        NotificationPrefs.setSound(this, uri)
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        ensureMessageChannels(this, manager)
+        Toast.makeText(this, "Notification sound updated", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun openSystemChannelSettings() {
+        val intent = Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+            .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+            .putExtra(Settings.EXTRA_CHANNEL_ID, NotificationPrefs.soundChannelId(this))
+        try {
+            startActivity(intent)
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(this, "No sound picker on this device", Toast.LENGTH_LONG).show()
+        }
     }
 
     /** Default [writeBackupText]: real file I/O into `filesDir`. */

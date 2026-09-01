@@ -97,4 +97,17 @@ class ThreadMessageLoaderTest {
 
         assertEquals(listOf(5L), messages.map { it.id })
     }
+
+    @Test
+    fun `the loader keeps inbound Photo rows`() = runBlocking {
+        val dao = mockk<MessageDao>()
+        val photo = entity(id = 6L, direction = MessageDirection.INCOMING, body = "[Photo]")
+            .copy(transport = MessageTransport.MMS.name, mediaPath = "/tmp/6.jpg")
+        every { dao.observeForConversation(any()) } returns flowOf(listOf(photo))
+
+        val messages = ThreadMessageLoader(dao, conversationId = 7L).messages().toList().single()
+
+        assertEquals(listOf(6L), messages.map { it.id })
+        assertEquals("[Photo]", messages.single().body)
+    }
 }

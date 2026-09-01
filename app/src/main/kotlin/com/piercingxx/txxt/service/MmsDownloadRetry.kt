@@ -1,5 +1,6 @@
 package com.piercingxx.txxt.service
 
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -101,27 +102,41 @@ class MmsDownloadRetry(
         val current = state(messageId)
         if (
             current == MmsDownloadState.DOWNLOADING ||
-            current == MmsDownloadState.DOWNLOADED ||
-            current == MmsDownloadState.FAILED
+            current == MmsDownloadState.DOWNLOADED
         ) {
             return@withLock current
+        }
+        if (current == MmsDownloadState.FAILED) {
+            attempts.remove(messageId)
         }
         setState(messageId, MmsDownloadState.DOWNLOADING)
 
         var attempt = attempts[messageId] ?: 0
-        while (attempt < maxAttempts) {
-            attempt += 1
-            attempts[messageId] = attempt
-            if (performDownload(messageId)) {
-                setState(messageId, MmsDownloadState.DOWNLOADED)
-                return@withLock MmsDownloadState.DOWNLOADED
+        try {
+            while (attempt < maxAttempts) {
+                attempt += 1
+                attempts[messageId] = attempt
+                val ok = try {
+                    performDownload(messageId)
+                } catch (t: Throwable) {
+                    if (t is CancellationException) throw t
+                    false
+                }
+                if (ok) {
+                    setState(messageId, MmsDownloadState.DOWNLOADED)
+                    return@withLock MmsDownloadState.DOWNLOADED
+                }
+                if (attempt < maxAttempts) {
+                    wait(retryDelayMillis(attempt))
+                }
             }
-            if (attempt < maxAttempts) {
-                wait(retryDelayMillis(attempt))
-            }
+            setState(messageId, MmsDownloadState.FAILED)
+            MmsDownloadState.FAILED
+        } catch (t: Throwable) {
+            setState(messageId, MmsDownloadState.FAILED)
+            if (t is CancellationException) throw t
+            MmsDownloadState.FAILED
         }
-        setState(messageId, MmsDownloadState.FAILED)
-        MmsDownloadState.FAILED
     }
 
     private fun setState(messageId: Long, state: MmsDownloadState) {

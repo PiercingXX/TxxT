@@ -76,8 +76,8 @@ object ThreadMessagePresenter {
      *
      * Deliberately narrow. It is scoped to OUTGOING because that is the row
      * this app creates and therefore the only one whose media it knows to be a
-     * photo. Inbound MMS is not invented here: empty inbound MMS is not a
-     * message (see [Message.isUnshownInboundMms]) and is dropped before bind.
+     * photo. Inbound photos arrive as `[Photo]` from the retrieve path and pass
+     * through until the operator taps to reveal the image.
      */
     private fun bodyFor(message: Message): String =
         when {
