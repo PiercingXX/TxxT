@@ -83,7 +83,7 @@ object PhotoAttachment {
      * treated as no text either way.
      */
     fun plan(body: String, hasPhoto: Boolean): List<SendStep> = when {
-        !hasPhoto && body.isBlank() -> emptyList()
+        !hasPhoto && body.isBlank() -> listOf()
         !hasPhoto -> listOf(SendStep.SMS_TEXT)
         body.isBlank() -> listOf(SendStep.MMS_PHOTO)
         else -> listOf(SendStep.SMS_TEXT, SendStep.MMS_PHOTO)
