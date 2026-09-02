@@ -33,9 +33,9 @@ class ThemeStoreTest {
     }
 
     @Test
-    fun `auto sync defaults to off`() {
+    fun `auto sync defaults to on`() {
         val store = ThemeStore(InMemoryKeyValueStore())
-        assertFalse(store.autoSyncEnabled)
+        assertTrue(store.autoSyncEnabled)
     }
 
     // ---- Persistence round-trips through the key-value store ----
@@ -105,6 +105,7 @@ class ThemeStoreTest {
     @Test
     fun `effective theme is the default when nothing is set`() {
         val store = ThemeStore(InMemoryKeyValueStore())
+        store.autoSyncEnabled = false
         assertEquals(ThemePreset.DEFAULT, store.effectiveTheme(null))
         assertEquals(ThemePreset.DEFAULT, store.effectiveTheme(ThemePreset.MIST))
     }
@@ -214,6 +215,7 @@ class ThemeStoreTest {
     @Test
     fun `effective ground is the default ground when nothing is set`() {
         val store = ThemeStore(InMemoryKeyValueStore())
+        store.autoSyncEnabled = false
         assertEquals(ThemePreset.DEFAULT.ground, store.effectiveGround(null))
         assertEquals(ThemePreset.DEFAULT.ground, store.effectiveGround(customGround(0xFFEEDDCCL)))
     }
