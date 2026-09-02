@@ -43,6 +43,7 @@ class ThemeControllerTest {
     @Test
     fun `controller ignores the launcher when auto sync is off`() {
         val controller = ThemeController(ThemeStore(InMemoryKv()))
+        controller.setAutoSync(false)
         controller.onLauncherTheme(ThemePreset.MIST)
         assertEquals(ThemePreset.DEFAULT, controller.effectiveTheme)
     }
@@ -51,7 +52,7 @@ class ThemeControllerTest {
     fun `controller defaults to the brand default ground`() {
         val controller = ThemeController(ThemeStore(InMemoryKv()))
         assertNull(controller.launcherTheme)
-        assertFalse(controller.autoSyncEnabled)
+        assertTrue(controller.autoSyncEnabled)
         assertEquals(ThemePreset.DEFAULT, controller.manualTheme)
         assertEquals(ThemePreset.DEFAULT, controller.effectiveTheme)
     }
@@ -92,6 +93,7 @@ class ThemeControllerTest {
     fun `a persisted launcher report does not apply when auto sync is off`() {
         val kv = InMemoryKv()
         val first = ThemeController(ThemeStore(kv))
+        first.setAutoSync(false)
         first.onLauncherTheme(ThemePreset.MIST)
         assertFalse(first.autoSyncEnabled)
 

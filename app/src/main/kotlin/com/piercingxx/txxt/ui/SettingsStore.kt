@@ -58,19 +58,19 @@ enum class AlertStyle {
  * member names are identical to the historical settings-local enum, so
  * `.name` serialization in existing backups/prefs round-trips unchanged.
  *
- * Defaults follow PRIVACY.md's "defaults with a spine": lock-screen privacy
- * defaults to sender-only (§3), and theme auto-sync defaults to **off** — the
- * app never starts following the launcher until the user opts in, matching the
- * rendering store's own default ([com.piercingxx.txxt.theme.ThemeStore
- * .autoSyncEnabled]). A manual in-app theme always wins once set
- * (PRIVACY.md §7 "explicit beats ambient").
+ * Defaults follow the family contract: lock-screen privacy defaults to
+ * sender-only (§3), and theme auto-sync defaults to **on** — a fresh install
+ * follows the launcher until the user opts out, matching the rendering store's
+ * own default ([com.piercingxx.txxt.theme.ThemeStore.autoSyncEnabled]). A
+ * manual in-app theme always wins once set (PRIVACY.md §7 "explicit beats
+ * ambient").
  * The store is a plain data class so it round-trips through the backup format
  * (WS12 T4) unchanged.
  */
 data class SettingsStore(
     val lockScreenPrivacy: LockScreenPrivacy = LockScreenPrivacy.SENDER_ONLY,
     val alertStyle: AlertStyle = AlertStyle.SOUND,
-    val autoSyncTheme: Boolean = false,
+    val autoSyncTheme: Boolean = true,
     val themePreset: ThemePreset = ThemePreset.DEFAULT,
     val fontMode: FontMode = FontMode.defaults(),
 ) {
