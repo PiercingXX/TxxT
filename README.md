@@ -1,7 +1,7 @@
 # TxxT
 > An SMS client whose defaults are the product.
 
-A private SMS client for Android. Holds the system SMS role on a Pixel 6
+A private SMS client for Android. Holds the system SMS role on a Pixel 9 Pro
 running GrapheneOS. Text-first, AMOLED black, Space Mono / JetBrains Mono, same
 stack as the rest of the phone suite. The features are ordinary; what makes it
 worth building is which of them ship switched off. Photos go as MMS (scrubbed
