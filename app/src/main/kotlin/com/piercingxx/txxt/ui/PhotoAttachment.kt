@@ -58,7 +58,7 @@ object PhotoAttachment {
      */
     const val REMOVE_GLYPH = "✕"
 
-    /** Shown in place of a blank body on an outgoing MMS row (see [ThreadMessagePresenter]). */
+    /** Revealed photo-only marker (same string as [com.piercingxx.txxt.core.MmsRetrievedContent.PHOTO_PLACEHOLDER]). */
     const val PHOTO_ROW_PLACEHOLDER = "[photo]"
 
     /**

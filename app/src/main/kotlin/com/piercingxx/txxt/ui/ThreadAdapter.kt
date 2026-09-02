@@ -1,7 +1,9 @@
 package com.piercingxx.txxt.ui
 
+import android.view.GestureDetector
 import android.view.Gravity
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.graphics.BitmapFactory
@@ -12,7 +14,9 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.piercingxx.txxt.R
 import com.piercingxx.txxt.core.Message
+import com.piercingxx.txxt.core.MessageTransport
 import com.piercingxx.txxt.core.MmsRetrievedContent
+import com.piercingxx.txxt.service.MmsRetrieve
 
 /**
  * RecyclerView adapter for the conversation thread (T3).
@@ -35,6 +39,11 @@ class ThreadAdapter(
     private val onMessageTap: (Message) -> Unit = {},
     /** Invoked on a long-press, so the activity can offer copy/delete. */
     private val onMessageLongPress: (Message) -> Unit = {},
+    /** Long-press on a photo: fullscreen until the finger lifts. */
+    private val onPhotoPeek: (Message) -> Unit = {},
+    private val onPhotoUnpeek: () -> Unit = {},
+    /** Double-tap on a photo: offer to save it. */
+    private val onPhotoDoubleTap: (Message) -> Unit = {},
 ) : RecyclerView.Adapter<ThreadAdapter.RowHolder>() {
 
     private val messages = mutableListOf<Message>()
@@ -73,12 +82,50 @@ class ThreadAdapter(
         // The wire-in: every rendered row goes through the presenter, so the
         // direction → alignment/emphasis mapping is the single source of truth.
         val row = ThreadMessagePresenter.present(message)
-        holder.itemView.setOnClickListener { onMessageTap(message) }
-        holder.itemView.setOnLongClickListener {
-            onMessageLongPress(message)
+        bindPhotoGestures(holder.itemView, message)
+        bindRow(holder.itemView, row)
+    }
+
+    private fun bindPhotoGestures(itemView: View, message: Message) {
+        if (!isPhotoRow(message)) {
+            itemView.setOnTouchListener(null)
+            itemView.setOnClickListener { onMessageTap(message) }
+            itemView.setOnLongClickListener {
+                onMessageLongPress(message)
+                true
+            }
+            return
+        }
+        itemView.setOnClickListener(null)
+        itemView.setOnLongClickListener(null)
+        val detector = GestureDetector(
+            itemView.context,
+            object : GestureDetector.SimpleOnGestureListener() {
+                override fun onDown(e: MotionEvent): Boolean = true
+                override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+                    onMessageTap(message)
+                    return true
+                }
+                override fun onDoubleTap(e: MotionEvent): Boolean {
+                    onPhotoDoubleTap(message)
+                    return true
+                }
+                override fun onLongPress(e: MotionEvent) {
+                    itemView.parent?.requestDisallowInterceptTouchEvent(true)
+                    onPhotoPeek(message)
+                }
+            },
+        )
+        itemView.setOnTouchListener { v, ev ->
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    onPhotoUnpeek()
+                    v.parent?.requestDisallowInterceptTouchEvent(false)
+                }
+            }
+            detector.onTouchEvent(ev)
             true
         }
-        bindRow(holder.itemView, row)
     }
 
     class RowHolder(itemView: View) : RecyclerView.ViewHolder(itemView)
@@ -192,6 +239,15 @@ class ThreadAdapter(
          * manifest sets `supportsRtl`); pure over its input, so the
          * direction → side mapping is JVM-testable without inflating a view.
          */
+        fun isPhotoRow(message: Message): Boolean {
+            if (!message.mediaPath.isNullOrBlank()) return true
+            if (message.transport != MessageTransport.MMS) return false
+            val trimmed = message.body.trim()
+            return trimmed == MmsRetrievedContent.COLLAPSED_PHOTO_PLACEHOLDER ||
+                trimmed == MmsRetrievedContent.PHOTO_PLACEHOLDER ||
+                MmsRetrieve.needsRetrieve(message)
+        }
+
         fun layoutGravityFor(alignment: ThreadAlignment): Int = when (alignment) {
             ThreadAlignment.LEFT -> Gravity.START
             ThreadAlignment.RIGHT -> Gravity.END

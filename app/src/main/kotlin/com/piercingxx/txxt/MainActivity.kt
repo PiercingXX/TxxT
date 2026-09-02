@@ -51,7 +51,7 @@ import kotlinx.coroutines.launch
  * every emission re-applies the current search query before submitting to
  * [ConversationListAdapter]. Tapping a row opens its [ThreadActivity]; the NEW
  * affordance opens [NewConversationActivity] so a thread can start from a
- * contact name or a typed number; swiping left archives, swiping right
+ * contact name or a typed number; swiping right archives, swiping left
  * deletes (WS10).
  */
 class MainActivity : Activity(), SwipeActionCallback {
@@ -406,7 +406,7 @@ class MainActivity : Activity(), SwipeActionCallback {
      * PINNED_FIRST ordering), star/unstar (the persisted starred-contacts set
      * that bypasses every blocking rule, docs/PRIVACY.md §6), call, block the
      * sender (adds them to the persisted blocked-addresses set and re-applies
-     * the live filter), and archive (the swipe-left action, offered here too
+     * the live filter), and archive (the swipe-right action, offered here too
      * for discoverability). Reads the persisted state first so the dialog
      * names the toggles it will actually perform.
      */
@@ -537,8 +537,8 @@ class MainActivity : Activity(), SwipeActionCallback {
     }
 
     /**
-     * Swipe left: archive (WS10). Sets the persisted archive flag; the live
-     * list drops the row on the next emission (archiving hides, never deletes).
+     * Swipe right: archive (WS10). No confirm — archiving hides, never deletes.
+     * The live list drops the row on the next emission.
      */
     override fun onArchive(conversationId: Long) {
         scope.launch {
@@ -547,7 +547,10 @@ class MainActivity : Activity(), SwipeActionCallback {
         }
     }
 
-    /** Swipe right: confirm, then delete the conversation and its messages. */
+    /**
+     * Swipe left: confirm before deleting. The swipe helper has already
+     * snapped the row back, so Cancel is a no-op.
+     */
     override fun onDelete(conversationId: Long) {
         AlertDialog.Builder(this)
             .setTitle("Delete this conversation?")
@@ -558,10 +561,7 @@ class MainActivity : Activity(), SwipeActionCallback {
                     database.conversationDao().deleteById(conversationId)
                 }
             }
-            .setNegativeButton("Cancel") { _, _ ->
-                applySearchQuery(currentQuery)
-            }
-            .setOnCancelListener { applySearchQuery(currentQuery) }
+            .setNegativeButton("Cancel", null)
             .show()
     }
 

@@ -3,7 +3,9 @@ package com.piercingxx.txxt.ui
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
 import com.piercingxx.txxt.MainActivity
+import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -72,6 +74,27 @@ class MainActivityWiringTest {
     }
 
     @Test
+    fun `swipe right archives and swipe left deletes`() {
+        val recyclerView = mockk<RecyclerView>(relaxed = true)
+        val actions = mockk<SwipeActionCallback>(relaxed = true)
+        var attachedCallback: ItemTouchHelper.Callback? = null
+        ConversationSwipeHelper(
+            callback = actions,
+            attach = { _, cb -> attachedCallback = cb },
+        ).attachTo(recyclerView)
+
+        val holder = mockk<RecyclerView.ViewHolder>(relaxed = true)
+        every { holder.itemId } returns 42L
+        every { holder.adapterPosition } returns 3
+        attachedCallback!!.onSwiped(holder, ItemTouchHelper.RIGHT)
+        verify { actions.onArchive(42L) }
+
+        every { holder.itemId } returns 7L
+        attachedCallback!!.onSwiped(holder, ItemTouchHelper.LEFT)
+        verify { actions.onDelete(7L) }
+    }
+
+    @Test
     fun `the swipe callback enables both swipe directions for the four actions`() {
         val recyclerView = mockk<RecyclerView>(relaxed = true)
         var attachedCallback: ItemTouchHelper.Callback? = null
@@ -107,6 +130,32 @@ class MainActivityWiringTest {
             "MainActivity.attachSwipeHelper must attach the helper to the RecyclerView",
             mainActivity.contains(".attachTo(recyclerView)"),
         )
+        assertTrue(
+            "archive is immediate — no confirm dialog",
+            !onArchiveBlock.contains("AlertDialog"),
+        )
+        assertTrue(
+            "delete asks before it removes anything",
+            onDeleteBlock.contains("Delete this conversation?"),
+        )
+        val swipeHelper = sourceText("ui/ConversationSwipeHelper.kt")
+        assertTrue(
+            "canceling delete must snap the swiped row back",
+            swipeHelper.contains("notifyItemChanged(position)"),
+        )
+    }
+
+    private val onArchiveBlock: String
+        get() = blockAfter(mainActivity, "override fun onArchive")
+
+    private val onDeleteBlock: String
+        get() = blockAfter(mainActivity, "override fun onDelete")
+
+    private fun blockAfter(source: String, marker: String): String {
+        val start = source.indexOf(marker)
+        assertTrue("missing $marker", start >= 0)
+        val next = source.indexOf("override fun", start + marker.length)
+        return if (next < 0) source.substring(start) else source.substring(start, next)
     }
 
     // ---- Default-handler grants: the launcher asks, it is never silent ----

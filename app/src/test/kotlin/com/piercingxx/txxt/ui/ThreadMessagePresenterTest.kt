@@ -48,15 +48,16 @@ class ThreadMessagePresenterTest {
     }
 
     @Test
-    fun `an outgoing photo with no caption renders as a text-first photo line`() {
+    fun `an outgoing photo with no caption renders as a collapsed Photo marker`() {
         // Sending a photo with an empty caption persists a blank-bodied MMS
-        // row. Without the substitution the thread shows a row of nothing at
-        // all and the send looks like it vanished.
+        // row. It must start collapsed like inbound photos, not already
+        // revealed as the image.
         val row = present(
             message(id = 6L, direction = MessageDirection.OUTGOING, body = "")
-                .copy(transport = MessageTransport.MMS),
+                .copy(transport = MessageTransport.MMS, mediaPath = "/tmp/p.jpg"),
         )
-        assertEquals(PhotoAttachment.PHOTO_ROW_PLACEHOLDER, row.body)
+        assertEquals("[Photo]", row.body)
+        assertEquals("/tmp/p.jpg", row.mediaPath)
     }
 
     @Test

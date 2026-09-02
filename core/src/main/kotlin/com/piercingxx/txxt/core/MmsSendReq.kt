@@ -13,9 +13,15 @@ object MmsSendReq {
     private const val MSG_SEND_REQ = 0x80
     private const val MMS_VERSION = 0x8D
     private const val VERSION_1_2 = 0x92
+    private const val FROM = 0x89
+    private const val FROM_INSERT_ADDRESS = 0x81
+    private const val DATE = 0x85
     private const val TO = 0x97
     private const val CONTENT_TYPE = 0x84
     private const val TRANSACTION_ID = 0x98
+    private const val DELIVERY_REPORT = 0x86
+    private const val READ_REPORT = 0x90
+    private const val VALUE_NO = 0x81
     private const val CT_MULTIPART_RELATED = 0xB3
     private const val PARAM_TYPE = 0x89
     private const val PARAM_START = 0x8A
@@ -52,7 +58,7 @@ object MmsSendReq {
         else -> "image/jpeg"
     }
 
-    internal fun wireAddress(to: String): String? {
+    fun wireAddress(to: String): String? {
         val trimmed = to.trim()
         if (trimmed.isEmpty()) return null
         if ('@' in trimmed) return trimmed
@@ -64,7 +70,7 @@ object MmsSendReq {
         return "$withPlus/TYPE=PLMN"
     }
 
-    internal fun smil(imageName: String, hasText: Boolean): String {
+    fun smil(imageName: String, hasText: Boolean): String {
         val text = if (hasText) """<text src="text.txt" region="Text"/>""" else ""
         return """<smil><head><layout><root-layout/><region id="Image" /><region id="Text" /></layout></head><body><par><img src="$imageName" region="Image"/>$text</par></body></smil>"""
     }
@@ -77,8 +83,19 @@ object MmsSendReq {
         out.textString(transactionId)
         out.octet(MMS_VERSION)
         out.octet(VERSION_1_2)
+        // AOSP PduParser.checkMandatoryHeader requires From on m-send-req.
+        // Insert-address-token: Value-length 1, then 0x81.
+        out.octet(FROM)
+        out.octet(1)
+        out.octet(FROM_INSERT_ADDRESS)
+        out.octet(DATE)
+        out.longInteger(System.currentTimeMillis() / 1000L)
         out.octet(TO)
         out.textString(to)
+        out.octet(DELIVERY_REPORT)
+        out.octet(VALUE_NO)
+        out.octet(READ_REPORT)
+        out.octet(VALUE_NO)
         val related = relatedContentType()
         out.octet(CONTENT_TYPE)
         out.append(related)
@@ -107,6 +124,8 @@ object MmsSendReq {
             headers.textString(part.mime)
             headers.octet(0xC0) // Content-ID
             headers.quotedString("<${part.contentId}>")
+            headers.octet(0x8E) // Content-Location
+            headers.textString(part.name)
             val headerBytes = headers.toByteArray()
             out.uintvar(headerBytes.size)
             out.uintvar(part.data.size)
@@ -159,6 +178,20 @@ object MmsSendReq {
                 octet(LENGTH_QUOTE)
                 uintvar(length)
             }
+        }
+        fun longInteger(value: Long) {
+            val bytes = ArrayList<Byte>(8)
+            var v = value
+            if (v == 0L) {
+                bytes += 0
+            } else {
+                while (v != 0L) {
+                    bytes.add(0, (v and 0xFF).toByte())
+                    v = v ushr 8
+                }
+            }
+            octet(bytes.size)
+            bytes.forEach { buf += it }
         }
         fun toByteArray(): ByteArray = ByteArray(buf.size) { buf[it] }
     }

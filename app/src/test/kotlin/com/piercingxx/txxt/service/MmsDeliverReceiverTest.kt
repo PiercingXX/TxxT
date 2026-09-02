@@ -144,6 +144,32 @@ class MmsDeliverReceiverTest {
     }
 
     @Test
+    fun `a verizon notification persists the retrieve URL with the transaction id`() {
+        val recording = Recording()
+        val persisted = CountDownLatch(1)
+        val rcv = receiver(
+            pduBytes = pdu(
+                from = "+15551234567",
+                contentLocation = "http://63.59.140.82/servlets/mms?message-id=",
+            ).let { body ->
+                // Insert X-Mms-Transaction-Id (0x98) after the message-type octet.
+                val txn = "A1B2C3D4".toByteArray(Charsets.US_ASCII) + byteArrayOf(0x00)
+                byteArrayOf(body[0], 0x98.toByte()) + txn + body.copyOfRange(1, body.size)
+            },
+            recording = recording,
+            persistLatch = persisted,
+        )
+
+        rcv.onReceive(context, pushIntent())
+
+        assertTrue(persisted.await(5, TimeUnit.SECONDS))
+        assertEquals(
+            "http://63.59.140.82/servlets/mms?message-id=A1B2C3D4",
+            recording.persisted.single().third,
+        )
+    }
+
+    @Test
     fun `a PLMN-suffixed FROM is stored under the bare number`() {
         val recording = Recording()
         val persisted = CountDownLatch(1)

@@ -128,5 +128,19 @@ class MessageModelTest {
         assertEquals("[photo]", opened.body)
         assertFalse(opened.isCollapsedInboundPhoto)
         assertEquals("/tmp/6.jpg", opened.mediaPath)
+        val hidden = opened.collapsePhoto()
+        assertEquals("[Photo]", hidden.body)
+        assertTrue(hidden.isCollapsedPhoto)
+    }
+
+    @Test
+    fun `an outgoing photo toggles between the image and Photo`() {
+        val collapsed = message(id = 7L, transport = MessageTransport.MMS, body = "")
+            .copy(direction = MessageDirection.OUTGOING, mediaPath = "/tmp/7.jpg")
+        assertTrue(collapsed.isCollapsedPhoto)
+        val shown = collapsed.revealPhoto()
+        assertEquals("[photo]", shown.body)
+        assertFalse(shown.isCollapsedPhoto)
+        assertEquals("[Photo]", shown.collapsePhoto().body)
     }
 }

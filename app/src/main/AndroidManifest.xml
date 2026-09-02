@@ -270,6 +270,14 @@
             </intent-filter>
         </receiver>
 
+        <receiver
+            android:name=".service.MmsSentReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.piercingxx.txxt.action.MMS_SENT" />
+            </intent-filter>
+        </receiver>
+
         <!-- Holds the process while SmsManager.downloadMultimediaMessage
              writes the PDU. Started from MmsDeliverReceiver.onReceive. -->
         <service

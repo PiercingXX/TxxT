@@ -2,25 +2,32 @@ package com.piercingxx.txxt.ui
 
 import android.app.Activity
 import android.content.ActivityNotFoundException
+import android.content.ContentValues
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.speech.tts.TextToSpeech
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.app.AlertDialog
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.SearchView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.FileProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.piercingxx.txxt.R
 import com.piercingxx.txxt.contacts.ContactNameResolver
+import com.piercingxx.txxt.data.Mappers.toMessage
 import com.piercingxx.txxt.data.OutboundStore
 import com.piercingxx.txxt.data.TxxTDatabase
 import com.piercingxx.txxt.core.MmsRetrievedContent
@@ -187,6 +194,9 @@ class ThreadActivity : Activity() {
         adapter = ThreadAdapter(
             onMessageTap = ::onMessageTap,
             onMessageLongPress = ::promptMessageActions,
+            onPhotoPeek = ::onPhotoPeek,
+            onPhotoUnpeek = ::hidePeek,
+            onPhotoDoubleTap = ::onPhotoDoubleTap,
         )
         // stackFromEnd keeps the newest row against the compose bar. Without
         // it, adjustResize shrinks the list from the bottom and incoming
@@ -373,75 +383,134 @@ class ThreadActivity : Activity() {
         },
     )
 
+    private var peekView: ImageView? = null
+
     /**
-     * Tap: download a pending photo, reveal a collapsed `[Photo]`, open the
-     * image, otherwise read the row aloud.
+     * Tap: download a pending photo, toggle `[Photo]` ↔ image, otherwise
+     * read the row aloud.
      */
     private fun onMessageTap(message: com.piercingxx.txxt.core.Message) {
-        if (message.isCollapsedInboundPhoto) {
-            scope.launch(Dispatchers.IO) {
-                revealInboundPhoto(message.id)
-                launchPhoto(message.mediaPath)
-            }
-            return
-        }
         if (MmsRetrieve.needsRetrieve(message)) {
             Toast.makeText(this, "Downloading…", Toast.LENGTH_SHORT).show()
             scope.launch(Dispatchers.IO) {
                 val state = mmsRetry.download(message.id)
                 if (state != MmsDownloadState.DOWNLOADED) return@launch
                 revealInboundPhoto(message.id)
-                val path = database.messageDao().getById(message.id)?.mediaPath
-                launchPhoto(path)
             }
             return
         }
+        if (message.isCollapsedPhoto) {
+            scope.launch(Dispatchers.IO) { revealInboundPhoto(message.id) }
+            return
+        }
         if (!message.mediaPath.isNullOrBlank()) {
-            launchPhoto(message.mediaPath)
+            scope.launch(Dispatchers.IO) { collapseInboundPhoto(message.id) }
             return
         }
         readMessageAloud(message)
     }
 
-    private suspend fun revealInboundPhoto(messageId: Long) {
-        val row = database.messageDao().getById(messageId) ?: return
-        if (row.mediaPath.isNullOrBlank()) return
-        if (row.body.trim() != MmsRetrievedContent.COLLAPSED_PHOTO_PLACEHOLDER) return
-        database.messageDao().upsert(
-            row.copy(body = MmsRetrievedContent.PHOTO_PLACEHOLDER),
+    private fun onPhotoPeek(message: com.piercingxx.txxt.core.Message) {
+        val path = message.mediaPath
+        if (path.isNullOrBlank() || !File(path).isFile) return
+        hidePeek()
+        val bitmap = BitmapFactory.decodeFile(path) ?: return
+        val overlay = ImageView(this).apply {
+            setBackgroundColor(0xFF000000.toInt())
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            setImageBitmap(bitmap)
+            isClickable = true
+            setOnTouchListener { _, ev ->
+                if (ev.actionMasked == MotionEvent.ACTION_UP ||
+                    ev.actionMasked == MotionEvent.ACTION_CANCEL
+                ) {
+                    hidePeek()
+                }
+                true
+            }
+        }
+        findViewById<ViewGroup>(android.R.id.content).addView(
+            overlay,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            ),
         )
+        peekView = overlay
     }
 
-    /** Opens a retrieved photo in the system viewer. */
-    private fun launchPhoto(path: String?) {
-        if (path.isNullOrBlank()) return
-        val file = File(path)
-        if (!file.isFile) {
-            runOnUiThread {
-                Toast.makeText(this, "Photo could not be opened", Toast.LENGTH_LONG).show()
-            }
+    private fun hidePeek() {
+        peekView?.let { view ->
+            (view.parent as? ViewGroup)?.removeView(view)
+        }
+        peekView = null
+    }
+
+    private fun onPhotoDoubleTap(message: com.piercingxx.txxt.core.Message) {
+        val path = message.mediaPath
+        if (path.isNullOrBlank() || !File(path).isFile) {
+            Toast.makeText(this, "Photo is not downloaded yet", Toast.LENGTH_SHORT).show()
             return
         }
-        runOnUiThread {
-            try {
-                val uri = FileProvider.getUriForFile(
+        AlertDialog.Builder(this)
+            .setMessage("Save this photo?")
+            .setPositiveButton("Save") { _, _ ->
+                val ok = savePhotoToGallery(path)
+                Toast.makeText(
                     this,
-                    "${packageName}.mms",
-                    file,
-                )
-                startActivity(
-                    Intent(Intent.ACTION_VIEW).apply {
-                        setDataAndType(uri, "image/*")
-                        clipData = android.content.ClipData.newRawUri("photo", uri)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    },
-                )
-            } catch (_: ActivityNotFoundException) {
-                Toast.makeText(this, "Photo could not be opened", Toast.LENGTH_LONG).show()
-            } catch (_: Exception) {
-                Toast.makeText(this, "Photo could not be opened", Toast.LENGTH_LONG).show()
+                    if (ok) "Saved" else "Photo could not be saved",
+                    if (ok) Toast.LENGTH_SHORT else Toast.LENGTH_LONG,
+                ).show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun savePhotoToGallery(path: String): Boolean {
+        val file = File(path)
+        if (!file.isFile) return false
+        val mime = if (path.endsWith(".png", ignoreCase = true)) "image/png" else "image/jpeg"
+        val values = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, "txxt-${System.currentTimeMillis()}")
+            put(MediaStore.Images.Media.MIME_TYPE, mime)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/TxxT")
+                put(MediaStore.Images.Media.IS_PENDING, 1)
             }
         }
+        val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+            ?: return false
+        return try {
+            contentResolver.openOutputStream(uri)?.use { out ->
+                file.inputStream().use { it.copyTo(out) }
+            } ?: return false
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                values.clear()
+                values.put(MediaStore.Images.Media.IS_PENDING, 0)
+                contentResolver.update(uri, values, null, null)
+            }
+            true
+        } catch (_: Exception) {
+            try {
+                contentResolver.delete(uri, null, null)
+            } catch (_: Exception) {
+            }
+            false
+        }
+    }
+
+    private suspend fun revealInboundPhoto(messageId: Long) {
+        val row = database.messageDao().getById(messageId) ?: return
+        val revealed = row.toMessage().revealPhoto()
+        if (revealed.body == row.body) return
+        database.messageDao().upsert(row.copy(body = revealed.body))
+    }
+
+    private suspend fun collapseInboundPhoto(messageId: Long) {
+        val row = database.messageDao().getById(messageId) ?: return
+        val collapsed = row.toMessage().collapsePhoto()
+        if (collapsed.body == row.body) return
+        database.messageDao().upsert(row.copy(body = collapsed.body))
     }
 
     /**
@@ -494,6 +563,7 @@ class ThreadActivity : Activity() {
     override fun onStop() {
         super.onStop()
         started = false
+        hidePeek()
         ViewedThread.close(conversationId)
     }
 
@@ -630,23 +700,38 @@ class ThreadActivity : Activity() {
             messages = database.messageDao(),
             address = destination,
         )
+        val bytes = try {
+            photo.readBytes()
+        } catch (_: Exception) {
+            null
+        } ?: return false
+        val mime = if (
+            bytes.size >= 8 &&
+            (bytes[0].toInt() and 0xFF) == 0x89 &&
+            bytes[1] == 'P'.code.toByte()
+        ) {
+            "image/png"
+        } else {
+            "image/jpeg"
+        }
+        val stored = MmsRetrieve.saveRetrievedImage(this@ThreadActivity, messageId, bytes, mime)
+            ?: photo.absolutePath
+        val row = database.messageDao().getById(messageId)
+        if (row != null) {
+            database.messageDao().upsert(row.copy(mediaPath = stored))
+        }
         val ok = try {
-            SendPipeline.sendMms(
-                this@ThreadActivity,
-                Uri.fromFile(photo),
-                destination = destination,
-            )
+            withContext(Dispatchers.IO) {
+                SendPipeline.sendMms(
+                    this@ThreadActivity,
+                    Uri.fromFile(photo),
+                    destination = destination,
+                )
+            }
         } catch (_: Exception) {
             false
         }
-        if (ok) {
-            val row = database.messageDao().getById(messageId)
-            if (row != null) {
-                database.messageDao().upsert(row.copy(mediaPath = photo.absolutePath, sent = true))
-            } else {
-                database.messageDao().markSent(messageId)
-            }
-        }
+        if (ok) database.messageDao().markSent(messageId)
         return ok
     }
 

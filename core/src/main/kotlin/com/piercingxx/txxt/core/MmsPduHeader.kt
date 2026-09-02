@@ -16,6 +16,8 @@ data class MmsPduInfo(
     val contentLocation: String? = null,
     /** X-Mms-Transaction-Id; null when absent. */
     val transactionId: String? = null,
+    /** X-Mms-Message-ID; null when absent. */
+    val messageId: String? = null,
 )
 
 /**
@@ -150,6 +152,7 @@ object MmsPduHeader {
         var contentType: String? = null
         var contentLocation: String? = null
         var transactionId: String? = null
+        var messageId: String? = null
 
         while (pos < pdu.size) {
             val field = u(pdu, pos)
@@ -183,8 +186,11 @@ object MmsPduHeader {
                     pos = parsed.second
                     if (transactionId == null) transactionId = parsed.first
                 }
-                FIELD_MESSAGE_ID ->
-                    pos = skipNullTerminated(pdu, pos) ?: return null
+                FIELD_MESSAGE_ID -> {
+                    val parsed = readTextString(pdu, pos) ?: return null
+                    pos = parsed.second
+                    if (messageId == null) messageId = parsed.first
+                }
                 FIELD_MESSAGE_CLASS ->
                     pos = skipMessageClass(pdu, pos) ?: return null
                 FIELD_DELIVERY_REPORT, FIELD_MESSAGE_TYPE, FIELD_MMS_VERSION, FIELD_PRIORITY,
@@ -201,7 +207,32 @@ object MmsPduHeader {
             }
         }
 
-        return MmsPduInfo(messageType, from, dateMillis, contentType, contentLocation, transactionId)
+        return MmsPduInfo(
+            messageType,
+            from,
+            dateMillis,
+            contentType,
+            contentLocation,
+            transactionId,
+            messageId,
+        )
+    }
+
+    /**
+     * The HTTP URL [SmsManager.downloadMultimediaMessage] should GET.
+     *
+     * Verizon notification-ind PDUs send Content-Location as
+     * `http://…/servlets/mms?message-id=` and put the token in
+     * X-Mms-Transaction-Id (or Message-ID). GETting the bare prefix is rejected
+     * immediately and the photo never lands.
+     */
+    fun retrieveUrl(info: MmsPduInfo): String? {
+        val location = info.contentLocation?.trim().orEmpty()
+        if (location.isEmpty()) return null
+        if (!location.endsWith('=')) return location
+        val token = info.transactionId?.trim().orEmpty()
+            .ifEmpty { info.messageId?.trim().orEmpty() }
+        return if (token.isNotEmpty()) location + token else location
     }
 
     /** Text-string: null-terminated printable US-ASCII. Empty yields null text without failing. */

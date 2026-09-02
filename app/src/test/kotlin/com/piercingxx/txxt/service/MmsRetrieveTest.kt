@@ -198,6 +198,11 @@ class MmsRetrieveTest {
             "auto-fetch and tap must share retrieveAndStore so they do not double-GET",
             retrieve.contains("fun retrieveAndStore"),
         )
+        assertTrue(
+            "GrapheneOS MmsService rejects FileProvider dests; download must use content://mms",
+            retrieve.contains("Telephony.Mms.Inbox.CONTENT_URI") &&
+                retrieve.contains("content://mms/"),
+        )
     }
 
     @Test

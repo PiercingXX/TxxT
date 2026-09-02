@@ -2,6 +2,7 @@ package com.piercingxx.txxt.data
 
 import com.piercingxx.txxt.core.MessageDirection
 import com.piercingxx.txxt.core.MessageTransport
+import com.piercingxx.txxt.core.MmsRetrievedContent
 
 /**
  * Persistence entry point for outgoing sends — the store every outbound SMS
@@ -91,20 +92,20 @@ object OutboundStore {
      *    row is left pending, visibly unsent, rather than turned into
      *    something it is not.
      *  - [com.piercingxx.txxt.ui.ThreadMessagePresenter] renders an outgoing
-     *    MMS row with a blank body as a text-first `[photo]` line, so a photo
-     *    sent with no caption is a visible row in the thread and not a blank
-     *    one.
+     *    MMS row with a blank body as `[Photo]`, matching inbound photos, so
+     *    a photo sent with no caption is a visible, tappable row.
      *
-     * [body] is normally empty: a caption composed alongside a photo travels
-     * as its own SMS row (`PhotoAttachment.plan`), because the send pipeline's
-     * MMS entry point carries media only. The parameter exists so this store
-     * stays a faithful persist of whatever the caller actually sent.
+     * [body] defaults to `[Photo]`: a caption composed alongside a photo
+     * travels as its own SMS row (`PhotoAttachment.plan`), because the send
+     * pipeline's MMS entry point carries media only. The parameter exists so
+     * this store stays a faithful persist of whatever the caller actually sent.
      */
     suspend fun persistOutgoingMms(
         conversations: ConversationDao,
         messages: MessageDao,
         address: String,
-        body: String = "",
+        body: String = MmsRetrievedContent.COLLAPSED_PHOTO_PLACEHOLDER,
+        mediaPath: String? = null,
     ): Long = InboundStore.withPersistenceLock {
         val conversationId = InboundStore.findOrCreateConversationLocked(conversations, address)
         // Sending into an archived thread unarchives it (InboundStore rule).
@@ -119,6 +120,7 @@ object OutboundStore {
             senderAddress = null,
             isRead = true,
             sent = false,
+            mediaPath = mediaPath,
         )
         messages.upsert(message)
         message.id

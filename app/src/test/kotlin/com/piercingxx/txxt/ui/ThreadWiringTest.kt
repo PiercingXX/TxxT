@@ -142,8 +142,17 @@ class ThreadWiringTest {
             threadActivity.contains("revealInboundPhoto"),
         )
         assertTrue(
-            "tapping a retrieved photo must launch the system viewer",
-            threadActivity.contains("ACTION_VIEW") && threadActivity.contains("launchPhoto"),
+            "tapping a revealed photo must collapse it back to Photo",
+            threadActivity.contains("collapseInboundPhoto") ||
+                threadActivity.contains("collapsePhoto"),
+        )
+        assertTrue(
+            "long-pressing a photo must peek fullscreen until the finger lifts",
+            threadActivity.contains("onPhotoPeek") && threadActivity.contains("hidePeek"),
+        )
+        assertTrue(
+            "double-tapping a photo must ask to save it",
+            threadActivity.contains("Save this photo?"),
         )
         assertTrue(
             "the open thread must register as viewed so a follow-up SMS stays silent",

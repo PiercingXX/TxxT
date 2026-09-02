@@ -231,11 +231,11 @@ class OutboundStoreTest {
 
         val stored = messages.rows.getValue(messageId)
         // The transport is the load-bearing field: RebootReconcile refuses to
-        // re-drive an MMS row, and ThreadMessagePresenter renders a blank-bodied
-        // one as [photo]. Both branch on exactly this.
+        // re-drive an MMS row. The body starts as [Photo] so sent photos
+        // toggle the same way inbound ones do.
         assertEquals(MessageTransport.MMS.name, stored.transport)
         assertEquals(MessageDirection.OUTGOING.name, stored.direction)
-        assertEquals("", stored.body)
+        assertEquals("[Photo]", stored.body)
         assertNull(stored.senderAddress)
         assertEquals(true, stored.isRead)
         assertEquals("photo sends are pending until dispatched", false, stored.sent)

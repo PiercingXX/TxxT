@@ -132,10 +132,11 @@ class MmsDeliverReceiver(
                             contentLocation = location,
                         )
                     }
-                val messageId = store(sender, dateMillis, info.contentLocation)
+                val location = MmsPduHeader.retrieveUrl(info)
+                val messageId = store(sender, dateMillis, location)
                 val fetch: suspend (Context, Long, String?) -> Boolean =
-                    retrieve ?: { ctx, id, location -> defaultRetrieve(ctx, id, location) }
-                val kept = fetch(context, messageId, info.contentLocation)
+                    retrieve ?: { ctx, id, loc -> defaultRetrieve(ctx, id, loc) }
+                val kept = fetch(context, messageId, location)
                 if (kept) {
                     val post: suspend (Context, String, String) -> Unit =
                         notify ?: { ctx, from, text ->

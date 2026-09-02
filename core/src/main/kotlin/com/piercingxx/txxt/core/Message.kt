@@ -66,20 +66,41 @@ data class Message(
             (body.isBlank() || body.trim() == MmsRetrievedContent.MMS_PLACEHOLDER)
 
     /**
-     * Fetched inbound photo still showing the `[Photo]` marker. A tap
-     * [revealInboundPhoto]s it.
+     * A photo on disk still showing the `[Photo]` marker (or a blank
+     * photo-only body, the outgoing persist before that marker is written).
+     * A tap [revealPhoto]s it; another tap [collapsePhoto]s it.
      */
-    val isCollapsedInboundPhoto: Boolean
-        get() = direction == MessageDirection.INCOMING &&
-            transport == MessageTransport.MMS &&
-            !mediaPath.isNullOrBlank() &&
-            body.trim() == MmsRetrievedContent.COLLAPSED_PHOTO_PLACEHOLDER
+    val isCollapsedPhoto: Boolean
+        get() {
+            if (mediaPath.isNullOrBlank()) return false
+            val trimmed = body.trim()
+            return trimmed == MmsRetrievedContent.COLLAPSED_PHOTO_PLACEHOLDER ||
+                trimmed.isEmpty()
+        }
 
-    /** Opens a collapsed inbound photo so the thread can render the image. */
-    fun revealInboundPhoto(): Message =
-        if (isCollapsedInboundPhoto) {
+    val isCollapsedInboundPhoto: Boolean
+        get() = direction == MessageDirection.INCOMING && isCollapsedPhoto
+
+    fun revealInboundPhoto(): Message = revealPhoto()
+
+    fun revealPhoto(): Message =
+        if (isCollapsedPhoto) {
             copy(body = MmsRetrievedContent.PHOTO_PLACEHOLDER)
         } else {
             this
         }
+
+    /**
+     * Hides a revealed photo-only row back to `[Photo]`. Captioned rows keep
+     * their text — collapsing would throw the caption away.
+     */
+    fun collapsePhoto(): Message {
+        if (mediaPath.isNullOrBlank()) return this
+        val trimmed = body.trim()
+        if (trimmed == MmsRetrievedContent.COLLAPSED_PHOTO_PLACEHOLDER) return this
+        if (trimmed == MmsRetrievedContent.PHOTO_PLACEHOLDER || trimmed.isEmpty()) {
+            return copy(body = MmsRetrievedContent.COLLAPSED_PHOTO_PLACEHOLDER)
+        }
+        return this
+    }
 }

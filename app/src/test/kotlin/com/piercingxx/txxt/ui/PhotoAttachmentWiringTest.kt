@@ -201,6 +201,10 @@ class PhotoAttachmentWiringTest {
             "an outgoing MMS must be persisted before it is sent",
             threadActivity.contains("OutboundStore.persistOutgoingMms("),
         )
+        assertTrue(
+            "a sent photo must be copied into filesDir/mms so it toggles like inbound",
+            threadActivity.contains("MmsRetrieve.saveRetrievedImage"),
+        )
     }
 
     @Test

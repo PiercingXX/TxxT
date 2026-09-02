@@ -213,6 +213,65 @@ class SendPipelineTest {
         assertEquals(listOf(tempUri), deleted)
     }
 
+    @Test
+    fun `production MMS send writes a FileProvider PDU and waits for the sent broadcast`() {
+        val source = sequenceOf(
+            java.io.File("src/main/kotlin/com/piercingxx/txxt/service/SendPipeline.kt"),
+            java.io.File("app/src/main/kotlin/com/piercingxx/txxt/service/SendPipeline.kt"),
+        ).first { it.exists() }.readText()
+        assertTrue(
+            "GrapheneOS 17 must read a FileProvider PDU, not an outbox row",
+            source.contains("FileProvider.getUriForFile"),
+        )
+        assertTrue(
+            "send must wait for the local sent PendingIntent",
+            source.contains("sendAndAwait"),
+        )
+        assertTrue(
+            "Pixel camera JPEGs must be resized before they hit the MMSC",
+            source.contains("MmsImageFit.constrain"),
+        )
+        assertFalse(
+            "send must not reuse the download part dest",
+            source.contains("MmsContentFetcher.createTelephonyDest"),
+        )
+        assertFalse(
+            "outbox persist NPE'd in PduComposer; do not hand MmsService content://mms/{id}",
+            source.contains("Telephony.Mms.Outbox.CONTENT_URI"),
+        )
+    }
+
+    @Test
+    fun `send-conf with Response-Status OK is accepted`() {
+        assertTrue(MmsSentReceiver.sendConfAccepted(null))
+        assertTrue(MmsSentReceiver.sendConfAccepted(byteArrayOf()))
+        assertTrue(
+            MmsSentReceiver.sendConfAccepted(
+                byteArrayOf(0x8C.toByte(), 0x81.toByte(), 0x92.toByte(), 0x80.toByte()),
+            ),
+        )
+        assertFalse(
+            MmsSentReceiver.sendConfAccepted(
+                byteArrayOf(0x8C.toByte(), 0x81.toByte(), 0x92.toByte(), 0x81.toByte()),
+            ),
+        )
+        // Verizon m-send-conf: Message-Type, Transaction-Id, Version 1.2 (0x8D 0x92),
+        // Message-ID, Response-Status OK. The 0x92 version value must not be
+        // read as a failed Response-Status.
+        val verizonOk = hex(
+            "8c81985431373838333038343435373031008d928b304338304138373638324643303030304436323030303031009280",
+        )
+        assertTrue(MmsSentReceiver.sendConfAccepted(verizonOk))
+    }
+
+    private fun hex(s: String): ByteArray {
+        val out = ByteArray(s.length / 2)
+        for (i in out.indices) {
+            out[i] = s.substring(i * 2, i * 2 + 2).toInt(16).toByte()
+        }
+        return out
+    }
+
     // --- helpers -------------------------------------------------------------
 
     /** A minimal EXIF-carrying JPEG: SOI, APP1(EXIF), SOS header, scan, EOI. */

@@ -50,8 +50,18 @@ class ConversationSwipeHelper(
             override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
                 val conversationId = viewHolder.itemId
                 when (direction) {
-                    ItemTouchHelper.LEFT -> callback.onArchive(conversationId)
-                    ItemTouchHelper.RIGHT -> callback.onDelete(conversationId)
+                    ItemTouchHelper.RIGHT -> callback.onArchive(conversationId)
+                    ItemTouchHelper.LEFT -> {
+                        // Snap the row back before the confirm dialog. ItemTouchHelper
+                        // has already translated it off-screen; without this, Cancel
+                        // leaves a hole until the activity is recreated.
+                        @Suppress("DEPRECATION")
+                        val position = viewHolder.adapterPosition
+                        if (position != RecyclerView.NO_POSITION) {
+                            recyclerView.adapter?.notifyItemChanged(position)
+                        }
+                        callback.onDelete(conversationId)
+                    }
                 }
             }
         }

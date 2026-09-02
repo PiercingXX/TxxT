@@ -3,10 +3,14 @@ package com.piercingxx.txxt.service
 import android.app.Activity
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
+import android.content.ContentUris
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.provider.Telephony
+import android.util.Log
 import com.piercingxx.txxt.core.Message
 import com.piercingxx.txxt.core.MessageDirection
 import com.piercingxx.txxt.core.MessageTransport
@@ -201,8 +205,12 @@ class MmsDownloadedReceiver : BroadcastReceiver() {
 }
 
 /**
- * Fetches one MMS from the MMSC into a FileProvider URI and returns the PDU
- * bytes. Injectable [download] so JVM tests never touch SmsManager.
+ * Fetches one MMS from the MMSC and returns the PDU bytes.
+ *
+ * GrapheneOS MmsService [isValidContentUri] rejects FileProvider destinations
+ * (`Blocked unauthorized URI access`). The dest must be a `content://mms/…`
+ * part the telephony provider owns. Injectable [download] so JVM tests never
+ * touch SmsManager.
  */
 class MmsContentFetcher(
     private val download: suspend (Context, String, Uri) -> Boolean = { ctx, location, dest ->
@@ -218,6 +226,23 @@ class MmsContentFetcher(
 ) {
 
     suspend fun fetch(context: Context, locationUrl: String): ByteArray? {
+        val telephony = createTelephonyDest(context)
+        if (telephony != null) {
+            try {
+                try {
+                    download(context, locationUrl, telephony)
+                } catch (_: Exception) {
+                }
+                val bytes = readBytes(context, telephony)
+                if (bytes != null && bytes.isNotEmpty()) return bytes
+            } finally {
+                deleteTelephonyDest(context, telephony)
+            }
+        }
+        return fetchViaFileProvider(context, locationUrl)
+    }
+
+    private suspend fun fetchViaFileProvider(context: Context, locationUrl: String): ByteArray? {
         val dir = File(context.cacheDir, "mms")
         if (!dir.exists()) dir.mkdirs()
         val file = File.createTempFile("retrieve-", ".pdu", dir)
@@ -232,10 +257,9 @@ class MmsContentFetcher(
             return null
         }
         MmsUriGrants.grantWrite(context, dest)
-        val signaled = try {
+        try {
             download(context, locationUrl, dest)
         } catch (_: Exception) {
-            false
         }
         val bytes = when {
             file.length() > 0L -> try {
@@ -243,15 +267,68 @@ class MmsContentFetcher(
             } catch (_: Exception) {
                 null
             }
-            signaled -> readBytes(context, dest)
-            else -> null
+            else -> readBytes(context, dest)
         }
         file.delete()
-        return bytes
+        return bytes?.takeIf { it.isNotEmpty() }
     }
 
     companion object {
         private const val DOWNLOAD_TIMEOUT_MS = 90_000L
+        private const val TAG = "TxxT-Mms"
+
+        /**
+         * A `content://mms/{id}/part/{partId}` URI MmsService is allowed to
+         * write. FileProvider URIs are rejected as unauthorized.
+         */
+        internal fun createTelephonyDest(context: Context): Uri? {
+            return try {
+                val cr = context.contentResolver
+                val msgUri = cr.insert(
+                    Telephony.Mms.Inbox.CONTENT_URI,
+                    ContentValues().apply {
+                        put(Telephony.Mms.READ, 0)
+                        put(Telephony.Mms.SEEN, 0)
+                        put(Telephony.Mms.DATE, System.currentTimeMillis() / 1000L)
+                        put(Telephony.Mms.TEXT_ONLY, 0)
+                    },
+                ) ?: return null
+                val msgId = ContentUris.parseId(msgUri)
+                if (msgId < 0L) {
+                    cr.delete(msgUri, null, null)
+                    return null
+                }
+                val partUri = cr.insert(
+                    Uri.parse("content://mms/$msgId/part"),
+                    ContentValues().apply {
+                        put(Telephony.Mms.Part.MSG_ID, msgId)
+                        put(Telephony.Mms.Part.CONTENT_TYPE, "application/vnd.wap.mms-message")
+                    },
+                )
+                if (partUri == null) {
+                    cr.delete(msgUri, null, null)
+                    null
+                } else {
+                    Log.i(TAG, "download dest $partUri")
+                    partUri
+                }
+            } catch (t: Exception) {
+                Log.w(TAG, "telephony dest failed", t)
+                null
+            }
+        }
+
+        internal fun deleteTelephonyDest(context: Context, dest: Uri) {
+            val msgId = dest.pathSegments.firstOrNull { it.toLongOrNull() != null } ?: return
+            try {
+                context.contentResolver.delete(
+                    ContentUris.withAppendedId(Telephony.Mms.CONTENT_URI, msgId.toLong()),
+                    null,
+                    null,
+                )
+            } catch (_: Exception) {
+            }
+        }
 
         internal suspend fun platformDownload(
             context: Context,

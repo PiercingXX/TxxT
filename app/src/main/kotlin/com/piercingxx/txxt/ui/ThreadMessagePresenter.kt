@@ -3,6 +3,7 @@ package com.piercingxx.txxt.ui
 import com.piercingxx.txxt.core.Message
 import com.piercingxx.txxt.core.MessageDirection
 import com.piercingxx.txxt.core.MessageTransport
+import com.piercingxx.txxt.core.MmsRetrievedContent
 
 /**
  * Horizontal alignment of a message row within the thread.
@@ -70,9 +71,10 @@ object ThreadMessagePresenter {
      *
      * Bodies pass through unchanged with exactly one substitution: an
      * **outgoing MMS with a blank body** — a photo the operator sent with no
-     * caption — renders as the text-first `[photo]` marker rather than as an
-     * empty line. Without it, sending a photo produces a row of nothing at all
-     * and the thread looks like the send vanished.
+     * caption — renders as `[Photo]`, the same collapsed marker inbound
+     * photos use. A tap reveals the image; another tap collapses it back.
+     * Without the substitution the thread shows a row of nothing at all and
+     * the send looks like it vanished.
      *
      * Deliberately narrow. It is scoped to OUTGOING because that is the row
      * this app creates and therefore the only one whose media it knows to be a
@@ -83,7 +85,7 @@ object ThreadMessagePresenter {
         when {
             message.direction == MessageDirection.OUTGOING &&
                 message.transport == MessageTransport.MMS &&
-                message.body.isBlank() -> PhotoAttachment.PHOTO_ROW_PLACEHOLDER
+                message.body.isBlank() -> MmsRetrievedContent.COLLAPSED_PHOTO_PLACEHOLDER
             else -> message.body
         }
 }

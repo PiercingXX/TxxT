@@ -126,6 +126,40 @@ class MmsPduHeaderTest {
         assertNotNull(info)
         assertEquals("http://mmsc.example/m/1", info!!.contentLocation)
         assertEquals("Txn1", info.transactionId)
+        assertEquals("http://mmsc.example/m/1", MmsPduHeader.retrieveUrl(info))
+    }
+
+    @Test
+    fun `verizon content location appends the transaction id after message-id=`() {
+        val pdu = bytes(0x82) +
+            bytes(0x98) + text("A1B2C3D4") +
+            fromField() +
+            bytes(0x83) + text("http://63.59.140.82/servlets/mms?message-id=") +
+            bytes(0x00)
+        val info = MmsPduHeader.parse(pdu)
+        assertNotNull(info)
+        assertEquals("http://63.59.140.82/servlets/mms?message-id=", info!!.contentLocation)
+        assertEquals("A1B2C3D4", info.transactionId)
+        assertEquals(
+            "http://63.59.140.82/servlets/mms?message-id=A1B2C3D4",
+            MmsPduHeader.retrieveUrl(info),
+        )
+    }
+
+    @Test
+    fun `verizon content location falls back to message-id when transaction id is absent`() {
+        val pdu = bytes(0x82) +
+            fromField() +
+            bytes(0x83) + text("http://63.59.140.82/servlets/mms?message-id=") +
+            bytes(0x8B) + text("MSGTOKEN") +
+            bytes(0x00)
+        val info = MmsPduHeader.parse(pdu)
+        assertNotNull(info)
+        assertEquals("MSGTOKEN", info!!.messageId)
+        assertEquals(
+            "http://63.59.140.82/servlets/mms?message-id=MSGTOKEN",
+            MmsPduHeader.retrieveUrl(info),
+        )
     }
 
     @Test

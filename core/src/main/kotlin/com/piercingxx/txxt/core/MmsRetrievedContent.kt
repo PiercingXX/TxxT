@@ -16,10 +16,10 @@ data class MmsRetrievedContent(
     val imageMime: String? = null,
 ) {
     companion object {
-        /** Revealed inbound photo, and the outgoing photo-only marker. */
+        /** Revealed photo-only marker after a tap (inbound and outgoing). */
         const val PHOTO_PLACEHOLDER = "[photo]"
 
-        /** Inbound photo that has been fetched but not yet opened. */
+        /** Fetched photo still showing the marker; a tap reveals the image. */
         const val COLLAPSED_PHOTO_PLACEHOLDER = "[Photo]"
 
         const val MMS_PLACEHOLDER = "[MMS]"

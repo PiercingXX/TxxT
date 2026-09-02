@@ -25,6 +25,22 @@ class MmsSendReqTest {
     }
 
     @Test
+    fun `compose includes the mandatory From insert-address token`() {
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0x01, 0x02, 0xFF.toByte(), 0xD9.toByte())
+        val pdu = MmsSendReq.compose("+15551234567", jpeg)!!
+        // 0x89 From, value-length 1, 0x81 insert-address-token — AOSP PduParser
+        // rejects m-send-req without From.
+        var found = false
+        for (i in 0..pdu.size - 3) {
+            if (pdu[i] == 0x89.toByte() && pdu[i + 1] == 0x01.toByte() && pdu[i + 2] == 0x81.toByte()) {
+                found = true
+                break
+            }
+        }
+        assertTrue(found)
+    }
+
+    @Test
     fun `wireAddress keeps email and tags phone numbers`() {
         assertTrue(MmsSendReq.wireAddress("+15551234567")!!.endsWith("/TYPE=PLMN"))
         assertTrue(MmsSendReq.wireAddress("alice@carrier.example")!!.contains("@"))
