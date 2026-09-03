@@ -128,6 +128,8 @@ The three PiercingXX repos were read this session and their findings are in
 
 ## Blocked items (need operator action)
 - **Nagatha cleanroom** of the best options — explicitly deferred by operator.
-- **Theme-sync channel** — the xx-launcher's actual theme-publish mechanism
-  needs its source to confirm; the broadcast contract in PRIVACY.md §7 is a
-  proposal until then.
+- **Theme-sync channel** — resolved and shipping (PRIVACY.md §7): the launcher
+  broadcasts `xx.launcher.THEME_CHANGED` carrying the theme name and resolved
+  background ARGB; TxxT's `.theme.ThemeSyncReceiver` (exported, guarded by the
+  `com.piercingxx.xxlauncher.permission.THEME_SYNC` signature permission) applies
+  it. No longer blocked.
