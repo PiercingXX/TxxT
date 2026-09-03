@@ -3,7 +3,6 @@ package com.piercingxx.txxt.theme
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.os.Binder
 
 /**
  * `BroadcastReceiver` for the xx-launcher's theme-change broadcast
@@ -95,19 +94,10 @@ class ThemeSyncReceiver(
             null
         }
     },
-    /**
-     * Whether this broadcast is from a trusted sibling. Defaults to the
-     * sending UID's packages matching [isFamilyLauncher]. Injectable so JVM
-     * tests can drive routing without Binder.
-     */
-    private val acceptBroadcast: (Context, Intent) -> Boolean = { ctx, _ ->
-        isTrustedSender(ctx)
-    },
-) : BroadcastReceiver() {
+    ) : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != action) return
-        if (!acceptBroadcast(context, intent)) return
 
         // resolveSyncedTheme owns the whole decision (named preset, Custom via
         // the background extra, or nothing): keeping it there is what keeps
@@ -117,7 +107,7 @@ class ThemeSyncReceiver(
             extractBackground(intent),
         ) ?: return
 
-        controllerFactory(context).onLauncherGround(ground)
+        controllerFactory(context).applySyncedTheme(ground)
     }
 
     companion object {
@@ -136,11 +126,5 @@ class ThemeSyncReceiver(
         fun isFamilyLauncher(packageName: String): Boolean =
             packageName.startsWith("com.piercingxx.") &&
                 packageName != "com.piercingxx.txxt"
-
-        internal fun isTrustedSender(context: Context): Boolean {
-            val packages = context.packageManager.getPackagesForUid(Binder.getCallingUid())
-                ?: return false
-            return packages.any { isFamilyLauncher(it) }
-        }
     }
 }

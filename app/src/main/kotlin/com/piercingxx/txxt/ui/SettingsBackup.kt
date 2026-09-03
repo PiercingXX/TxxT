@@ -79,7 +79,7 @@ object SettingsBackup {
     fun fromSettingsMap(map: Map<String, String>): SettingsStore = SettingsStore(
         lockScreenPrivacy = enumOr(map[KEY_LOCK_SCREEN_PRIVACY], LockScreenPrivacy.SENDER_ONLY),
         alertStyle = enumOr(map[KEY_NOTIFICATION_POSTURE], AlertStyle.SOUND),
-        autoSyncTheme = map[KEY_AUTO_SYNC_THEME]?.toBooleanStrictOrNull() ?: false,
+        autoSyncTheme = map[KEY_AUTO_SYNC_THEME]?.toBooleanStrictOrNull() ?: true,
         themePreset = enumOr(map[KEY_THEME_PRESET], ThemePreset.DEFAULT),
         fontMode = enumOr(map[KEY_FONT_MODE], FontMode.SPACE_MONO),
     )
