@@ -85,6 +85,18 @@ class ThemeController(
     }
 
     /**
+     * The launcher broadcast reported [ground] as active and TxxT should follow
+     * it (T5's receiver). Applies the synced launcher theme through the
+     * manual-wins precedence rule: the ground is recorded in memory AND
+     * persisted through the store, so a later controller — or the applier —
+     * resolves it via [effectiveGround] exactly as [onLauncherGround] dictates.
+     * This is the single entry point the theme-sync receiver calls.
+     */
+    fun applySyncedTheme(ground: ThemeGround) {
+        onLauncherGround(ground)
+    }
+
+    /**
      * The launcher broadcast reported [ground] as active (T5's receiver) —
      * either a named preset's ground or the family's Custom colour.
      *

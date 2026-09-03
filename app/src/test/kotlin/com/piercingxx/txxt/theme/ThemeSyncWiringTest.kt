@@ -76,7 +76,6 @@ class ThemeSyncWiringTest {
             controllerFactory = { into },
             action = ThemeSyncReceiver.ACTION_THEME_CHANGED,
             extraThemeName = ThemeSyncReceiver.EXTRA_THEME_NAME,
-            acceptBroadcast = { _, _ -> true },
         )
 
     /**
@@ -150,9 +149,10 @@ class ThemeSyncWiringTest {
     @Test
     fun `receiver ignores a broadcast when auto sync is off`() {
         val c = controller()
+        c.setAutoSync(false)
         receiver(c).onReceive(context, themeIntent(ThemePreset.MIST.displayName))
-        // Auto-sync is off by default; the launcher theme is recorded but never
-        // drives the effective theme.
+        // Auto-sync is off; the launcher theme is recorded but never drives the
+        // effective theme.
         assertEquals(ThemePreset.MIST, c.launcherTheme)
         assertEquals(ThemePreset.DEFAULT, c.effectiveTheme)
     }

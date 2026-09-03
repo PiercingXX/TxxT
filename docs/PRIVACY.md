@@ -140,13 +140,17 @@ TxxT's background theme follows the **xx-launcher**'s active theme automatically
 - **Mechanism (confirmed and shipping):** the launcher broadcasts
   `xx.launcher.THEME_CHANGED` on theme change, carrying the theme's display name
   and its resolved background ARGB, targeted at each family app by package. All
-  nine subscribe. TxxT's receiver — `.theme.ThemeSyncReceiver`, exported —
-  resolves the carried name to a `ThemePreset`, persists it to the `txxt_theme`
-  store so the choice survives process death, and the applier repaints.
-- **Custom:** the launcher's Custom ground has no preset to resolve. TxxT keys
-  off the *name* only and therefore stays on the last resolved preset when a
-  Custom broadcast arrives; xx-dialer is the family app that consumes the raw
-  ARGB off the broadcast.
+  nine subscribe. TxxT's receiver — `.theme.ThemeSyncReceiver`, exported — is
+  guarded by the manifest's `com.piercingxx.xxlauncher.permission.THEME_SYNC`
+  signature permission (no runtime sender-UID check), resolves the carried name
+  and background to a `ThemeGround`, persists it to the `txxt_theme` store so
+  the choice survives process death, and the applier repaints. Auto-sync
+  **defaults to on** (the family contract); the user can switch it off in
+  Settings.
+- **Custom:** the launcher's Custom ground has no preset to resolve, so TxxT
+  reads the raw background ARGB off the broadcast (masked back to unsigned
+  0xAARRGGBB) and carries that colour as the effective ground — the same way
+  xx-dialer consumes it.
 - **User override:** a manual in-app theme still wins over auto-sync (explicit
   beats ambient). Pick a theme in Settings and the launcher stops overriding it.
 
@@ -193,9 +197,10 @@ default-off or default-safe posture that costs little and leaks nothing.
    be unwanted.)
 2. **Burn-after-read / auto-delete:** include? Default off proposed.
 3. **Biometric lock:** include? Default off proposed.
-4. **Theme-sync channel:** confirm the launcher's actual theme-publish mechanism
-   once the launcher source is readable; the broadcast contract in §7 is a
-   proposal until then.
+4. **Theme-sync channel:** resolved and shipping (see §7) — the launcher
+   broadcasts `xx.launcher.THEME_CHANGED`; TxxT's receiver applies it, guarded by
+   the manifest's `com.piercingxx.xxlauncher.permission.THEME_SYNC` signature
+   permission. No longer open.
 5. **"Bubble" interpretation (§2):** confirmed by the operator as **no message
    bubbles in the thread UI** (text-first rendering) **and** no notification
    bubbles/chat-heads. Resolved — not open.

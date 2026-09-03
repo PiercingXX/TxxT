@@ -22,11 +22,11 @@ class SettingsStoreTest {
     }
 
     @Test
-    fun `defaults disable theme auto-sync`() {
-        // PRIVACY.md "defaults with a spine": ambient behaviour is opt-in. The
-        // default matches the render store (ThemeStore.autoSyncEnabled = false)
-        // so the settings screen can never silently enable launcher-following.
-        assertFalse(SettingsStore.defaults().autoSyncTheme)
+    fun `defaults enable theme auto-sync`() {
+        // Family contract: a fresh install follows the launcher until the user
+        // opts out. The default matches the render store (ThemeStore.autoSyncEnabled
+        // = true) so the settings screen never silently diverges from it.
+        assertTrue(SettingsStore.defaults().autoSyncTheme)
     }
 
     @Test

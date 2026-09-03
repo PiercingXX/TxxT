@@ -76,13 +76,13 @@ class SettingsBackupTest {
     }
 
     @Test
-    fun `non-boolean auto-sync value falls back to the default off`() {
+    fun `non-boolean auto-sync value falls back to the default on`() {
         val store = SettingsBackup.fromSettingsMap(
             mapOf(SettingsBackup.KEY_AUTO_SYNC_THEME to "maybe"),
         )
-        // Default is off (privacy-by-default), matching SettingsStore and the
-        // render store's ThemeStore.autoSyncEnabled default.
-        assertEquals(false, store.autoSyncTheme)
+        // Default is on (family contract, matching SettingsStore and the render
+        // store's ThemeStore.autoSyncEnabled default).
+        assertEquals(true, store.autoSyncTheme)
     }
 
     @Test

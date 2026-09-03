@@ -44,9 +44,8 @@ class SharedPreferencesThemeKeyValueStore(
  *    in-app theme wins over auto-sync (PRIVACY.md §7 "explicit beats ambient");
  *    that precedence rule lives in ThemeController (T4), which reads this.
  *  - [autoSyncEnabled] — whether TxxT follows the launcher's active theme via
- *    the broadcast receiver (T5). Defaults to **off** (privacy by default,
- *    PRIVACY.md §7), so the app never starts following the launcher until the
- *    user opts in.
+ *    the broadcast receiver (T5). Defaults to **on** (the family contract), so
+ *    a fresh install follows the launcher until the user opts out.
  *  - [lastLauncherGround] / [lastLauncherTheme] — the launcher's most recently
  *    broadcast ground, persisted so a receiver's report survives process death
  *    and is visible to controllers constructed later (e.g. the thread
@@ -67,9 +66,9 @@ class ThemeStore(
         get() = ThemePreset.fromKey(kv.getString(KEY_MANUAL_THEME)) ?: ThemePreset.DEFAULT
         set(value) = kv.putString(KEY_MANUAL_THEME, value.key)
 
-    /** Whether TxxT follows the launcher's active theme. Off by default. */
+    /** Whether TxxT follows the launcher's active theme. On by default. */
     var autoSyncEnabled: Boolean
-        get() = kv.getBoolean(KEY_AUTO_SYNC, default = false)
+        get() = kv.getBoolean(KEY_AUTO_SYNC, default = true)
         set(value) = kv.putBoolean(KEY_AUTO_SYNC, value)
 
     /**
