@@ -197,9 +197,10 @@ default-off or default-safe posture that costs little and leaks nothing.
    be unwanted.)
 2. **Burn-after-read / auto-delete:** include? Default off proposed.
 3. **Biometric lock:** include? Default off proposed.
-4. **Theme-sync channel:** confirm the launcher's actual theme-publish mechanism
-   once the launcher source is readable; the broadcast contract in §7 is a
-   proposal until then.
+4. **Theme-sync channel:** resolved and shipping (see §7) — the launcher
+   broadcasts `xx.launcher.THEME_CHANGED`; TxxT's receiver applies it, guarded by
+   the manifest's `com.piercingxx.xxlauncher.permission.THEME_SYNC` signature
+   permission. No longer open.
 5. **"Bubble" interpretation (§2):** confirmed by the operator as **no message
    bubbles in the thread UI** (text-first rendering) **and** no notification
    bubbles/chat-heads. Resolved — not open.
