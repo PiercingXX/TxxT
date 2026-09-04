@@ -61,6 +61,18 @@ That is data loss. **Default off** until the store exists.
 - **Accept:** the system role UI is out of our hands; the in-app “unset”
   / first-run copy is honest.
 
+### T5 — Pin and mute-until
+
+Daily-driver quality of life. Not a new privacy surface.
+
+- [ ] **Pin** a thread to the top of the conversation list. Cap it (e.g.
+  5). Pinned stay above the rest; unpin is one tap.
+- [ ] **Mute until** a wall time or duration (1h / 8h / tonight / Monday).
+  Notifications for that thread stay off until then; the thread still
+  receives. Existing mute (forever) stays.
+- **Accept:** pin two threads, kill the app, they are still on top.
+  Mute-until 1h: no notification; after the hour, the next SMS notifies.
+
 ### T4 — Device confirmation (not a SIM re-prove)
 
 Already daily. Spot-check after T1/T2:
@@ -68,6 +80,7 @@ Already daily. Spot-check after T1/T2:
 - [ ] Export + restore on this phone.
 - [ ] Quarantine on → unknown SMS held; toggle off → normal deliver.
 - [ ] Verizon MMS photo still sends (existing path).
+- [ ] Pin + mute-until survive process death (T5).
 - **Accept:** dated note in this file.
 
 ---
@@ -91,5 +104,6 @@ link previews, bubbles.
 
 1. T1 (the archive can vanish today)
 2. T2 (do not enable a drop-path)
-3. T3 copy
-4. T4 spot-check
+3. T5 pin / mute-until
+4. T3 copy
+5. T4 spot-check
