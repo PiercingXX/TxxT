@@ -4,7 +4,13 @@
 
 ### Core messaging
 - **SMS, 1:1**, plus **photo send/receive** over MMS (scrubbed on send,
-  fetched on arrival, shown as `[Photo]` until tapped). Group MMS still out.
+  fetched on arrival, shown as `[Photo]` until tapped). The feature list
+  confirms **photo send is wired**: the compose bar's ⊕ drives the system
+  photo picker
+  (`ActivityResultContracts.PickVisualMedia`, `ImageOnly`) in `ThreadActivity`,
+  which stages the picked bytes into app-private storage via `PhotoStaging`
+  (so no storage permission and no retained content-URI grant), then routes an
+  attached send through `SendPipeline.sendMms`. Group MMS still out.
 - Conversation list: pin, mute, archive, swipe-to-delete (confirmed), call,
   copy number, block, star. Search the list and search inside a thread.
 - Emoji in the compose bar (palette) and in message bodies (system fallback).
@@ -30,8 +36,14 @@
 
 ### Backup
 - Settings + blocklist JSON export to app-private storage (not messages).
-- Message JSON (`BackupJson`) exists in code but is not wired to a
-  user-visible export. History lives in `txxt.db` only.
+- **Conversation export (todo.md T1):** EXPORT in the launcher opens the SAF
+  create-document picker and writes every conversation and message as backup
+  JSON (`BackupJson`). MMS **photos are not in the JSON** — the export counts
+  them and says "N photos not in this JSON" in the toast, so a user is never
+  left believing their photos travelled with the export. IMPORT opens the SAF
+  open-document picker and restores through `RestoreService` idempotently
+  (REPLACE-upsert — a second import never duplicates a message, and live ids
+  are never destroyed). History also lives in `txxt.db`.
 
 ### Accessibility
 - In-app text-to-speech (tap a message). No in-app speech-to-text (mic removed).

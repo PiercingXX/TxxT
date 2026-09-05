@@ -17,6 +17,9 @@ import com.piercingxx.txxt.core.Message
 import com.piercingxx.txxt.core.MessageTransport
 import com.piercingxx.txxt.core.MmsRetrievedContent
 import com.piercingxx.txxt.service.MmsRetrieve
+import com.piercingxx.txxt.theme.ThemePreset
+import com.piercingxx.txxt.theme.ThemeTokens
+import com.piercingxx.txxt.theme.deriveTokens
 
 /**
  * RecyclerView adapter for the conversation thread (T3).
@@ -34,7 +37,7 @@ import com.piercingxx.txxt.service.MmsRetrieve
  * applies the presenter's view state.
  */
 class ThreadAdapter(
-    private val bindRow: (View, ThreadRow) -> Unit = ::defaultBindRow,
+    private val bindRow: (View, ThreadRow, ThemeTokens) -> Unit = ::defaultBindRow,
     /** Invoked when a message row is tapped, so the activity can read it aloud. */
     private val onMessageTap: (Message) -> Unit = {},
     /** Invoked on a long-press, so the activity can offer copy/delete. */
@@ -47,6 +50,25 @@ class ThreadAdapter(
 ) : RecyclerView.Adapter<ThreadAdapter.RowHolder>() {
 
     private val messages = mutableListOf<Message>()
+
+    /**
+     * The theme tokens the rows are painted from. Defaults to the brand's
+     * default preset (AMOLED black) so the adapter stays constructible — and
+     * JVM-testable — without a `Context`; the thread screen pushes the live
+     * theme here via [applyTheme] so the message rows follow the chosen theme
+     * instead of the hardcoded white they used to wear.
+     */
+    private var theme: ThemeTokens = deriveTokens(ThemePreset.DEFAULT)
+
+    /**
+     * Re-paints the rows from [tokens]: stores the new theme and refreshes the
+     * list so every visible row re-binds through the presenter with the new
+     * emphasis colours. The theme seam the thread screen's applier drives.
+     */
+    fun applyTheme(tokens: ThemeTokens) {
+        theme = tokens
+        if (attached) notifyDataSetChanged()
+    }
 
     // Tracks whether the adapter is attached to a live RecyclerView. The
     // mockable android.jar does not initialise RecyclerView.Adapter's observer
@@ -83,7 +105,7 @@ class ThreadAdapter(
         // direction → alignment/emphasis mapping is the single source of truth.
         val row = ThreadMessagePresenter.present(message)
         bindPhotoGestures(holder.itemView, message)
-        bindRow(holder.itemView, row)
+        bindRow(holder.itemView, row, theme)
     }
 
     private fun bindPhotoGestures(itemView: View, message: Message) {
@@ -148,7 +170,11 @@ class ThreadAdapter(
          * child's `LayoutParams` in its parent (`item_message.xml`'s
          * `FrameLayout`), which only [applyAlignment] below writes.
          */
-        fun defaultBindRow(itemView: View, row: ThreadRow) {
+        fun defaultBindRow(
+            itemView: View,
+            row: ThreadRow,
+            tokens: ThemeTokens = deriveTokens(ThemePreset.DEFAULT),
+        ) {
             val body = itemView.findViewById<TextView>(R.id.message_body)
             val timestamp = itemView.findViewById<TextView>(R.id.message_timestamp)
             val rowContainer = itemView.findViewById<LinearLayout>(R.id.message_row)
@@ -178,12 +204,26 @@ class ThreadAdapter(
                 )
             body.visibility = if (hideMarker) View.GONE else View.VISIBLE
             applyAlignment(rowContainer, body, timestamp, row.alignment)
-            body.setTextColor(when (row.emphasis) {
-                // Sent = signal-white inverted emphasis; received = muted slate.
-                ThreadEmphasis.SENT -> 0xFFE6FFFFFF.toInt()
-                ThreadEmphasis.RECEIVED -> 0xFF80FFFFFF.toInt()
-            })
+            body.setTextColor(emphasisColor(row.emphasis, tokens).toInt())
         }
+
+        /**
+         * The text colour a row's emphasis maps to, derived from the theme's
+         * tokens — never a hardcoded white.
+         *
+         * Sent (the operator's own messages) takes the theme's `text` token
+         * (the ceiling, 90% of the foreground); received takes `muted` (half
+         * the foreground). On the brand's dark presets these are the white
+         * ramp (`0xFFE6FFFFFF` / `0xFF80FFFFFF` — the exact values this used
+         * to hardcode); on a light preset (Paper, Mist) they are the black
+         * ramp, so a message row stays legible instead of wearing white-on-
+         * white. Pure over its inputs — JVM-testable.
+         */
+        fun emphasisColor(emphasis: ThreadEmphasis, tokens: ThemeTokens): Long =
+            when (emphasis) {
+                ThreadEmphasis.SENT -> tokens.text
+                ThreadEmphasis.RECEIVED -> tokens.muted
+            }
 
         /**
          * Puts the message column on its side of the row: outbound (the

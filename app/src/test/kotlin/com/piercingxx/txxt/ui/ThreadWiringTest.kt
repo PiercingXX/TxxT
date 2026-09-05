@@ -169,7 +169,7 @@ class ThreadWiringTest {
     @Test
     fun `the adapter's onBindViewHolder reaches ThreadMessagePresenter`() {
         var bound: ThreadRow? = null
-        val adapter = ThreadAdapter(bindRow = { _, row -> bound = row })
+        val adapter = ThreadAdapter(bindRow = { _, row, _ -> bound = row })
 
         // Relaxed mock View — no inflation needed in a JVM test.
         val holder = ThreadAdapter.RowHolder(mockk(relaxed = true))
@@ -189,7 +189,7 @@ class ThreadWiringTest {
     @Test
     fun `the adapter maps inbound rows through the presenter too`() {
         var bound: ThreadRow? = null
-        val adapter = ThreadAdapter(bindRow = { _, row -> bound = row })
+        val adapter = ThreadAdapter(bindRow = { _, row, _ -> bound = row })
         val holder = ThreadAdapter.RowHolder(mockk(relaxed = true))
 
         adapter.submit(listOf(message(2L, MessageDirection.INCOMING)))
