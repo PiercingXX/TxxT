@@ -19,7 +19,10 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.piercingxx.txxt.contacts.ContactNameResolver
 import com.piercingxx.txxt.core.Conversation
+import com.piercingxx.txxt.data.BackupJson
+import com.piercingxx.txxt.data.ConversationExporter
 import com.piercingxx.txxt.data.InboundStore
+import com.piercingxx.txxt.data.RoomRestoreService
 import com.piercingxx.txxt.data.TxxTDatabase
 import com.piercingxx.txxt.service.DefaultHandlerMonitor
 import com.piercingxx.txxt.service.EXTRA_SENDER
@@ -33,6 +36,9 @@ import com.piercingxx.txxt.ui.ConversationListLoader
 import com.piercingxx.txxt.ui.ConversationSearchFilter
 import com.piercingxx.txxt.ui.ConversationSwipeHelper
 import com.piercingxx.txxt.ui.NewConversationActivity
+import com.piercingxx.txxt.ui.SettingsBackup
+import com.piercingxx.txxt.ui.SettingsBlockingStore
+import com.piercingxx.txxt.ui.SettingsStore
 import com.piercingxx.txxt.ui.SwipeActionCallback
 import com.piercingxx.txxt.ui.ThreadActivity
 import kotlinx.coroutines.CoroutineScope
@@ -40,6 +46,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import java.io.IOException
 
 /**
  * Launcher activity for TxxT: the conversation list.
@@ -126,6 +133,8 @@ class MainActivity : Activity(), SwipeActionCallback {
     private lateinit var emptyState: TextView
     private lateinit var newMessageButton: Button
     private lateinit var settingsButton: Button
+    private lateinit var exportButton: Button
+    private lateinit var importButton: Button
     private lateinit var roleBanner: TextView
     private var runtimePermissionsAsked = false
 
@@ -145,6 +154,8 @@ class MainActivity : Activity(), SwipeActionCallback {
         emptyState = findViewById(R.id.empty_state)
         newMessageButton = findViewById(R.id.new_message_button)
         settingsButton = findViewById(R.id.settings_button)
+        exportButton = findViewById(R.id.export_button)
+        importButton = findViewById(R.id.import_button)
         roleBanner = findViewById(R.id.role_banner)
 
         // The launcher's conversation-list host (activity_main.xml): the live
@@ -174,6 +185,8 @@ class MainActivity : Activity(), SwipeActionCallback {
         settingsButton.setOnClickListener {
             startActivity(Intent(this, com.piercingxx.txxt.ui.SettingsActivity::class.java))
         }
+        exportButton.setOnClickListener { launchExport() }
+        importButton.setOnClickListener { launchImport() }
         roleBanner.setOnClickListener {
             val roleIntent = DefaultHandlerMonitor().roleRequest(this)
             if (shouldRequestRole(roleIntent)) {
@@ -351,6 +364,11 @@ class MainActivity : Activity(), SwipeActionCallback {
         if (requestCode == REQUEST_ROLE_SMS) {
             refreshRoleBanner()
             requestRuntimePermissions()
+        } else if (resultCode == Activity.RESULT_OK) {
+            when (requestCode) {
+                REQUEST_EXPORT -> data?.data?.let(::performExport)
+                REQUEST_IMPORT -> data?.data?.let(::performImport)
+            }
         }
     }
 
@@ -586,6 +604,103 @@ class MainActivity : Activity(), SwipeActionCallback {
     // so the SwipeActionCallback surface stays complete.
     override fun onSchedule(conversationId: Long) {}
 
+    /**
+     * User-visible conversation export (todo.md T1). Opens the SAF
+     * create-document picker; the chosen URI is written in [onActivityResult]
+     * with the serialized backup of every conversation and message.
+     */
+    private fun launchExport() {
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "application/json"
+            putExtra(Intent.EXTRA_TITLE, "txxt-backup.json")
+        }
+        startActivityForResult(intent, REQUEST_EXPORT)
+    }
+
+    /**
+     * User-visible conversation import (todo.md T1). Opens the SAF
+     * open-document picker; the chosen JSON is parsed and restored through
+     * [RoomRestoreService] in [onActivityResult].
+     */
+    private fun launchImport() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "application/json"
+        }
+        startActivityForResult(intent, REQUEST_IMPORT)
+    }
+
+    /**
+     * Builds and writes the backup JSON to [uri]. Every conversation and
+     * message is mapped onto the backup format by [ConversationExporter], then
+     * serialized by [BackupJson] and written through the content resolver. The
+     * honest photo note is surfaced: photos are never in the JSON, so the user
+     * is told how many were left behind rather than left to assume they
+     * travelled with the export.
+     */
+    private fun performExport(uri: Uri) {
+        scope.launch {
+            try {
+                val export = ConversationExporter.buildBackup(
+                    conversations = database.conversationDao().getAll(),
+                    messages = database.messageDao().getAll(),
+                    settings = SettingsBackup.toSettingsMap(currentSettingsStore()),
+                    blocklist = SettingsBlockingStore.fromMap(blockingMap()).blockedAddresses().toList(),
+                    starred = SettingsBlockingStore.fromMap(blockingMap()).starredContacts().toList(),
+                )
+                val json = BackupJson.serialize(export.backup)
+                contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
+                    ?: throw IOException("could not open export destination")
+                val note = if (export.photoCount > 0) {
+                    " / $export.photoCount photos not in this JSON"
+                } else {
+                    ""
+                }
+                Toast.makeText(
+                    this@MainActivity,
+                    "Exported ${export.backup.messages.size} messages$note",
+                    Toast.LENGTH_LONG,
+                ).show()
+            } catch (e: Exception) {
+                Toast.makeText(this@MainActivity, "Export failed: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    /**
+     * Reads [uri], parses and validates it through [BackupJson], and restores it
+     * through [RoomRestoreService] — the idempotent REPLACE path that overwrites
+     * the same primary keys instead of duplicating, so a re-import never doubles
+     * a message and live ids are never destroyed.
+     */
+    private fun performImport(uri: Uri) {
+        scope.launch {
+            try {
+                val json = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?.toString(Charsets.UTF_8)
+                    ?: throw IOException("could not open import source")
+                val data = BackupJson.deserialize(json)
+                val plan = RoomRestoreService(database).restore(data)
+                Toast.makeText(
+                    this@MainActivity,
+                    "Restored ${plan.messages.size} messages",
+                    Toast.LENGTH_LONG,
+                ).show()
+            } catch (e: Exception) {
+                Toast.makeText(this@MainActivity, "Import failed: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    /** The settings store the backup format expects (the settings-screen shape). */
+    private fun currentSettingsStore(): SettingsStore =
+        SettingsBackup.fromSettingsMap(
+            SettingsBackup.KEY_NAMES.associateWith { key ->
+                getSharedPreferences("txxt_settings", MODE_PRIVATE).getString(key, null)
+            }.filterValues { it != null }.mapValues { it.value!! },
+        )
+
     companion object {
         /** Request code for the default-SMS-handler role request. */
         const val REQUEST_ROLE_SMS = 4_001
@@ -595,6 +710,12 @@ class MainActivity : Activity(), SwipeActionCallback {
 
         /** Request code for the READ_CONTACTS runtime-permission prompt (legacy). */
         const val REQUEST_READ_CONTACTS = 4_003
+
+        /** Request code for the SAF create-document conversation export. */
+        const val REQUEST_EXPORT = 4_004
+
+        /** Request code for the SAF open-document conversation import. */
+        const val REQUEST_IMPORT = 4_005
 
         const val REQUEST_POST_NOTIFICATIONS = REQUEST_RUNTIME_PERMISSIONS
 

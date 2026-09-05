@@ -292,6 +292,11 @@ class ThreadActivity : Activity() {
             // The header is type, not chrome: it takes the theme's text token,
             // not the accent — the accent stays reserved for the affordances.
             threadTitle.setTextColor(text)
+            // The message rows follow the same theme: push the tokens into the
+            // adapter so every row re-binds with the emphasis colours derived
+            // from them (ThreadAdapter.emphasisColor), instead of the hardcoded
+            // white it used to wear.
+            adapter.applyTheme(tokens)
         }.apply()
     }
 

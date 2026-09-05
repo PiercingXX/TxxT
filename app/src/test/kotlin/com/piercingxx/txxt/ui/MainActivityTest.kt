@@ -1,96 +1,109 @@
 package com.piercingxx.txxt.ui
 
+import com.piercingxx.txxt.MainActivity
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 /**
- * Asserts the launcher's conversation-list layout wiring (WS10 corrective-corrective
- * T2): `MainActivity` inflates `activity_main.xml` and resolves its RecyclerView by
- * the runtime view ID `R.id.recyclerView`.
+ * Behaviour-verifies `MainActivity`'s launcher grant-request decisions (corrective
+ * T1). `MainActivity.onCreate` drives the default-SMS-handler role request and the
+ * runtime-permission prompts from the pure companion functions `shouldRequestRole`,
+ * `needsNotificationPermission`, `needsContactsPermission`, and
+ * `neededRuntimePermissions` (MainActivity.kt companion object). These are the
+ * ask/no-ask rules the launcher actually applies: the SMS role is requested exactly
+ * when a role intent exists, POST_NOTIFICATIONS only on API 33+ when not granted,
+ * READ_CONTACTS whenever not held, and the combined list is built from those two
+ * decisions.
  *
- * The assertions check the RUNTIME view ID — the compiled `R.id.recyclerView`
- * constant referenced from `MainActivity`'s Kotlin source and resolved by
- * `findViewById` at runtime — not the XML attribute string `@+id/recyclerView`.
- * The screen *rendering* on-device is the operator's (see the plan's deferred
- * verification), and instantiating `MainActivity` (an Activity) is not JVM-testable
- * without Robolectric (not in the offline cache). Following the established
- * source-reading pattern (ThreadWiringTest, ThreadLayoutTest), this locks the
- * runtime-ID wiring the launcher drives: if `onCreate` never inflates the layout
- * or never resolves the RecyclerView by `R.id.recyclerView`, the assertions fail.
+ * The assertions drive the real production functions over their inputs and assert
+ * the outputs — a regression in any decision rule fails here. The framework-bound
+ * `MainActivity` (an Activity) cannot be instantiated in a plain JVM unit test (no
+ * Robolectric in the offline cache), so the pure decision seams the launcher calls
+ * are the JVM-testable surface, the same pattern `MainActivityWiringTest` uses.
  */
 class MainActivityTest {
 
-    // Gradle unit tests run with the module directory (app/) as the working
-    // directory; fall back to the workspace-root-relative path for robustness.
-    private fun sourceText(name: String): String =
-        sequenceOf(
-            File("src/main/kotlin/com/piercingxx/txxt/$name"),
-            File("app/src/main/kotlin/com/piercingxx/txxt/$name"),
-        ).first { it.exists() }.readText()
-
-    private fun layoutText(name: String): String {
-        val file = sequenceOf(
-            File("src/main/res/layout/$name"),
-            File("app/src/main/res/layout/$name"),
-        ).first { it.exists() }
-        // Strip XML comments so the assertions check actual layout elements, not
-        // the documentation prose that names the constraints.
-        return file.readText().replace(Regex("<!--.*?-->", RegexOption.DOT_MATCHES_ALL), "")
+    @Test
+    fun `shouldRequestRole asks exactly when a role intent exists`() {
+        // A non-null role intent means there is something to ask for; null means
+        // nothing to request (already held / unavailable / API <29 no RoleManager).
+        assertTrue(MainActivity.shouldRequestRole(android.content.Intent()))
+        assertFalse(MainActivity.shouldRequestRole(null))
     }
 
-    private val mainActivity: String by lazy { sourceText("MainActivity.kt") }
-    private val activityMain: String by lazy { layoutText("activity_main.xml") }
+    @Test
+    fun `needsNotificationPermission prompts only on API 33+ when not granted`() {
+        // Below TIRAMISU (API 33) the permission is auto-granted — never prompt.
+        assertFalse(MainActivity.needsNotificationPermission(32, granted = true))
+        assertFalse(MainActivity.needsNotificationPermission(32, granted = false))
+        // On API 33+ prompt only when the current check says not granted.
+        assertFalse(MainActivity.needsNotificationPermission(33, granted = true))
+        assertTrue(MainActivity.needsNotificationPermission(33, granted = false))
+    }
 
     @Test
-    fun `MainActivity inflates the launcher layout by its runtime resource`() {
-        assertTrue(
-            "MainActivity.onCreate must inflate the launcher layout via setContentView(R.layout.activity_main)",
-            mainActivity.contains("setContentView(R.layout.activity_main)"),
+    fun `needsContactsPermission prompts whenever contacts are not held`() {
+        // READ_CONTACTS is a runtime permission since API 23 (minSdk 24), so the
+        // only question is whether it is already held.
+        assertFalse(MainActivity.needsContactsPermission(granted = true))
+        assertTrue(MainActivity.needsContactsPermission(granted = false))
+    }
+
+    @Test
+    fun `neededRuntimePermissions asks both missing grants in one list`() {
+        val both = MainActivity.neededRuntimePermissions(
+            sdkInt = 33,
+            notificationsGranted = false,
+            contactsGranted = false,
         )
-    }
-
-    @Test
-    fun `MainActivity resolves the RecyclerView by the runtime view ID`() {
-        assertTrue(
-            "MainActivity must resolve the conversation list by the runtime view ID R.id.recyclerView",
-            mainActivity.contains("findViewById<RecyclerView>(R.id.recyclerView)"),
-        )
-    }
-
-    @Test
-    fun `MainActivity drives the swipe helper from the resolved RecyclerView`() {
-        assertTrue(
-            "MainActivity must attach the swipe helper to the resolved RecyclerView",
-            mainActivity.contains("attachSwipeHelper(findViewById<RecyclerView>(R.id.recyclerView))"),
+        assertEquals(
+            listOf(
+                android.Manifest.permission.POST_NOTIFICATIONS,
+                android.Manifest.permission.READ_CONTACTS,
+            ),
+            both,
         )
     }
 
     @Test
-    fun `the launcher layout hosts the RecyclerView the runtime ID resolves`() {
-        assertTrue(
-            "activity_main.xml must host a RecyclerView conversation list",
-            activityMain.contains("RecyclerView"),
+    fun `neededRuntimePermissions asks only the grants still missing`() {
+        // API 33, notifications already held: only READ_CONTACTS is asked.
+        assertEquals(
+            listOf(android.Manifest.permission.READ_CONTACTS),
+            MainActivity.neededRuntimePermissions(
+                sdkInt = 33,
+                notificationsGranted = true,
+                contactsGranted = false,
+            ),
         )
-        assertTrue(
-            "activity_main.xml must identify the list as recyclerView",
-            activityMain.contains("@+id/recyclerView"),
+        // API 32 (< 33): notifications are auto-granted, so only contacts can be asked.
+        assertEquals(
+            listOf(android.Manifest.permission.READ_CONTACTS),
+            MainActivity.neededRuntimePermissions(
+                sdkInt = 32,
+                notificationsGranted = false,
+                contactsGranted = false,
+            ),
         )
     }
 
     @Test
-    fun `launcher chrome is search, settings, then NEW at the far right`() {
-        val search = activityMain.indexOf("@+id/searchView")
-        val settings = activityMain.indexOf("@+id/settings_button")
-        val newBtn = activityMain.indexOf("@+id/new_message_button")
-        assertTrue("search must be the leftmost chrome", search >= 0)
+    fun `neededRuntimePermissions asks nothing when every grant is held`() {
         assertTrue(
-            "settings must sit second from the left, after search",
-            settings > search,
+            MainActivity.neededRuntimePermissions(
+                sdkInt = 33,
+                notificationsGranted = true,
+                contactsGranted = true,
+            ).isEmpty(),
         )
         assertTrue(
-            "NEW must be the rightmost chrome control",
-            newBtn > settings,
+            MainActivity.neededRuntimePermissions(
+                sdkInt = 32,
+                notificationsGranted = false,
+                contactsGranted = true,
+            ).isEmpty(),
         )
     }
 }

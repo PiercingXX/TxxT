@@ -49,6 +49,28 @@
             android:textSize="18sp"
             android:textColor="#FFFFFF" />
 
+        <!-- Conversation export (todo.md T1): SAF create-document of every
+             conversation and message. Text-first monospace word, borderless. -->
+        <Button
+            android:id="@+id/export_button"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/font_body"
+            android:textColor="#FFFFFF"
+            android:text="EXPORT" />
+
+        <!-- Conversation import (todo.md T1): SAF open-document, restored
+             idempotently through RestoreService. Borderless monospace word. -->
+        <Button
+            android:id="@+id/import_button"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/font_body"
+            android:textColor="#FFFFFF"
+            android:text="IMPORT" />
+
         <!-- New-conversation affordance: opens the recipient picker (name or
              number) and then the thread. Text-first — a monospace word, not
              an icon, and borderless: a bright-white word on the ground, no
