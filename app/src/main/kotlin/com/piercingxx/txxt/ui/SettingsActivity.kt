@@ -10,16 +10,19 @@ import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.Spinner
 import android.widget.Switch
 import android.widget.Toast
+import androidx.appcompat.app.AppCompatDelegate
 import com.piercingxx.txxt.R
 import com.piercingxx.txxt.service.NotificationPrefs
 import com.piercingxx.txxt.service.ensureMessageChannels
 import com.piercingxx.txxt.theme.SharedPreferencesThemeKeyValueStore
+import com.piercingxx.txxt.theme.ThemeApplier
 import com.piercingxx.txxt.theme.ThemeController
 import com.piercingxx.txxt.theme.ThemeStore
 import com.piercingxx.txxt.theme.ThemePreset
@@ -138,6 +141,24 @@ class SettingsActivity : Activity() {
 
         bindControls()
         loadIntoControls()
+        applyTheme()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        applyTheme()
+    }
+
+    /**
+     * Paints this screen's chrome from the current effective theme and pins
+     * night mode to the ground so spinners/dialogs do not follow the OS clock.
+     */
+    private fun applyTheme() {
+        val root = findViewById<View>(R.id.settings_root)
+        ThemeApplier(themeController) { tokens ->
+            AppCompatDelegate.setDefaultNightMode(ThemeApplier.nightModeFor(tokens.isDark))
+            ThemeApplier.paintChrome(root, tokens)
+        }.apply()
     }
 
     /**
@@ -247,6 +268,7 @@ class SettingsActivity : Activity() {
             SettingsBackup.toSettingsMap(store).forEach { (k, v) -> putString(k, v) }
         }.apply()
         syncRenderTheme(store)
+        applyTheme()
         lastLoadedStore = store
     }
 
@@ -331,6 +353,7 @@ class SettingsActivity : Activity() {
         // The restored theme must reach the render path immediately, not just
         // wait for the next control change.
         syncRenderTheme(loadStore())
+        applyTheme()
         // Restored blocking/starred rules must reach the running inbound filter
         // immediately too — otherwise they sit inert in prefs until process
         // death (receiver ensureLoaded) or a manual blocking-button press.

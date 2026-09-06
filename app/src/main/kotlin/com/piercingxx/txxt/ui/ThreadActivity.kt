@@ -23,6 +23,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.piercingxx.txxt.R
@@ -253,6 +254,11 @@ class ThreadActivity : Activity() {
         applyTheme()
     }
 
+    override fun onResume() {
+        super.onResume()
+        applyTheme()
+    }
+
     /**
      * Paints this screen's chrome from the current effective theme (T6). Builds
      * a [ThemeApplier] over [themeController] whose seam applies the derived
@@ -269,6 +275,7 @@ class ThreadActivity : Activity() {
         val root = findViewById<android.view.View>(R.id.thread_root)
         val composeBar = findViewById<android.view.View>(R.id.compose_bar)
         ThemeApplier(themeController) { tokens ->
+            AppCompatDelegate.setDefaultNightMode(ThemeApplier.nightModeFor(tokens.isDark))
             val bg = tokens.background.toInt()
             val surface = tokens.surface.toInt()
             val text = tokens.text.toInt()

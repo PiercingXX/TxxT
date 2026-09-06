@@ -190,4 +190,20 @@ class SettingsWiringTest {
         )
         assertTrue(settingsActivity.contains(".apply()"))
     }
+
+    @Test
+    fun `SettingsActivity paints chrome through ThemeApplier on resume`() {
+        assertTrue(
+            "SettingsActivity must construct a ThemeApplier",
+            settingsActivity.contains("ThemeApplier("),
+        )
+        assertTrue(
+            "SettingsActivity must override onResume",
+            settingsActivity.contains("override fun onResume"),
+        )
+        assertTrue(
+            "SettingsActivity must pin night mode from the ground",
+            settingsActivity.contains("setDefaultNightMode"),
+        )
+    }
 }

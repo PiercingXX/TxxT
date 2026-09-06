@@ -59,7 +59,7 @@ class ThemeController(
     val manualTheme: ThemePreset
         get() = store.manualTheme
 
-    /** Whether TxxT follows the launcher's active theme. Off by default. */
+    /** Whether TxxT follows the launcher's active theme. On by default. */
     val autoSyncEnabled: Boolean
         get() = store.autoSyncEnabled
 

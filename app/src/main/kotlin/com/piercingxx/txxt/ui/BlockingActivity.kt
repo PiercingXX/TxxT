@@ -5,11 +5,20 @@ import android.app.AlertDialog
 import android.content.SharedPreferences
 import android.graphics.Typeface
 import android.os.Bundle
+import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.appcompat.app.AppCompatDelegate
 import com.piercingxx.txxt.R
+import com.piercingxx.txxt.theme.SharedPreferencesThemeKeyValueStore
+import com.piercingxx.txxt.theme.ThemeApplier
+import com.piercingxx.txxt.theme.ThemeController
+import com.piercingxx.txxt.theme.ThemePreset
+import com.piercingxx.txxt.theme.ThemeStore
+import com.piercingxx.txxt.theme.ThemeTokens
+import com.piercingxx.txxt.theme.deriveTokens
 
 /**
  * The blocking & starred editor (docs/FEATURES.md §Privacy/blocking).
@@ -25,6 +34,20 @@ import com.piercingxx.txxt.R
 class BlockingActivity : Activity() {
 
     private lateinit var prefs: SharedPreferences
+
+    private val themeController: ThemeController by lazy {
+        ThemeController(
+            ThemeStore(
+                SharedPreferencesThemeKeyValueStore(
+                    getSharedPreferences(SettingsActivity.THEME_PREFS_NAME, MODE_PRIVATE)
+                )
+            )
+        )
+    }
+
+    private var tokens: ThemeTokens = deriveTokens(ThemePreset.DEFAULT)
+
+    private val sections = mutableListOf<Pair<String, LinearLayout>>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -56,12 +79,33 @@ class BlockingActivity : Activity() {
             inputId = R.id.starred_input,
             addId = R.id.starred_add,
         )
+        applyTheme()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        applyTheme()
+    }
+
+    /**
+     * Paints this screen's chrome from the current effective theme and pins
+     * night mode to the ground so dialogs do not follow the OS clock.
+     */
+    private fun applyTheme() {
+        val root = findViewById<View>(R.id.blocking_root)
+        ThemeApplier(themeController) { next ->
+            tokens = next
+            AppCompatDelegate.setDefaultNightMode(ThemeApplier.nightModeFor(next.isDark))
+            ThemeApplier.paintChrome(root, next)
+            sections.forEach { (key, container) -> renderEntries(key, container) }
+        }.apply()
     }
 
     /** Wires one rule section: renders its entries and hooks its ADD button. */
     private fun wireSection(key: String, containerId: Int, inputId: Int, addId: Int) {
         val container = findViewById<LinearLayout>(containerId)
         val input = findViewById<EditText>(inputId)
+        sections += key to container
         renderEntries(key, container)
         findViewById<Button>(addId).setOnClickListener {
             val value = input.text?.toString()?.trim().orEmpty()
@@ -80,7 +124,7 @@ class BlockingActivity : Activity() {
                 text = value
                 typeface = Typeface.MONOSPACE
                 textSize = 14f
-                setTextColor(0xB3FFFFFF.toInt())
+                setTextColor(tokens.text.toInt())
                 setPadding(8, 12, 8, 12)
                 setOnClickListener { confirmRemove(key, value, container) }
             })

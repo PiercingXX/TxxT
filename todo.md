@@ -8,10 +8,10 @@ Default SMS/MMS handler. Privacy-first, AMOLED, everything leaky off by
 default. No RCS. No `RECORD_AUDIO`.
 
 ```
-Status: role held, photos, search, mute, theme sync shipped. Settings
-backup is settings+blocklist only. Quarantine disposition DROPS messages.
-Conversation export does not exist. Switching the default SMS app
-destroys the archive.
+Status: role held, photos, search, mute, theme sync, conversation export
+shipped. Settings backup is settings+blocklist only. Quarantine
+disposition DROPS messages. Switching the default SMS app destroys the
+archive unless exported first.
 ```
 
 ---
@@ -33,14 +33,15 @@ destroys the archive.
 History lives only in `txxt.db`. Role-switch or uninstall drops it.
 Settings already dump settings + blocklist into app-private storage.
 
-- [ ] SAF create-document **or** share-sheet export of conversations +
+- [x] SAF create-document **or** share-sheet export of conversations +
   messages (and say so in the UI).
-- [ ] Include MMS photo references honestly (export the files or write
+- [x] Include MMS photo references honestly (export the files or write
   “photos not in this JSON”).
-- [ ] Restore through `RestoreService` **without** REPLACE-destroying live ids.
-- [ ] README / FEATURES stop calling settings-dump “JSON export.”
+- [x] Restore through `RestoreService` **without** REPLACE-destroying live ids.
+- [x] README / FEATURES stop calling settings-dump “JSON export.”
 - **Accept:** export on device A, import on a fresh install, threads and
   bodies match. A second import does not duplicate every message.
+  (Device confirm is T4 — not claimed here.)
 
 ### T2 — Quarantine is a store, not a drop
 

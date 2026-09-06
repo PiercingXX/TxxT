@@ -8,6 +8,7 @@ import com.piercingxx.txxt.core.MessageDirection
 import com.piercingxx.txxt.core.MessageTransport
 import com.piercingxx.txxt.theme.ThemePreset
 import com.piercingxx.txxt.theme.deriveTokens
+import com.piercingxx.txxt.ui.ConversationListAdapter
 import com.piercingxx.txxt.ui.ThreadAdapter
 import com.piercingxx.txxt.ui.ThreadEmphasis
 import com.piercingxx.txxt.ui.ThreadMessagePresenter
@@ -100,5 +101,20 @@ class ThreadAdapterTest {
         // The body must be painted with the SENT emphasis colour — which is the
         // default theme's text token, never a hardcoded literal.
         verify { body.setTextColor(deriveTokens(ThemePreset.DEFAULT).text.toInt()) }
+    }
+
+    @Test
+    fun `conversation list rows use the same text and muted tokens as thread emphasis`() {
+        val paper = deriveTokens(ThemePreset.PAPER)
+        assertEquals(
+            "inbox title = SENT emphasis = tokens.text",
+            ThreadAdapter.emphasisColor(ThreadEmphasis.SENT, paper),
+            ConversationListAdapter.titleColor(paper),
+        )
+        assertEquals(
+            "inbox snippet = RECEIVED emphasis = tokens.muted",
+            ThreadAdapter.emphasisColor(ThreadEmphasis.RECEIVED, paper),
+            ConversationListAdapter.mutedColor(paper),
+        )
     }
 }

@@ -13,6 +13,7 @@ import android.widget.Button
 import android.widget.SearchView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -215,6 +216,7 @@ class MainActivity : Activity(), SwipeActionCallback {
 
     override fun onResume() {
         super.onResume()
+        applyTheme()
         refreshRoleBanner()
     }
 
@@ -263,11 +265,15 @@ class MainActivity : Activity(), SwipeActionCallback {
     private fun applyTheme() {
         val root = findViewById<View>(R.id.main_root)
         ThemeApplier(themeController) { tokens ->
+            AppCompatDelegate.setDefaultNightMode(ThemeApplier.nightModeFor(tokens.isDark))
             root.setBackgroundColor(tokens.background.toInt())
             emptyState.setTextColor(tokens.muted.toInt())
             newMessageButton.setTextColor(tokens.accent.toInt())
             settingsButton.setTextColor(tokens.accent.toInt())
+            exportButton.setTextColor(tokens.accent.toInt())
+            importButton.setTextColor(tokens.accent.toInt())
             roleBanner.setTextColor(tokens.accent.toInt())
+            adapter.applyTheme(tokens)
         }.apply()
     }
 
