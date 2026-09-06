@@ -4,8 +4,9 @@
 
   A text-first line, never a card (docs/DESIGN.md §"Conversation list",
   docs/PRIVACY.md §2): title + unread badge + timestamp on the first line,
-  a one-line snippet below. Emphasis comes from the white-opacity ramp,
-  never hue — the unread badge is signal-white text, not a colored dot.
+  a one-line snippet below. Colours are theme tokens (txxtText / txxtMuted),
+  never a hardcoded white — the adapter re-binds them from ThemeTokens so
+  Paper/Mist stay ink-on-cream. The unread badge is type, not a colored dot.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
@@ -22,7 +23,7 @@
         android:orientation="horizontal"
         android:gravity="center_vertical">
 
-        <!-- Participant addresses. Signal-white, single line. -->
+        <!-- Participant addresses. Theme text token, single line. -->
         <TextView
             android:id="@+id/conversation_title"
             android:layout_width="0dp"
@@ -31,11 +32,11 @@
             android:fontFamily="@font/font_body"
             android:textSize="15sp"
             android:textStyle="bold"
-            android:textColor="#E6FFFFFF"
+            android:textColor="?attr/txxtText"
             android:maxLines="1"
             android:ellipsize="end" />
 
-        <!-- Unread badge: "n new" in signal-white; GONE at zero. -->
+        <!-- Unread badge: "n new" in the theme text token; GONE at zero. -->
         <TextView
             android:id="@+id/conversation_unread"
             android:layout_width="wrap_content"
@@ -44,7 +45,7 @@
             android:fontFamily="@font/font_body"
             android:textSize="12sp"
             android:textStyle="bold"
-            android:textColor="#FFFFFFFF"
+            android:textColor="?attr/txxtText"
             android:visibility="gone" />
 
         <!-- Latest-activity timestamp, muted. -->
@@ -55,7 +56,7 @@
             android:layout_marginStart="8dp"
             android:fontFamily="@font/font_body"
             android:textSize="11sp"
-            android:textColor="#80FFFFFF" />
+            android:textColor="?attr/txxtMuted" />
     </LinearLayout>
 
     <!-- One-line snippet of the latest message, muted. -->
@@ -66,7 +67,7 @@
         android:layout_marginTop="2dp"
         android:fontFamily="@font/font_body"
         android:textSize="13sp"
-        android:textColor="#80FFFFFF"
+        android:textColor="?attr/txxtMuted"
         android:maxLines="1"
         android:ellipsize="end" />
 

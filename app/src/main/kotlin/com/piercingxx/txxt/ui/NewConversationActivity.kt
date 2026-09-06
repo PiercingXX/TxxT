@@ -6,6 +6,7 @@ import android.text.InputType
 import android.view.View
 import android.widget.SearchView
 import android.widget.TextView
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.piercingxx.txxt.R
@@ -106,6 +107,7 @@ class NewConversationActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        applyTheme()
         loadContacts()
     }
 
@@ -166,6 +168,7 @@ class NewConversationActivity : Activity() {
         val root = findViewById<View>(R.id.new_conversation_root)
         val title = findViewById<TextView>(R.id.new_conversation_title)
         ThemeApplier(themeController) { tokens ->
+            AppCompatDelegate.setDefaultNightMode(ThemeApplier.nightModeFor(tokens.isDark))
             root.setBackgroundColor(tokens.background.toInt())
             title.setTextColor(tokens.text.toInt())
             emptyState.setTextColor(tokens.muted.toInt())

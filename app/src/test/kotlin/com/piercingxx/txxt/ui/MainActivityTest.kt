@@ -5,6 +5,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 /**
  * Behaviour-verifies `MainActivity`'s launcher grant-request decisions (corrective
@@ -104,6 +105,41 @@ class MainActivityTest {
                 notificationsGranted = false,
                 contactsGranted = true,
             ).isEmpty(),
+        )
+    }
+
+    // ---- Theme P0: onResume re-applies, inbox rows take tokens ----
+
+    private val mainActivitySource: String
+        get() = sequenceOf(
+            File("src/main/kotlin/com/piercingxx/txxt/MainActivity.kt"),
+            File("app/src/main/kotlin/com/piercingxx/txxt/MainActivity.kt"),
+        ).first { it.exists() }.readText()
+
+    @Test
+    fun `onResume reapplies the theme so a settings pick reaches the inbox`() {
+        val source = mainActivitySource
+        val start = source.indexOf("override fun onResume")
+        assertTrue("MainActivity must override onResume", start >= 0)
+        val next = source.indexOf("override fun", start + "override fun onResume".length)
+        val block = if (next < 0) source.substring(start) else source.substring(start, next)
+        assertTrue("MainActivity.onResume must call applyTheme()", block.contains("applyTheme()"))
+    }
+
+    @Test
+    fun `applyTheme pins night mode and paints conversation rows from tokens`() {
+        val source = mainActivitySource
+        assertTrue(
+            "MainActivity.applyTheme must call setDefaultNightMode from the ground",
+            source.contains("setDefaultNightMode") && source.contains("ThemeApplier.nightModeFor"),
+        )
+        assertTrue(
+            "MainActivity.applyTheme must push tokens into ConversationListAdapter",
+            source.contains("adapter.applyTheme(tokens)"),
+        )
+        assertFalse(
+            "conversation-list bind must not hardcode 0xFFE6FFFFFF",
+            source.contains("0xFFE6FFFFFF") || source.contains("0xFF80FFFFFF"),
         )
     }
 }

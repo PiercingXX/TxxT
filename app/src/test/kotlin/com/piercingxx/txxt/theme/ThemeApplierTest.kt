@@ -1,5 +1,6 @@
 package com.piercingxx.txxt.theme
 
+import androidx.appcompat.app.AppCompatDelegate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -29,8 +30,10 @@ private class ThemeApplierInMemoryKv : ThemeKeyValueStore {
  *    the concrete [ThemeTokens] via [deriveTokens], and hands them to the
  *    `applyTokens` seam. A recording fake seam proves the tokens painted for an
  *    effective theme are exactly [deriveTokens] of that theme — so the running
- *    UI is driven from the chosen tokens.
- *  - **wiring**: the running thread screen must actually reach the applier. The
+ *    UI is driven from the chosen tokens. [ThemeApplier.nightModeFor] maps the
+ *    ground to MODE_NIGHT_YES/NO so SearchView/dialogs follow the preset, not
+ *    the OS clock.
+ *  - **wiring**: the running screens must actually reach the applier. The
  *    Android Activity itself is not JVM-testable without Robolectric (not in the
  *    offline cache), so — exactly as ThemeSyncWiringTest reads the manifest to
  *    prove the receiver is registered — this test reads `ThreadActivity.kt` and
@@ -60,7 +63,8 @@ class ThemeApplierTest {
         val c = controller()
         val applied = mutableListOf<ThemeTokens>()
         applier(c, applied).apply()
-        // Auto-sync off, no manual pick: effective theme is DEFAULT (AMOLED Night).
+        // Auto-sync on by default, no launcher report and no manual pick:
+        // effective theme is DEFAULT (AMOLED Night).
         assertEquals(ThemePreset.DEFAULT, c.effectiveTheme)
         assertEquals(listOf(deriveTokens(ThemePreset.DEFAULT)), applied)
     }
@@ -139,6 +143,50 @@ class ThemeApplierTest {
         assertTrue(
             "ThreadActivity.kt must call ThemeApplier.apply() so the running UI is painted",
             activityText.contains("ThemeApplier(") && activityText.contains(".apply()"),
+        )
+    }
+
+    @Test
+    fun `nightModeFor maps dark grounds to YES and light grounds to NO`() {
+        assertEquals(
+            AppCompatDelegate.MODE_NIGHT_YES,
+            ThemeApplier.nightModeFor(true),
+        )
+        assertEquals(
+            AppCompatDelegate.MODE_NIGHT_NO,
+            ThemeApplier.nightModeFor(false),
+        )
+        assertEquals(
+            AppCompatDelegate.MODE_NIGHT_NO,
+            ThemeApplier.nightModeFor(deriveTokens(ThemePreset.PAPER).isDark),
+        )
+        assertEquals(
+            AppCompatDelegate.MODE_NIGHT_NO,
+            ThemeApplier.nightModeFor(deriveTokens(ThemePreset.MIST).isDark),
+        )
+        assertEquals(
+            AppCompatDelegate.MODE_NIGHT_YES,
+            ThemeApplier.nightModeFor(deriveTokens(ThemePreset.DEFAULT).isDark),
+        )
+    }
+
+    @Test
+    fun `settings and blocking screens reach the applier`() {
+        val settings = sequenceOf(
+            File("src/main/kotlin/com/piercingxx/txxt/ui/SettingsActivity.kt"),
+            File("app/src/main/kotlin/com/piercingxx/txxt/ui/SettingsActivity.kt"),
+        ).first { it.exists() }.readText()
+        val blocking = sequenceOf(
+            File("src/main/kotlin/com/piercingxx/txxt/ui/BlockingActivity.kt"),
+            File("app/src/main/kotlin/com/piercingxx/txxt/ui/BlockingActivity.kt"),
+        ).first { it.exists() }.readText()
+        assertTrue(
+            "SettingsActivity.kt must construct a ThemeApplier",
+            settings.contains("ThemeApplier(") && settings.contains(".apply()"),
+        )
+        assertTrue(
+            "BlockingActivity.kt must construct a ThemeApplier",
+            blocking.contains("ThemeApplier(") && blocking.contains(".apply()"),
         )
     }
 }
