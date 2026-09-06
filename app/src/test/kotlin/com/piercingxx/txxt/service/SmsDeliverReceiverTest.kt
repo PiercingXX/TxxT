@@ -42,6 +42,7 @@ class SmsDeliverReceiverTest {
 
     private class Recording {
         val persisted = mutableListOf<Triple<String, String, Long>>()
+        val quarantined = mutableListOf<Triple<String, String, Long>>()
         val replies = mutableListOf<Pair<String, String>>()
         val notified = mutableListOf<Pair<String, String>>()
 
@@ -57,6 +58,7 @@ class SmsDeliverReceiverTest {
         body: String = "hello there",
         recording: Recording = Recording(),
         persistLatch: CountDownLatch? = null,
+        quarantineLatch: CountDownLatch? = null,
         replyLatch: CountDownLatch? = null,
         notifyLatch: CountDownLatch? = null,
         notifyThrows: Boolean = false,
@@ -77,6 +79,11 @@ class SmsDeliverReceiverTest {
                 recording.persisted.add(Triple(address, persistedBody, date))
                 recording.events.add("persist")
                 persistLatch?.countDown()
+            },
+            persistQuarantine = { address, persistedBody, date ->
+                recording.quarantined.add(Triple(address, persistedBody, date))
+                recording.events.add("quarantine")
+                quarantineLatch?.countDown()
             },
             notify = { _, from, notifiedBody ->
                 if (notifyThrows) throw IllegalStateException("notification seam exploded")
@@ -230,11 +237,11 @@ class SmsDeliverReceiverTest {
     }
 
     @Test
-    fun `a quarantined unknown sender neither persists nor replies`() {
+    fun `a quarantined unknown sender persists to the hold and does not notify or reply`() {
         val recording = Recording()
         val persisted = CountDownLatch(1)
+        val held = CountDownLatch(1)
         val rcv = receiver(
-            // quarantineUnknownSenders=true routes unknown senders to QUARANTINE.
             inboundFilter = InboundFilter(
                 knownContacts = setOf("+15550000000"),
                 quarantineUnknownSenders = true,
@@ -243,15 +250,49 @@ class SmsDeliverReceiverTest {
             sender = "+15559998888",
             recording = recording,
             persistLatch = persisted,
+            quarantineLatch = held,
         )
 
         rcv.onReceive(context, deliverIntent())
 
+        assertTrue(held.await(5, TimeUnit.SECONDS))
         assertFalse(persisted.await(200, TimeUnit.MILLISECONDS))
+        assertEquals(1, recording.quarantined.size)
+        assertEquals(
+            Triple("+15559998888", "hello there", knownDate),
+            recording.quarantined.single(),
+        )
         assertTrue(recording.persisted.isEmpty())
         assertTrue(recording.replies.isEmpty())
         assertTrue(recording.notified.isEmpty())
-        assertTrue(recording.notified.isEmpty())
+    }
+
+    @Test
+    fun `a starred unknown sender delivers to the inbox not the hold`() {
+        val recording = Recording()
+        val persisted = CountDownLatch(1)
+        val held = CountDownLatch(1)
+        val notified = CountDownLatch(1)
+        val rcv = receiver(
+            inboundFilter = InboundFilter(
+                knownContacts = setOf("+15550000000"),
+                starredContacts = setOf("+15559998888"),
+                quarantineUnknownSenders = true,
+            ),
+            sender = "+15559998888",
+            recording = recording,
+            persistLatch = persisted,
+            quarantineLatch = held,
+            notifyLatch = notified,
+        )
+
+        rcv.onReceive(context, deliverIntent())
+
+        assertTrue(persisted.await(5, TimeUnit.SECONDS))
+        assertTrue(notified.await(5, TimeUnit.SECONDS))
+        assertFalse(held.await(200, TimeUnit.MILLISECONDS))
+        assertEquals(1, recording.persisted.size)
+        assertTrue(recording.quarantined.isEmpty())
     }
 
     // ---- guards ----

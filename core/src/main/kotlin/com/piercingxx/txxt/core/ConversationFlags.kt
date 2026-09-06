@@ -31,6 +31,17 @@ data class ConversationFlags(
     val isArchived: Boolean = false,
     /** Whether notifications for this thread are suppressed (starred still notifies). */
     val isMuted: Boolean = false,
+    /**
+     * Whether this thread is held in quarantine (hidden from the main list,
+     * like archive). Unknown-sender holds land here until the operator
+     * delivers, blocks, or deletes them.
+     */
+    val isQuarantined: Boolean = false,
+    /**
+     * Epoch millis until which notifications stay off. `0` means no
+     * time-based mute; forever-mute is [isMuted] instead.
+     */
+    val mutedUntilMillis: Long = 0L,
     /** The sort order applied to the conversation list. */
     val sortOrder: ConversationSortOrder = ConversationSortOrder.PINNED_FIRST,
 ) {
@@ -46,9 +57,17 @@ data class ConversationFlags(
     /** Returns a copy with the conversation unarchived. */
     fun unarchive(): ConversationFlags = copy(isArchived = false)
 
-    fun mute(): ConversationFlags = copy(isMuted = true)
+    fun mute(): ConversationFlags = copy(isMuted = true, mutedUntilMillis = 0L)
 
-    fun unmute(): ConversationFlags = copy(isMuted = false)
+    fun unmute(): ConversationFlags = copy(isMuted = false, mutedUntilMillis = 0L)
+
+    /** Time-based mute: notifications off until [untilMillis], not forever. */
+    fun muteUntil(untilMillis: Long): ConversationFlags =
+        copy(isMuted = false, mutedUntilMillis = untilMillis)
+
+    fun quarantine(): ConversationFlags = copy(isQuarantined = true)
+
+    fun releaseFromQuarantine(): ConversationFlags = copy(isQuarantined = false)
 
     /** Returns a copy with the given sort order applied. */
     fun withSortOrder(order: ConversationSortOrder): ConversationFlags =

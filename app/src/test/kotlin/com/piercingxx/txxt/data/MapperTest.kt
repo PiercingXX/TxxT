@@ -138,6 +138,8 @@ class MapperTest {
         val entity = Conversation(id = 1L, participantAddresses = setOf("+15550001111")).toEntity()
         assertEquals(false, entity.isPinned)
         assertEquals(false, entity.isArchived)
+        assertEquals(false, entity.isQuarantined)
+        assertEquals(0L, entity.mutedUntilMillis)
         assertEquals("PINNED_FIRST", entity.sortOrder)
         assertEquals(ConversationFlags(), entity.toFlags())
     }

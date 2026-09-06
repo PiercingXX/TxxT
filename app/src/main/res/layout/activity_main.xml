@@ -101,6 +101,20 @@
         android:text="TxxT is not the default SMS app. Tap to set it."
         android:visibility="gone" />
 
+    <TextView
+        android:id="@+id/quarantine_banner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
+        android:fontFamily="@font/font_body"
+        android:textSize="13sp"
+        android:textColor="#FFFFFF"
+        android:text="Held messages. Tap to review."
+        android:visibility="gone" />
+
     <!-- Shown instead of an empty list; MainActivity toggles visibility. -->
     <TextView
         android:id="@+id/empty_state"
@@ -111,7 +125,7 @@
         android:fontFamily="@font/font_body"
         android:textSize="14sp"
         android:textColor="#80FFFFFF"
-        android:text="No conversations yet.\nNEW starts one.\nSet TxxT as the default SMS app to receive messages."
+        android:text="No conversations yet.\nNEW starts one.\nSet TxxT as the default SMS app to receive messages.\nExport before switching away — the archive lives only in this app."
         android:visibility="gone" />
 
     <!-- Conversation list. The runtime view ID MainActivity resolves and the

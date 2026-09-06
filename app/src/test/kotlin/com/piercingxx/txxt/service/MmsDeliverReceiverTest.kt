@@ -73,9 +73,11 @@ class MmsDeliverReceiverTest {
 
     private class Recording {
         val persisted = mutableListOf<Triple<String, Long, String?>>()
+        val quarantined = mutableListOf<Triple<String, Long, String?>>()
         val retrieved = mutableListOf<Pair<Long, String?>>()
         val notified = mutableListOf<Pair<String, String>>()
         var retrieveKeeps = true
+        var quarantineLatch: CountDownLatch? = null
     }
 
     private fun receiver(
@@ -94,6 +96,11 @@ class MmsDeliverReceiverTest {
                 recording.persisted.add(Triple(address, date, location))
                 persistLatch?.countDown()
                 1L
+            },
+            persistQuarantine = { address, date, location ->
+                recording.quarantined.add(Triple(address, date, location))
+                recording.quarantineLatch?.countDown()
+                2L
             },
             retrieve = { _, id, location ->
                 recording.retrieved.add(id to location)
@@ -235,6 +242,30 @@ class MmsDeliverReceiverTest {
     }
 
     // ---- filter / attachment policy drops ----
+
+    @Test
+    fun `a quarantined unknown sender persists to the hold and does not notify`() {
+        val recording = Recording()
+        val held = CountDownLatch(1)
+        recording.quarantineLatch = held
+        val notified = CountDownLatch(1)
+        val rcv = receiver(
+            inboundFilter = InboundFilter(
+                knownContacts = setOf("+15550000000"),
+                quarantineUnknownSenders = true,
+            ),
+            recording = recording,
+            notifyLatch = notified,
+        )
+
+        rcv.onReceive(context, pushIntent())
+
+        assertTrue(held.await(5, TimeUnit.SECONDS))
+        assertEquals(1, recording.quarantined.size)
+        assertTrue(recording.persisted.isEmpty())
+        assertFalse(notified.await(200, TimeUnit.MILLISECONDS))
+        assertTrue(recording.notified.isEmpty())
+    }
 
     @Test
     fun `a blocked sender stores nothing`() {

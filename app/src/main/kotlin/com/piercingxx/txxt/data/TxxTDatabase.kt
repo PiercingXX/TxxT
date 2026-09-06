@@ -17,7 +17,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  */
 @Database(
     entities = [ConversationEntity::class, MessageEntity::class],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class TxxTDatabase : RoomDatabase() {
@@ -51,7 +51,7 @@ abstract class TxxTDatabase : RoomDatabase() {
          */
         fun build(context: Context): TxxTDatabase =
             Room.databaseBuilder(context, TxxTDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build()
 
         /**
@@ -81,6 +81,21 @@ abstract class TxxTDatabase : RoomDatabase() {
                     "ALTER TABLE conversations ADD COLUMN isMuted INTEGER NOT NULL DEFAULT 0"
                 )
                 db.execSQL("ALTER TABLE messages ADD COLUMN mediaPath TEXT")
+            }
+        }
+
+        /**
+         * v4 -> v5: quarantine hide-flag (todo.md T2) and mute-until wall
+         * time (todo.md T5). Existing rows stay in the inbox, unmuted.
+         */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE conversations ADD COLUMN isQuarantined INTEGER NOT NULL DEFAULT 0"
+                )
+                db.execSQL(
+                    "ALTER TABLE conversations ADD COLUMN mutedUntilMillis INTEGER NOT NULL DEFAULT 0"
+                )
             }
         }
     }

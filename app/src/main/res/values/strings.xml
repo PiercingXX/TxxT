@@ -3,4 +3,5 @@
     <string name="app_name">TxxT</string>
     <string name="title_settings">TxxT Settings</string>
     <string name="title_blocking">TxxT Blocking</string>
+    <string name="title_quarantine">TxxT Held</string>
 </resources>

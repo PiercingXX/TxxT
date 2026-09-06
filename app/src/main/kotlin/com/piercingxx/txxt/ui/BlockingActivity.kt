@@ -6,9 +6,11 @@ import android.content.SharedPreferences
 import android.graphics.Typeface
 import android.os.Bundle
 import android.view.View
+import android.content.Intent
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.Switch
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatDelegate
 import com.piercingxx.txxt.R
@@ -79,6 +81,10 @@ class BlockingActivity : Activity() {
             inputId = R.id.starred_input,
             addId = R.id.starred_add,
         )
+        wireQuarantineToggle()
+        findViewById<Button>(R.id.quarantine_review_button).setOnClickListener {
+            startActivity(Intent(this, QuarantineActivity::class.java))
+        }
         applyTheme()
     }
 
@@ -141,6 +147,21 @@ class BlockingActivity : Activity() {
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    /**
+     * The unknown-sender hold toggle. Default off; enabling is safe now that
+     * [com.piercingxx.txxt.data.QuarantineStore] persists held messages.
+     */
+    private fun wireQuarantineToggle() {
+        val toggle = findViewById<Switch>(R.id.quarantine_unknown_switch)
+        val enabled = SettingsBlockingStore.fromMap(currentMap()).quarantineUnknownSenders()
+        toggle.isChecked = enabled
+        toggle.setOnCheckedChangeListener { _, checked ->
+            val next = currentMap().toMutableMap()
+            next[SettingsBlockingStore.KEY_QUARANTINE_UNKNOWN] = checked.toString()
+            persist(next)
+        }
     }
 
     /** The persisted blocking/starred string map, straight from prefs. */

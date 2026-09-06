@@ -362,4 +362,38 @@ class InboundStoreTest {
         // message clears the archive flag so the launcher's list resurfaces it.
         assertFalse(conversations.rows.getValue(conversationId).isArchived)
     }
+
+    @Test
+    fun `a quarantined SMS is unread flagged and not surfaced`() = runBlocking {
+        val conversations = FakeConversationDao()
+        val messages = FakeMessageDao()
+
+        val messageId = InboundStore.persistInboundSms(
+            conversations, messages, "+15559990000", "held", 1_700_000_000_000L,
+            quarantined = true,
+        )
+
+        val conversation = conversations.rows.values.single()
+        assertTrue(conversation.isQuarantined)
+        assertFalse(conversation.isArchived)
+        val stored = messages.rows.getValue(messageId)
+        assertEquals(false, stored.isRead)
+        assertEquals("held", stored.body)
+        assertEquals("+15559990000", stored.senderAddress)
+    }
+
+    @Test
+    fun `a delivered SMS releases a previously quarantined thread`() = runBlocking {
+        val conversations = FakeConversationDao()
+        val messages = FakeMessageDao()
+        InboundStore.persistInboundSms(
+            conversations, messages, "+15559990000", "held", 1_700_000_000_000L,
+            quarantined = true,
+        )
+        InboundStore.persistInboundSms(
+            conversations, messages, "+15559990000", "released", 1_700_000_000_001L,
+            quarantined = false,
+        )
+        assertFalse(conversations.rows.values.single().isQuarantined)
+    }
 }

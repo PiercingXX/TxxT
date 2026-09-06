@@ -3,6 +3,7 @@ package com.piercingxx.txxt.ui
 import com.piercingxx.txxt.block.LiveInboundFilter
 import com.piercingxx.txxt.block.MessageDisposition
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -47,6 +48,7 @@ class SettingsBlockingStoreTest {
         assertTrue(store.phrases().isEmpty())
         assertTrue(store.blockedAddresses().isEmpty())
         assertTrue(store.starredContacts().isEmpty())
+        assertFalse(store.quarantineUnknownSenders())
     }
 
     @Test
@@ -84,6 +86,7 @@ class SettingsBlockingStoreTest {
         assertEquals(store.phrases(), restored.phrases())
         assertEquals(store.blockedAddresses(), restored.blockedAddresses())
         assertEquals(store.starredContacts(), restored.starredContacts())
+        assertEquals(store.quarantineUnknownSenders(), restored.quarantineUnknownSenders())
     }
 
     @Test
@@ -141,9 +144,24 @@ class SettingsBlockingStoreTest {
         SettingsBlockingStore.defaults().loadAndApply()
         val (disposition, _) = LiveInboundFilter.current.evaluate("+1 555 8888", "Hello")
         // No longer blocked after an empty store is applied. The empty default
-        // store DELIVERs: quarantine is explicit opt-in (quarantineUnknownSenders,
-        // docs/PRIVACY.md §8.7 is proposed, not adopted) and no quarantine store
-        // exists yet, so the factory default must not silently discard mail.
+        // store DELIVERs: the unknown-sender hold is opt-in (default off).
+        assertEquals(MessageDisposition.DELIVER, disposition)
+    }
+
+    @Test
+    fun `loadAndApply with quarantine on holds an unknown sender`() {
+        SettingsBlockingStore(quarantineUnknownSenders = true).loadAndApply()
+        val (disposition, _) = LiveInboundFilter.current.evaluate("+1 555 0000", "Hello")
+        assertEquals(MessageDisposition.QUARANTINE, disposition)
+    }
+
+    @Test
+    fun `loadAndApply with quarantine on still delivers a starred sender`() {
+        SettingsBlockingStore(
+            starredContacts = setOf("+1 555 0000"),
+            quarantineUnknownSenders = true,
+        ).loadAndApply()
+        val (disposition, _) = LiveInboundFilter.current.evaluate("+1 555 0000", "Hello")
         assertEquals(MessageDisposition.DELIVER, disposition)
     }
 }

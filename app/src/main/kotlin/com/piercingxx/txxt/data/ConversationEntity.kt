@@ -25,6 +25,17 @@ data class ConversationEntity(
     val isArchived: Boolean = false,
     /** Whether notifications for this thread are suppressed (starred still notifies). */
     val isMuted: Boolean = false,
+    /**
+     * Whether this thread is held in quarantine (hidden from the main list).
+     * Unknown-sender holds land here unread until the operator delivers,
+     * blocks, or deletes them.
+     */
+    val isQuarantined: Boolean = false,
+    /**
+     * Epoch millis until which notifications stay off. `0` means no
+     * time-based mute; forever-mute is [isMuted].
+     */
+    val mutedUntilMillis: Long = 0L,
     /** The sort order applied to the conversation list, as a `core` enum name. */
     val sortOrder: String = "PINNED_FIRST",
 )

@@ -142,6 +142,13 @@
             android:exported="false"
             android:label="@string/title_blocking" />
 
+        <!-- Quarantine review. Not exported: launched only from the
+             launcher banner or the blocking screen. -->
+        <activity
+            android:name=".ui.QuarantineActivity"
+            android:exported="false"
+            android:label="@string/title_quarantine" />
+
         <!-- Role-required compose entry point (default-SMS-handler role).
              Exported: other apps hand off ACTION_SENDTO compose requests with
              an sms:/smsto:/mms:/mmsto: data URI; the activity resolves the

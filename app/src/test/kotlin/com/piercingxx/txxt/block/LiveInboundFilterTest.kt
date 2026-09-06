@@ -69,8 +69,7 @@ class LiveInboundFilterTest {
         LiveInboundFilter.apply(SettingsBlocking(), SettingsStarred())
         val (disposition, _) = LiveInboundFilter.current.evaluate("+1 555 8888", "Hello")
         // No longer blocked after a fresh (empty) apply. The unknown sender now
-        // DELIVERs: factory default is fail-open (F6) — docs/PRIVACY.md §8.7 is
-        // proposed, not adopted, so quarantine is opt-in.
+        // DELIVERs: factory default is fail-open — the hold is opt-in.
         assertEquals(MessageDisposition.DELIVER, disposition)
     }
 

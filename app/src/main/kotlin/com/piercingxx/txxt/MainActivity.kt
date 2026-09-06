@@ -20,8 +20,12 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.piercingxx.txxt.contacts.ContactNameResolver
 import com.piercingxx.txxt.core.Conversation
+import com.piercingxx.txxt.core.MuteUntil
+import com.piercingxx.txxt.core.RoleSwitchCopy
 import com.piercingxx.txxt.data.BackupJson
 import com.piercingxx.txxt.data.ConversationExporter
+import com.piercingxx.txxt.data.ConversationMute
+import com.piercingxx.txxt.data.ConversationPin as PinStore
 import com.piercingxx.txxt.data.InboundStore
 import com.piercingxx.txxt.data.RoomRestoreService
 import com.piercingxx.txxt.data.TxxTDatabase
@@ -37,6 +41,7 @@ import com.piercingxx.txxt.ui.ConversationListLoader
 import com.piercingxx.txxt.ui.ConversationSearchFilter
 import com.piercingxx.txxt.ui.ConversationSwipeHelper
 import com.piercingxx.txxt.ui.NewConversationActivity
+import com.piercingxx.txxt.ui.QuarantineActivity
 import com.piercingxx.txxt.ui.SettingsBackup
 import com.piercingxx.txxt.ui.SettingsBlockingStore
 import com.piercingxx.txxt.ui.SettingsStore
@@ -137,6 +142,7 @@ class MainActivity : Activity(), SwipeActionCallback {
     private lateinit var exportButton: Button
     private lateinit var importButton: Button
     private lateinit var roleBanner: TextView
+    private lateinit var quarantineBanner: TextView
     private var runtimePermissionsAsked = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -158,6 +164,7 @@ class MainActivity : Activity(), SwipeActionCallback {
         exportButton = findViewById(R.id.export_button)
         importButton = findViewById(R.id.import_button)
         roleBanner = findViewById(R.id.role_banner)
+        quarantineBanner = findViewById(R.id.quarantine_banner)
 
         // The launcher's conversation-list host (activity_main.xml): the live
         // adapter plus the swipe helper (T1) over the same RecyclerView.
@@ -191,11 +198,15 @@ class MainActivity : Activity(), SwipeActionCallback {
         roleBanner.setOnClickListener {
             val roleIntent = DefaultHandlerMonitor().roleRequest(this)
             if (shouldRequestRole(roleIntent)) {
-                startActivityForResult(roleIntent!!, REQUEST_ROLE_SMS)
+                explainThenRequestRole(roleIntent!!)
             }
+        }
+        quarantineBanner.setOnClickListener {
+            startActivity(Intent(this, QuarantineActivity::class.java))
         }
 
         observeConversations()
+        observeQuarantineBanner()
         applyTheme()
         requestDefaultHandlerGrants()
         refreshRoleBanner()
@@ -254,6 +265,21 @@ class MainActivity : Activity(), SwipeActionCallback {
         }
     }
 
+    private fun observeQuarantineBanner() {
+        scope.launch {
+            ConversationListLoader(database.conversationDao(), database.messageDao())
+                .quarantined()
+                .collect { held ->
+                    quarantineBanner.visibility = if (held.isEmpty()) View.GONE else View.VISIBLE
+                    quarantineBanner.text = if (held.size == 1) {
+                        "1 held message. Tap to review."
+                    } else {
+                        "${held.size} held messages. Tap to review."
+                    }
+                }
+        }
+    }
+
     /**
      * Paints the launcher's chrome from the current effective theme (T6) — the
      * same applier path the thread screen uses, so both surfaces follow the
@@ -273,6 +299,7 @@ class MainActivity : Activity(), SwipeActionCallback {
             exportButton.setTextColor(tokens.accent.toInt())
             importButton.setTextColor(tokens.accent.toInt())
             roleBanner.setTextColor(tokens.accent.toInt())
+            quarantineBanner.setTextColor(tokens.accent.toInt())
             adapter.applyTheme(tokens)
         }.apply()
     }
@@ -328,10 +355,29 @@ class MainActivity : Activity(), SwipeActionCallback {
     private fun requestDefaultHandlerGrants() {
         val roleIntent = DefaultHandlerMonitor().roleRequest(this)
         if (shouldRequestRole(roleIntent)) {
-            startActivityForResult(roleIntent!!, REQUEST_ROLE_SMS)
+            explainThenRequestRole(roleIntent!!)
             return
         }
         requestRuntimePermissions()
+    }
+
+    /**
+     * First-run / in-app role request (todo.md T3). The system picker is
+     * out of our hands; this dialog is the honest copy: the archive lives
+     * only in this app and dies on uninstall unless exported.
+     */
+    private fun explainThenRequestRole(roleIntent: Intent) {
+        AlertDialog.Builder(this)
+            .setTitle("Default SMS app")
+            .setMessage(RoleSwitchCopy.FIRST_RUN)
+            .setPositiveButton("Set as default") { _, _ ->
+                startActivityForResult(roleIntent, REQUEST_ROLE_SMS)
+            }
+            .setNegativeButton("Not now") { _, _ ->
+                requestRuntimePermissions()
+            }
+            .setCancelable(false)
+            .show()
     }
 
     /**
@@ -441,7 +487,7 @@ class MainActivity : Activity(), SwipeActionCallback {
                 .split(ADDRESS_DELIMITER)
                 .firstOrNull { it.isNotBlank() }
             val pinLabel = if (entity.isPinned) "Unpin" else "Pin"
-            val muteLabel = if (entity.isMuted) "Unmute" else "Mute"
+            val muteLabel = "Mute…"
             val starLabel = if (
                 address != null && BlockingRules.isStarred(blockingMap(), address)
             ) "Unstar" else "Star"
@@ -469,7 +515,7 @@ class MainActivity : Activity(), SwipeActionCallback {
                 ) { _, which ->
                     when (which) {
                         0 -> togglePinned(conversationId)
-                        1 -> toggleMuted(conversationId, !entity.isMuted)
+                        1 -> promptMute(conversationId, entity)
                         2 -> address?.let { toggleStarred(it) }
                         3 -> address?.let { copyNumber(it) }
                         4 -> onCall(conversationId)
@@ -533,13 +579,61 @@ class MainActivity : Activity(), SwipeActionCallback {
             .show()
     }
 
-    private fun toggleMuted(conversationId: Long, muted: Boolean) {
+    /**
+     * Mute-until presets plus forever-mute (todo.md T5). Notifications stay
+     * off until the wall time; the thread still receives. Unmute is one tap
+     * when a mute is already active.
+     */
+    private fun promptMute(conversationId: Long, entity: com.piercingxx.txxt.data.ConversationEntity) {
+        val now = System.currentTimeMillis()
+        val items = mutableListOf<String>()
+        if (ConversationMute.isActive(entity, now)) items += "Unmute"
+        items += listOf(
+            "Mute 1 hour",
+            "Mute 8 hours",
+            "Mute until tonight",
+            "Mute until Monday",
+            "Mute forever",
+        )
+        AlertDialog.Builder(this)
+            .setTitle("Mute")
+            .setItems(items.toTypedArray()) { _, which ->
+                applyMuteChoice(conversationId, items[which])
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun applyMuteChoice(conversationId: Long, choice: String) {
         scope.launch {
             val dao = database.conversationDao()
-            dao.getById(conversationId)?.let { dao.update(it.copy(isMuted = muted)) }
+            val entity = dao.getById(conversationId) ?: return@launch
+            val now = System.currentTimeMillis()
+            val updated = when (choice) {
+                "Unmute" -> entity.copy(isMuted = false, mutedUntilMillis = 0L)
+                "Mute 1 hour" -> entity.copy(
+                    isMuted = false,
+                    mutedUntilMillis = MuteUntil.expiryMillis(MuteUntil.Preset.ONE_HOUR, now),
+                )
+                "Mute 8 hours" -> entity.copy(
+                    isMuted = false,
+                    mutedUntilMillis = MuteUntil.expiryMillis(MuteUntil.Preset.EIGHT_HOURS, now),
+                )
+                "Mute until tonight" -> entity.copy(
+                    isMuted = false,
+                    mutedUntilMillis = MuteUntil.expiryMillis(MuteUntil.Preset.TONIGHT, now),
+                )
+                "Mute until Monday" -> entity.copy(
+                    isMuted = false,
+                    mutedUntilMillis = MuteUntil.expiryMillis(MuteUntil.Preset.MONDAY, now),
+                )
+                "Mute forever" -> entity.copy(isMuted = true, mutedUntilMillis = 0L)
+                else -> return@launch
+            }
+            dao.update(updated)
             Toast.makeText(
                 this@MainActivity,
-                if (muted) "Muted" else "Unmuted",
+                if (choice == "Unmute") "Unmuted" else choice,
                 Toast.LENGTH_SHORT,
             ).show()
         }
@@ -552,11 +646,22 @@ class MainActivity : Activity(), SwipeActionCallback {
         Toast.makeText(this, "Copied $address", Toast.LENGTH_SHORT).show()
     }
 
-    /** Flips a conversation's persisted pinned flag (PINNED_FIRST ordering). */
+    /** Flips a conversation's persisted pinned flag, capped at five. */
     private fun togglePinned(conversationId: Long) {
         scope.launch {
-            val dao = database.conversationDao()
-            dao.getById(conversationId)?.let { dao.update(it.copy(isPinned = !it.isPinned)) }
+            when (PinStore.toggle(database.conversationDao(), conversationId)) {
+                PinStore.Result.PINNED ->
+                    Toast.makeText(this@MainActivity, "Pinned", Toast.LENGTH_SHORT).show()
+                PinStore.Result.UNPINNED ->
+                    Toast.makeText(this@MainActivity, "Unpinned", Toast.LENGTH_SHORT).show()
+                PinStore.Result.CAP_REACHED ->
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Pin limit is ${PinStore.MAX_PINNED}",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                PinStore.Result.MISSING -> Unit
+            }
         }
     }
 

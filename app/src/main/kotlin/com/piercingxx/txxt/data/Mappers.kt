@@ -79,6 +79,8 @@ object Mappers {
         isPinned = flags.isPinned,
         isArchived = flags.isArchived,
         isMuted = isMuted,
+        isQuarantined = flags.isQuarantined,
+        mutedUntilMillis = flags.mutedUntilMillis,
         sortOrder = flags.sortOrder.name,
     )
 
@@ -89,6 +91,8 @@ object Mappers {
         isPinned = isPinned,
         isArchived = isArchived,
         isMuted = isMuted,
+        isQuarantined = isQuarantined,
+        mutedUntilMillis = mutedUntilMillis,
         sortOrder = ConversationSortOrder.valueOf(sortOrder),
     )
 
@@ -98,6 +102,8 @@ object Mappers {
             isPinned = isPinned,
             isArchived = isArchived,
             isMuted = isMuted,
+            isQuarantined = isQuarantined,
+            mutedUntilMillis = mutedUntilMillis,
             sortOrder = sortOrder.name,
         )
 

@@ -57,8 +57,8 @@ object OutboundStore {
         // findOrCreateConversation — which self-locks — must NOT be called
         // in here; the internal unlocked variant is exactly for this).
         val conversationId = InboundStore.findOrCreateConversationLocked(conversations, address)
-        // Sending into an archived thread unarchives it (InboundStore rule).
-        conversations.unarchive(conversationId)
+        // Sending into an archived or quarantined thread surfaces it.
+        InboundStore.surfaceConversation(conversations, conversationId)
         val message = MessageEntity(
             id = InboundStore.freshMessageId(messages),
             conversationId = conversationId,
@@ -108,8 +108,8 @@ object OutboundStore {
         mediaPath: String? = null,
     ): Long = InboundStore.withPersistenceLock {
         val conversationId = InboundStore.findOrCreateConversationLocked(conversations, address)
-        // Sending into an archived thread unarchives it (InboundStore rule).
-        conversations.unarchive(conversationId)
+        // Sending into an archived or quarantined thread surfaces it.
+        InboundStore.surfaceConversation(conversations, conversationId)
         val message = MessageEntity(
             id = InboundStore.freshMessageId(messages),
             conversationId = conversationId,
