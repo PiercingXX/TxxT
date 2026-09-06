@@ -30,11 +30,13 @@ class SettingsBlockingStore(
     phrases: Set<String> = emptySet(),
     blockedAddresses: Set<String> = emptySet(),
     starredContacts: Set<String> = emptySet(),
+    quarantineUnknownSenders: Boolean = false,
 ) {
     private val keywordRules = keywords.toMutableSet()
     private val phraseRules = phrases.toMutableSet()
     private val blockedAddresses = blockedAddresses.toMutableSet()
     private val starredContacts = starredContacts.toMutableSet()
+    private var quarantineUnknown = quarantineUnknownSenders
 
     /** The current keyword rules, as an unmodifiable snapshot. */
     fun keywords(): Set<String> = keywordRules.toSet()
@@ -47,6 +49,18 @@ class SettingsBlockingStore(
 
     /** The current starred contacts, as an unmodifiable snapshot. */
     fun starredContacts(): Set<String> = starredContacts.toSet()
+
+    /**
+     * Whether unknown senders are held in quarantine. Default off — the
+     * store exists, the hold is still opt-in.
+     */
+    fun quarantineUnknownSenders(): Boolean = quarantineUnknown
+
+    /** Sets the unknown-sender hold. Returns this store for chaining. */
+    fun setQuarantineUnknownSenders(enabled: Boolean): SettingsBlockingStore {
+        quarantineUnknown = enabled
+        return this
+    }
 
     /** Builds the [SettingsBlocking] model the settings screen edits, from the persisted rules. */
     fun buildBlocking(): SettingsBlocking =
@@ -68,7 +82,11 @@ class SettingsBlockingStore(
      * behaviour is the wiring's behaviour.
      */
     fun loadAndApply() {
-        LiveInboundFilter.apply(buildBlocking(), buildStarred())
+        LiveInboundFilter.apply(
+            buildBlocking(),
+            buildStarred(),
+            quarantineUnknownSenders = quarantineUnknown,
+        )
     }
 
     companion object {
@@ -87,12 +105,16 @@ class SettingsBlockingStore(
         /** Backup settings-map key for the starred contacts. */
         const val KEY_STARRED_CONTACTS = "starredContacts"
 
+        /** Backup settings-map key for the unknown-sender quarantine toggle. */
+        const val KEY_QUARANTINE_UNKNOWN = "quarantineUnknownSenders"
+
         /** All blocking/starred backup-map keys. */
         val KEY_NAMES: List<String> = listOf(
             KEY_KEYWORDS,
             KEY_PHRASES,
             KEY_BLOCKED_ADDRESSES,
             KEY_STARRED_CONTACTS,
+            KEY_QUARANTINE_UNKNOWN,
         )
 
         /** Separator for a set rendered into a single map string. */
@@ -104,6 +126,7 @@ class SettingsBlockingStore(
             KEY_PHRASES to store.phrases().joinToString(SET_SEPARATOR),
             KEY_BLOCKED_ADDRESSES to store.blockedAddresses().joinToString(SET_SEPARATOR),
             KEY_STARRED_CONTACTS to store.starredContacts().joinToString(SET_SEPARATOR),
+            KEY_QUARANTINE_UNKNOWN to store.quarantineUnknownSenders().toString(),
         )
 
         /**
@@ -116,6 +139,7 @@ class SettingsBlockingStore(
             phrases = splitSet(map[KEY_PHRASES]),
             blockedAddresses = splitSet(map[KEY_BLOCKED_ADDRESSES]),
             starredContacts = splitSet(map[KEY_STARRED_CONTACTS]),
+            quarantineUnknownSenders = map[KEY_QUARANTINE_UNKNOWN]?.toBooleanStrictOrNull() ?: false,
         )
 
         private fun splitSet(value: String?): Set<String> =

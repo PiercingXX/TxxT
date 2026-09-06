@@ -1,6 +1,5 @@
 package com.piercingxx.txxt.block
 
-import com.piercingxx.txxt.core.BlockDecision
 import com.piercingxx.txxt.core.BlockingFilter
 import com.piercingxx.txxt.core.PhoneNumbers
 import com.piercingxx.txxt.core.StarredBypass
@@ -10,7 +9,7 @@ import com.piercingxx.txxt.core.UnknownSenderRule
  * App-layer inbound message filter.
  *
  * Wraps the core decision classes ([UnknownSenderRule], [BlockingFilter],
- * [StarredBypass], [BlockDecision]) and maps their result to a
+ * [StarredBypass]) and maps their result to a
  * [MessageDisposition] and an optional [BlockReason].
  *
  * Decision order:
@@ -21,13 +20,10 @@ import com.piercingxx.txxt.core.UnknownSenderRule
  *    unknown sender **delivers**.
  * 4. Otherwise → [MessageDisposition.DELIVER].
  *
- * Quarantine is explicit opt-in. `docs/PRIVACY.md` §8 lists "block unknown
- * senders by default" among *proposed* improvements (§8.7) that have not been
- * adopted, and there is no quarantine store to persist held messages to — a
- * quarantined message is dropped by the receivers without ever being written
- * anywhere, i.e. silent data loss. So the factory default is fail-open:
- * unknown non-blocked senders are delivered until both a quarantine store and
- * an explicit user setting exist.
+ * Quarantine is explicit opt-in and **default off**. Held messages persist
+ * through [com.piercingxx.txxt.data.QuarantineStore] (unread, hidden from the
+ * main list). The factory default stays fail-open so an unknown sender is
+ * never silently held until the operator turns the toggle on.
  *
  * Address matching goes through `PhoneNumbers.matches` (core): case-
  * insensitive, whitespace-trimmed, digit-normalised with country-code suffix
@@ -51,21 +47,19 @@ class InboundFilter(
     private val blockOverrideStore: BlockOverrideStore? = null,
     /**
      * Whether the unknown-sender rule routes unknown senders to QUARANTINE.
-     * Off by default: §8.7 of docs/PRIVACY.md is proposed, not adopted, and
-     * quarantine has no persistence behind it yet, so the factory posture is
-     * fail-open delivery.
+     * Off by default: the hold is opt-in even though the store now exists.
      */
     val quarantineUnknownSenders: Boolean = false,
+    /**
+     * Live lookup of known contacts. Defaults to the constructor snapshot.
+     * The inbound path supplies a provider that re-reads the system contacts
+     * book so a contact saved after process start is not held.
+     */
+    private val knownContactsProvider: () -> Set<String> = { knownContacts },
 ) {
 
-    private val unknownSenderRule = UnknownSenderRule(knownContacts = knownContacts)
     private val blockingFilter = BlockingFilter(keywords = contentKeywords, phrases = contentPhrases)
     private val starredBypass = StarredBypass(starredContacts = starredContacts)
-    private val blockDecision = BlockDecision(
-        filter = blockingFilter,
-        unknownSenderRule = unknownSenderRule,
-        starredBypass = starredBypass,
-    )
     // Originals are kept; membership compares with PhoneNumbers.matches so
     // formatting variance ("+1 555 8888" vs "55588888888"-style variants)
     // cannot evade the list.
@@ -106,16 +100,16 @@ class InboundFilter(
             }
         }
 
-        // Check unknown sender
-        if (unknownSenderRule.isUnknown(sender)) {
+        // Check unknown sender against the live contact set (not the
+        // construction-time snapshot) so a contact saved after apply() is
+        // not held.
+        if (UnknownSenderRule(knownContactsProvider()).isUnknown(sender)) {
             return if (starredBypass.isStarred(sender)) {
                 MessageDisposition.DELIVER to BlockReason.StarredContactRule("unknown-sender")
             } else if (quarantineUnknownSenders) {
-                // Explicit opt-in: docs/PRIVACY.md §8.7 is proposed, not adopted.
                 MessageDisposition.QUARANTINE to BlockReason.UnknownSender
             } else {
-                // Fail-open factory default: no adopted quarantine setting and
-                // no quarantine persistence — delivering loses nothing.
+                // Fail-open factory default: the hold is opt-in.
                 MessageDisposition.DELIVER to null
             }
         }

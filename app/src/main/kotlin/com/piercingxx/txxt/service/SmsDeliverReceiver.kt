@@ -8,6 +8,7 @@ import com.piercingxx.txxt.block.InboundFilter
 import com.piercingxx.txxt.block.LiveInboundFilter
 import com.piercingxx.txxt.block.MessageDisposition
 import com.piercingxx.txxt.data.InboundStore
+import com.piercingxx.txxt.data.QuarantineStore
 import com.piercingxx.txxt.data.TxxTDatabase
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -29,12 +30,11 @@ import kotlinx.coroutines.launch
  * persist is lost, full stop. That is why the [InboundFilter] decision
  * deliberately runs *before* any persistence:
  *
- *  - [MessageDisposition.BLOCK] — dropped, nothing stored, no auto-reply. There
- *    is no quarantine store yet (docs/PRIVACY.md §8.7 quarantine is proposed,
- *    not adopted); dropping blocked mail here IS the block working as intended.
- *  - [MessageDisposition.QUARANTINE] — likewise dropped without persistence:
- *    with no store to hold it aside into, "quarantining" would either be a lie
- *    (silent loss dressed up) or a write the user never reviews.
+ *  - [MessageDisposition.BLOCK] — dropped, nothing stored, no auto-reply.
+ *    Dropping blocked mail here IS the block working as intended.
+ *  - [MessageDisposition.QUARANTINE] — persisted unread through
+ *    [QuarantineStore] (hidden from the main list) and **not** notified.
+ *    Starred senders never reach this branch ([InboundFilter] delivers them).
  *  - [MessageDisposition.DELIVER] — persisted unread through [InboundStore]
  *    (`isRead = false`, so the unread-count derivation lights up), then the
  *    arrival notification is posted through [notify], then the optional
@@ -130,6 +130,12 @@ class SmsDeliverReceiver(
      */
     private val persist: (suspend (String, String, Long) -> Unit)? = null,
     /**
+     * Persists a quarantined message as `(address, body, dateMillis)`.
+     * Defaults to `null`, meaning [QuarantineStore.persistInboundSms].
+     * A hold is never announced and never auto-replied.
+     */
+    private val persistQuarantine: (suspend (String, String, Long) -> Unit)? = null,
+    /**
      * Posts the arrival notification for a delivered message as
      * `(context, address, body)`. Defaults to `null`, meaning the real posting
      * runs through [ArrivalNotify] (permission gate, starred bypass,
@@ -152,10 +158,11 @@ class SmsDeliverReceiver(
         val date = extractDate(intent)
 
         // The filter decision deliberately precedes persistence: in the
-        // default-app role this receiver is the only sink, so BLOCK/QUARANTINE
-        // end here — nothing written, nothing replied (see class KDoc).
+        // default-app role this receiver is the only sink. BLOCK ends here
+        // with nothing written. QUARANTINE persists to the hold, not the
+        // inbox, and never notifies.
         val (disposition, _) = inboundFilterProvider().evaluate(sender, body)
-        if (disposition != MessageDisposition.DELIVER) return
+        if (disposition == MessageDisposition.BLOCK) return
 
         val pendingResult = goAsync()
         // Backstop: an unexpected throw must never crash the delivery process —
@@ -163,6 +170,21 @@ class SmsDeliverReceiver(
         val exceptionHandler = CoroutineExceptionHandler { _, _ -> }
         CoroutineScope(Dispatchers.IO + exceptionHandler).launch {
             try {
+                if (disposition == MessageDisposition.QUARANTINE) {
+                    val hold: suspend (String, String, Long) -> Unit =
+                        persistQuarantine ?: { address, text, dateMillis ->
+                            val database = TxxTDatabase.instance(context)
+                            QuarantineStore.persistInboundSms(
+                                database.conversationDao(),
+                                database.messageDao(),
+                                address,
+                                text,
+                                dateMillis,
+                            )
+                        }
+                    hold(sender, body, date)
+                    return@launch
+                }
                 val store: suspend (String, String, Long) -> Unit =
                     persist ?: { address, text, dateMillis ->
                         val database = TxxTDatabase.instance(context)

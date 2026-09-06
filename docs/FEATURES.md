@@ -11,8 +11,10 @@
   which stages the picked bytes into app-private storage via `PhotoStaging`
   (so no storage permission and no retained content-URI grant), then routes an
   attached send through `SendPipeline.sendMms`. Group MMS still out.
-- Conversation list: pin, mute, archive, swipe-to-delete (confirmed), call,
-  copy number, block, star. Search the list and search inside a thread.
+- Conversation list: pin (cap 5), mute forever or until (1h / 8h / tonight /
+  Monday), archive, swipe-to-delete (confirmed), call, copy number, block,
+  star. Search the list and search inside a thread. Unknown-sender hold
+  (default off) persists to a review list: deliver / block / delete.
 - Emoji in the compose bar (palette) and in message bodies (system fallback).
 - Quick reply from notifications; call-screen reply persists to the thread.
 - **Excluded:** voice messages (never sent or received — PRIVACY.md §5);

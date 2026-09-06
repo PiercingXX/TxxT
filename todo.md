@@ -8,10 +8,10 @@ Default SMS/MMS handler. Privacy-first, AMOLED, everything leaky off by
 default. No RCS. No `RECORD_AUDIO`.
 
 ```
-Status: role held, photos, search, mute, theme sync, conversation export
-shipped. Settings backup is settings+blocklist only. Quarantine
-disposition DROPS messages. Switching the default SMS app destroys the
-archive unless exported first.
+Status: role held, photos, search, mute, mute-until, pin cap, theme sync,
+conversation export, quarantine store shipped. Settings backup is
+settings+blocklist only. Switching the default SMS app is warned in-app;
+uninstall still drops the archive unless exported first.
 ```
 
 ---
@@ -48,16 +48,16 @@ Settings already dump settings + blocklist into app-private storage.
 `InboundFilter` already returns QUARANTINE. Deliver receivers discard.
 That is data loss. **Default off** until the store exists.
 
-- [ ] Persist quarantined inbound SMS/MMS (unread, flagged).
-- [ ] Hide them from the main list (same idea as archive).
-- [ ] Review surface: deliver / block / delete per sender.
-- [ ] Enabling the toggle with no store must be impossible (hide or disable).
+- [x] Persist quarantined inbound SMS/MMS (unread, flagged).
+- [x] Hide them from the main list (same idea as archive).
+- [x] Review surface: deliver / block / delete per sender.
+- [x] Enabling the toggle with no store must be impossible (hide or disable).
 - **Accept:** unknown sender + quarantine on → message is in the review
   list, not gone. Starred sender still lands in the inbox.
 
 ### T3 — Role-switch warning
 
-- [ ] Before the user leaves default-SMS, warn that the local archive
+- [x] Before the user leaves default-SMS, warn that the local archive
   dies unless they exported.
 - **Accept:** the system role UI is out of our hands; the in-app “unset”
   / first-run copy is honest.
@@ -66,9 +66,9 @@ That is data loss. **Default off** until the store exists.
 
 Daily-driver quality of life. Not a new privacy surface.
 
-- [ ] **Pin** a thread to the top of the conversation list. Cap it (e.g.
+- [x] **Pin** a thread to the top of the conversation list. Cap it (e.g.
   5). Pinned stay above the rest; unpin is one tap.
-- [ ] **Mute until** a wall time or duration (1h / 8h / tonight / Monday).
+- [x] **Mute until** a wall time or duration (1h / 8h / tonight / Monday).
   Notifications for that thread stay off until then; the thread still
   receives. Existing mute (forever) stays.
 - **Accept:** pin two threads, kill the app, they are still on top.

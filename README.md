@@ -63,7 +63,7 @@ export ANDROID_HOME=$HOME/Android/Sdk
 ./gradlew assembleDebug :core:test :app:testDebugUnitTest
 ```
 
-778 JVM tests, green. `core/` holds the message and state-machine domain with
+1016 JVM tests, green. `core/` holds the message and state-machine domain with
 zero `android.*` imports, so the logic that has to be correct is testable
 without a device; `scripts/verify_no_android_imports.py` enforces that.
 

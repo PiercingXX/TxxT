@@ -151,6 +151,25 @@
             android:textColor="#FFFFFF"
             android:layout_marginBottom="8dp" />
 
+        <Button
+            android:id="@+id/unset_sms_button"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Stop being default SMS"
+            android:textColor="#FFFFFF"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:id="@+id/unset_sms_hint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="TxxT keeps messages only on this phone. Export first if you still need the archive."
+            android:textColor="#80FFFFFF"
+            android:textSize="12sp"
+            android:fontFamily="@font/font_body"
+            android:layout_marginBottom="8dp" />
+
     </LinearLayout>
 
 </ScrollView>

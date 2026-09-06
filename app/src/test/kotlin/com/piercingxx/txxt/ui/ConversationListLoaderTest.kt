@@ -64,11 +64,13 @@ class ConversationListLoaderTest {
         address: String = "+1555000$id",
         isArchived: Boolean = false,
         isPinned: Boolean = false,
+        isQuarantined: Boolean = false,
     ): ConversationEntity = ConversationEntity(
         id = id,
         participantAddresses = address,
         isArchived = isArchived,
         isPinned = isPinned,
+        isQuarantined = isQuarantined,
     )
 
     private fun message(
@@ -120,6 +122,32 @@ class ConversationListLoaderTest {
         ).conversations().first()
 
         assertEquals(listOf(1L), loaded.map { it.id })
+    }
+
+    @Test
+    fun `quarantined conversations are dropped from the main list`() = runBlocking {
+        val loaded = loaderOver(
+            conversations = listOf(
+                conversation(1L),
+                conversation(2L, isQuarantined = true),
+            ),
+            messages = emptyList(),
+        ).conversations().first()
+
+        assertEquals(listOf(1L), loaded.map { it.id })
+    }
+
+    @Test
+    fun `quarantined conversations appear only on the review list`() = runBlocking {
+        val loader = loaderOver(
+            conversations = listOf(
+                conversation(1L),
+                conversation(2L, isQuarantined = true),
+            ),
+            messages = emptyList(),
+        )
+        assertEquals(listOf(2L), loader.quarantined().first().map { it.id })
+        assertEquals(listOf(1L), loader.conversations().first().map { it.id })
     }
 
     @Test

@@ -4,8 +4,10 @@ import android.app.role.RoleManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.provider.Settings
 import android.provider.Telephony
 import android.widget.Toast
+import com.piercingxx.txxt.core.RoleSwitchCopy
 
 /**
  * Monitors the default-SMS-handler role: warns loudly when it is revoked (T6)
@@ -72,7 +74,7 @@ class DefaultHandlerMonitor(
     private val onRevoked: (Context) -> Unit = { context ->
         Toast.makeText(
             context,
-            "TxxT is no longer the default SMS app — messages may not be received.",
+            RoleSwitchCopy.REVOKED,
             Toast.LENGTH_LONG,
         ).show()
     },
@@ -97,6 +99,22 @@ class DefaultHandlerMonitor(
         } else {
             // No RoleManager below API 29: the user grants the role manually.
             null
+        }
+    },
+    /**
+     * System settings where the operator can pick a different default SMS
+     * app. The platform has no in-app "release ROLE_SMS" API; this is the
+     * honest unset path. Injectable so JVM tests can observe the launch
+     * without a device.
+     */
+    private val defaultAppsSettingsIntent: (Context) -> Intent = { _ ->
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // ACTION_MANAGE_DEFAULT_APPS landed in API 31; the compile
+            // classpath's android.jar may not export the constant, so the
+            // platform action string is used verbatim.
+            Intent("android.settings.MANAGE_DEFAULT_APPS")
+        } else {
+            Intent(Settings.ACTION_SETTINGS)
         }
     },
 ) {
@@ -138,4 +156,11 @@ class DefaultHandlerMonitor(
      * single-user app.
      */
     fun roleRequest(context: Context): Intent? = roleRequestIntent(context)
+
+    /**
+     * The system default-apps screen — the in-app unset path. The operator
+     * is warned about the local archive first; this intent is what we start
+     * after they confirm.
+     */
+    fun unsetSettingsIntent(context: Context): Intent = defaultAppsSettingsIntent(context)
 }

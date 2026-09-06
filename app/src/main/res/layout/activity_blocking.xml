@@ -39,6 +39,33 @@
             android:fontFamily="@font/font_body"
             android:paddingBottom="12dp" />
 
+        <Switch
+            android:id="@+id/quarantine_unknown_switch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Hold unknown senders"
+            android:textColor="#E6FFFFFF"
+            android:fontFamily="@font/font_body"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Off by default. Unknown senders land in a review list, not the inbox. Starred senders still land in the inbox."
+            android:textColor="#80FFFFFF"
+            android:textSize="12sp"
+            android:fontFamily="@font/font_body"
+            android:paddingBottom="8dp" />
+
+        <Button
+            android:id="@+id/quarantine_review_button"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Review held messages"
+            android:textColor="#FFFFFF"
+            android:layout_marginBottom="16dp" />
+
         <!-- Blocked numbers -->
         <TextView
             android:layout_width="match_parent"

@@ -9,6 +9,7 @@ import com.piercingxx.txxt.block.MessageDisposition
 import com.piercingxx.txxt.core.MmsPduHeader
 import com.piercingxx.txxt.core.MmsRetrievedContent
 import com.piercingxx.txxt.data.InboundStore
+import com.piercingxx.txxt.data.QuarantineStore
 import com.piercingxx.txxt.data.TxxTDatabase
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -29,7 +30,9 @@ import kotlinx.coroutines.launch
  *  - **Parse failure = fail closed.** An unparseable PDU cannot prove what it
  *    carries — for all this receiver knows it is exactly the voice message
  *    docs/PRIVACY.md §5 promises is never received.
- *  - Filter BLOCK/QUARANTINE → nothing stored, broadcast aborted.
+ *  - Filter BLOCK → nothing stored, broadcast aborted.
+ *  - Filter QUARANTINE → persisted to the hold (unread, hidden), photo
+ *    still retrieved, no notification.
  *  - Header CONTENT-TYPE is audio → DROP_UNSTORED: voice messages are never
  *    received, never stored, never downloaded (§5).
  *  - Otherwise persist, auto-fetch the photo, and notify. A photo stays
@@ -78,6 +81,11 @@ class MmsDeliverReceiver(
      */
     private val persist: (suspend (String, Long, String?) -> Long)? = null,
     /**
+     * Persists a quarantined MMS row as `(address, dateMillis, contentLocation)`
+     * and returns the message id. Defaults to [QuarantineStore].
+     */
+    private val persistQuarantine: (suspend (String, Long, String?) -> Long)? = null,
+    /**
      * Fetches the PDU for `(context, messageId, contentLocation)` and returns
      * whether a message row still exists afterwards. Defaults to `null`,
      * meaning [MmsRetrieveService] is started (or [MmsRetrieve.retrieveAndStore]
@@ -104,7 +112,7 @@ class MmsDeliverReceiver(
             ?: return
 
         val (disposition, _) = inboundFilterProvider().evaluate(sender, "")
-        if (disposition != MessageDisposition.DELIVER) {
+        if (disposition == MessageDisposition.BLOCK) {
             abortBroadcast()
             return
         }
@@ -121,23 +129,37 @@ class MmsDeliverReceiver(
         val exceptionHandler = CoroutineExceptionHandler { _, _ -> }
         CoroutineScope(Dispatchers.IO + exceptionHandler).launch {
             try {
+                val hold = disposition == MessageDisposition.QUARANTINE
                 val store: suspend (String, Long, String?) -> Long =
-                    persist ?: { address, date, location ->
-                        val database = TxxTDatabase.instance(context)
-                        InboundStore.persistInboundMmsMetadata(
-                            database.conversationDao(),
-                            database.messageDao(),
-                            address,
-                            date,
-                            contentLocation = location,
-                        )
+                    if (hold) {
+                        persistQuarantine ?: { address, date, location ->
+                            val database = TxxTDatabase.instance(context)
+                            QuarantineStore.persistInboundMmsMetadata(
+                                database.conversationDao(),
+                                database.messageDao(),
+                                address,
+                                date,
+                                contentLocation = location,
+                            )
+                        }
+                    } else {
+                        persist ?: { address, date, location ->
+                            val database = TxxTDatabase.instance(context)
+                            InboundStore.persistInboundMmsMetadata(
+                                database.conversationDao(),
+                                database.messageDao(),
+                                address,
+                                date,
+                                contentLocation = location,
+                            )
+                        }
                     }
                 val location = MmsPduHeader.retrieveUrl(info)
                 val messageId = store(sender, dateMillis, location)
                 val fetch: suspend (Context, Long, String?) -> Boolean =
                     retrieve ?: { ctx, id, loc -> defaultRetrieve(ctx, id, loc) }
                 val kept = fetch(context, messageId, location)
-                if (kept) {
+                if (kept && !hold) {
                     val post: suspend (Context, String, String) -> Unit =
                         notify ?: { ctx, from, text ->
                             ArrivalNotify.post(ctx, from, text)

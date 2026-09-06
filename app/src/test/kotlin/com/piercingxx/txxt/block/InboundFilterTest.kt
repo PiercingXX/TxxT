@@ -208,10 +208,8 @@ class InboundFilterTest {
     }
 
     // ---- F6 regression lock: factory default is fail-open delivery ----
-    // docs/PRIVACY.md §8.7 ("block unknown senders by default") is PROPOSED,
-    // not adopted, and quarantine has no persistence behind it — a quarantined
-    // message would be dropped silently. So default construction must DELIVER
-    // unknown senders, never QUARANTINE.
+    // The hold is opt-in even though QuarantineStore now persists. Default
+    // construction must DELIVER unknown senders, never QUARANTINE.
 
     @Test
     fun `default construction delivers an unknown sender - factory default is fail-open`() {

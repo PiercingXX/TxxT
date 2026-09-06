@@ -8,10 +8,13 @@ import org.junit.Test
 class PinSortArchiveTest {
 
     @Test
-    fun `default flags are unpinned unarchived pinned-first`() {
+    fun `default flags are unpinned unarchived unquarantined pinned-first`() {
         val flags = ConversationFlags()
         assertFalse(flags.isPinned)
         assertFalse(flags.isArchived)
+        assertFalse(flags.isQuarantined)
+        assertFalse(flags.isMuted)
+        assertEquals(0L, flags.mutedUntilMillis)
         assertEquals(ConversationSortOrder.PINNED_FIRST, flags.sortOrder)
     }
 
@@ -72,6 +75,23 @@ class PinSortArchiveTest {
         assertTrue(flags.isPinned)
         assertTrue(flags.isArchived)
         assertEquals(ConversationSortOrder.OLDEST_FIRST, flags.sortOrder)
+    }
+
+    @Test
+    fun `quarantine sets the quarantined flag`() {
+        val flags = ConversationFlags().quarantine()
+        assertTrue(flags.isQuarantined)
+        assertFalse(flags.releaseFromQuarantine().isQuarantined)
+    }
+
+    @Test
+    fun `mute until is not forever-mute`() {
+        val flags = ConversationFlags().muteUntil(1_700_000_000_000L)
+        assertFalse(flags.isMuted)
+        assertEquals(1_700_000_000_000L, flags.mutedUntilMillis)
+        assertEquals(0L, flags.unmute().mutedUntilMillis)
+        assertTrue(flags.mute().isMuted)
+        assertEquals(0L, flags.mute().mutedUntilMillis)
     }
 
     @Test

@@ -129,17 +129,44 @@ object InboundStore {
      * is always `true` for incoming rows — the pending-send flag exists only
      * for outgoing messages (`RebootReconcile` re-drives those).
      */
+    /**
+     * Surfaces [conversationId] in the launcher's inbox: clears archive and
+     * quarantine. New delivered activity (or an outgoing send) must never stay
+     * silently hidden. Quarantine holds skip this on purpose.
+     */
+    internal suspend fun surfaceConversation(dao: ConversationDao, conversationId: Long) {
+        dao.getById(conversationId)?.let { entity ->
+            if (entity.isArchived || entity.isQuarantined) {
+                dao.update(entity.copy(isArchived = false, isQuarantined = false))
+            }
+        }
+    }
+
+    internal suspend fun markQuarantined(dao: ConversationDao, conversationId: Long) {
+        dao.getById(conversationId)?.let { entity ->
+            if (!entity.isQuarantined) {
+                dao.update(entity.copy(isQuarantined = true))
+            }
+        }
+    }
+
     suspend fun persistInboundSms(
         conversations: ConversationDao,
         messages: MessageDao,
         address: String,
         body: String,
         dateMillis: Long,
+        quarantined: Boolean = false,
     ): Long = MUTEX.withLock {
         val conversationId = findOrCreateConversationLocked(conversations, address)
-        // New activity unarchives: an archived thread receiving a message must
-        // surface in the launcher's list again, never stay silently hidden.
-        conversations.unarchive(conversationId)
+        if (quarantined) {
+            markQuarantined(conversations, conversationId)
+        } else {
+            // New activity unarchives / releases a hold: an archived or
+            // quarantined thread receiving a delivered message must surface
+            // in the launcher's list again, never stay silently hidden.
+            surfaceConversation(conversations, conversationId)
+        }
         val message = MessageEntity(
             id = freshMessageId(messages),
             conversationId = conversationId,
@@ -166,11 +193,14 @@ object InboundStore {
         address: String,
         dateMillis: Long,
         contentLocation: String? = null,
+        quarantined: Boolean = false,
     ): Long = MUTEX.withLock {
         val conversationId = findOrCreateConversationLocked(conversations, address)
-        // New activity unarchives: an archived thread receiving a message must
-        // surface in the launcher's list again, never stay silently hidden.
-        conversations.unarchive(conversationId)
+        if (quarantined) {
+            markQuarantined(conversations, conversationId)
+        } else {
+            surfaceConversation(conversations, conversationId)
+        }
         val message = MessageEntity(
             id = freshMessageId(messages),
             conversationId = conversationId,

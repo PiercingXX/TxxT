@@ -83,12 +83,16 @@ class SettingsBlocking(
      * current rules, the [starred] contact list, and the caller's known-contact
      * set. This is the wiring that makes the settings the user edits reach the
      * inbound message path. [quarantineUnknownSenders] passes through to
-     * [InboundFilter]: quarantine stays opt-in until a quarantine store exists.
+     * [InboundFilter]: the hold is opt-in (default off) now that the store
+     * exists. [knownContactsProvider] and [blockOverrideStore] are the live
+     * inbound path's lookups.
      */
     fun filter(
         starred: SettingsStarred,
         knownContacts: Set<String> = emptySet(),
         quarantineUnknownSenders: Boolean = false,
+        knownContactsProvider: (() -> Set<String>)? = null,
+        blockOverrideStore: com.piercingxx.txxt.block.BlockOverrideStore? = null,
     ): InboundFilter =
         InboundFilter(
             knownContacts = knownContacts,
@@ -97,5 +101,7 @@ class SettingsBlocking(
             contentPhrases = phraseRules.toSet(),
             starredContacts = starred.contacts(),
             quarantineUnknownSenders = quarantineUnknownSenders,
+            knownContactsProvider = knownContactsProvider ?: { knownContacts },
+            blockOverrideStore = blockOverrideStore,
         )
 }

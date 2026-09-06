@@ -1,6 +1,7 @@
 package com.piercingxx.txxt.ui
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.app.NotificationManager
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -19,6 +20,8 @@ import android.widget.Switch
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatDelegate
 import com.piercingxx.txxt.R
+import com.piercingxx.txxt.core.RoleSwitchCopy
+import com.piercingxx.txxt.service.DefaultHandlerMonitor
 import com.piercingxx.txxt.service.NotificationPrefs
 import com.piercingxx.txxt.service.ensureMessageChannels
 import com.piercingxx.txxt.theme.SharedPreferencesThemeKeyValueStore
@@ -234,6 +237,25 @@ class SettingsActivity : Activity() {
             // its own edits re-apply live on every change.
             startActivity(android.content.Intent(this, BlockingActivity::class.java))
         }
+        findViewById<Button>(R.id.unset_sms_button).setOnClickListener {
+            confirmUnsetDefaultSms()
+        }
+    }
+
+    /**
+     * In-app unset path (todo.md T3). The system role UI is out of our
+     * hands; we warn that the local archive dies unless exported, then
+     * open the platform default-apps screen.
+     */
+    private fun confirmUnsetDefaultSms() {
+        AlertDialog.Builder(this)
+            .setTitle("Stop being default SMS?")
+            .setMessage(RoleSwitchCopy.UNSET)
+            .setPositiveButton("Open system settings") { _, _ ->
+                startActivity(DefaultHandlerMonitor().unsetSettingsIntent(this))
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     /** Reads the current control selections into a [SettingsStore]. */
