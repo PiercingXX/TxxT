@@ -19,6 +19,7 @@ import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.piercingxx.txxt.contacts.ContactNameResolver
+import com.piercingxx.txxt.contacts.PhoneLookupIdentity
 import com.piercingxx.txxt.core.Conversation
 import com.piercingxx.txxt.core.MuteUntil
 import com.piercingxx.txxt.core.RoleSwitchCopy
@@ -30,6 +31,8 @@ import com.piercingxx.txxt.data.InboundStore
 import com.piercingxx.txxt.data.RoomRestoreService
 import com.piercingxx.txxt.data.TxxTDatabase
 import com.piercingxx.txxt.service.DefaultHandlerMonitor
+import com.piercingxx.txxt.service.DialerBusinessTier
+import com.piercingxx.txxt.service.DialerGroups
 import com.piercingxx.txxt.service.EXTRA_SENDER
 import com.piercingxx.txxt.theme.SharedPreferencesThemeKeyValueStore
 import com.piercingxx.txxt.theme.ThemeApplier
@@ -37,6 +40,7 @@ import com.piercingxx.txxt.theme.ThemeController
 import com.piercingxx.txxt.theme.ThemeStore
 import com.piercingxx.txxt.ui.BlockingRules
 import com.piercingxx.txxt.ui.ConversationListAdapter
+import com.piercingxx.txxt.ui.GroupGlyphs
 import com.piercingxx.txxt.ui.ConversationListLoader
 import com.piercingxx.txxt.ui.ConversationSearchFilter
 import com.piercingxx.txxt.ui.ConversationSwipeHelper
@@ -134,6 +138,15 @@ class MainActivity : Activity(), SwipeActionCallback {
         onConversationTap = { row -> openThread(row.conversationId) },
         onConversationLongPress = { row -> promptRowActions(row.conversationId) },
         displayName = { address -> contactNames.labelFor(address) },
+        titleMarks = { addresses -> conversationMarks(addresses) },
+    )
+
+    private var marksSnap: MarksSnap = MarksSnap()
+
+    private data class MarksSnap(
+        val biz: Set<String> = emptySet(),
+        val family: Set<String> = emptySet(),
+        val map: Map<String, String> = emptyMap(),
     )
 
     private lateinit var emptyState: TextView
@@ -466,6 +479,11 @@ class MainActivity : Activity(), SwipeActionCallback {
      */
     fun applySearchQuery(query: String) {
         currentQuery = query
+        marksSnap = MarksSnap(
+            biz = DialerBusinessTier.load(this)?.keys.orEmpty(),
+            family = DialerGroups.keysNamed(this, "Family"),
+            map = blockingMap(),
+        )
         val filtered = searchFilter.filterConversations(conversations, query)
         adapter.submit(filtered)
         emptyState.visibility = if (filtered.isEmpty()) View.VISIBLE else View.GONE
@@ -490,7 +508,7 @@ class MainActivity : Activity(), SwipeActionCallback {
             val muteLabel = "Mute…"
             val starLabel = if (
                 address != null && BlockingRules.isStarred(blockingMap(), address)
-            ) "Unstar" else "Star"
+            ) "${GroupGlyphs.STAR} Unstar" else "${GroupGlyphs.STAR} Star"
             AlertDialog.Builder(this@MainActivity)
                 // Same title the row shows: resolved through the contacts
                 // provider, so the dialog does not regress to a bare number
@@ -509,7 +527,7 @@ class MainActivity : Activity(), SwipeActionCallback {
                         starLabel,
                         "Copy number",
                         "Call",
-                        "Block sender",
+                        "${GroupGlyphs.BLOCK} Block sender",
                         "Archive",
                     )
                 ) { _, which ->
@@ -526,6 +544,18 @@ class MainActivity : Activity(), SwipeActionCallback {
                 .setNegativeButton("Cancel", null)
                 .show()
         }
+    }
+
+    private fun conversationMarks(addresses: Collection<String>): String {
+        val address = addresses.firstOrNull { it.isNotBlank() } ?: return ""
+        val hit = PhoneLookupIdentity.lookup(this, address)
+        val key = hit.lookupKey
+        return GroupGlyphs.marks(
+            starred = hit.starred || BlockingRules.isStarred(marksSnap.map, address),
+            business = key != null && key in marksSnap.biz,
+            family = key != null && key in marksSnap.family,
+            blocked = BlockingRules.isBlocked(marksSnap.map, address),
+        )
     }
 
     /** The persisted blocking/starred string map (the settings-screen shape). */
