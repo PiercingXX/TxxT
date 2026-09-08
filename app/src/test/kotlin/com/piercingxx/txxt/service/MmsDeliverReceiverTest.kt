@@ -193,6 +193,27 @@ class MmsDeliverReceiverTest {
     }
 
     @Test
+    fun `a notification with no From still persists`() {
+        val recording = Recording()
+        val persisted = CountDownLatch(1)
+        val rcv = receiver(
+            pduBytes = byteArrayOf(0x82.toByte()) +
+                byteArrayOf(0x89.toByte(), 0x01, 0x81.toByte()) +
+                byteArrayOf(0x83.toByte()) +
+                "http://mmsc.example/id".toByteArray(Charsets.US_ASCII) +
+                byteArrayOf(0x00, 0x00),
+            recording = recording,
+            persistLatch = persisted,
+        )
+
+        rcv.onReceive(context, pushIntent())
+
+        assertTrue(persisted.await(5, TimeUnit.SECONDS))
+        assertEquals(MmsDeliverReceiver.UNKNOWN_SENDER, recording.persisted.single().first)
+        assertEquals("http://mmsc.example/id", recording.persisted.single().third)
+    }
+
+    @Test
     fun `a retrieve that drops the row does not notify`() {
         val recording = Recording().also { it.retrieveKeeps = false }
         val persisted = CountDownLatch(1)

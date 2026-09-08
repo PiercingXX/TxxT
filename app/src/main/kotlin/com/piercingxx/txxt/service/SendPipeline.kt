@@ -12,6 +12,7 @@ import android.util.Log
 import androidx.core.content.FileProvider
 import com.piercingxx.txxt.core.MetadataScrubber
 import com.piercingxx.txxt.core.MmsSendReq
+import com.piercingxx.txxt.log.AppLog
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
@@ -142,17 +143,27 @@ object SendPipeline {
         },
     ): Boolean {
         if (!gate.canSend(context)) return false
-        val bytes = readUriBytes(contentUri) ?: return false
-        // Fail closed: a recognized-but-malformed structure must not be sent —
-        // there is no guarantee its metadata is gone.
-        val scrubbed = MetadataScrubber.scrub(bytes) ?: return false
+        val bytes = readUriBytes(contentUri) ?: run {
+            AppLog.w("send", "mms unreadable uri")
+            return false
+        }
+        val scrubbed = MetadataScrubber.scrub(bytes) ?: run {
+            AppLog.w("send", "mms scrub rejected")
+            return false
+        }
         val image = if (scrubbed.size <= DEFAULT_MMS_MAX_BYTES) {
             scrubbed
         } else {
-            MmsImageFit.constrain(scrubbed, maxImageBytes(context)) ?: return false
+            MmsImageFit.constrain(scrubbed, maxImageBytes(context)) ?: run {
+                AppLog.w("send", "mms image too large bytes=${scrubbed.size}")
+                return false
+            }
         }
         val payload = if (destination.isNotBlank()) {
-            composePdu(destination, image, caption) ?: return false
+            composePdu(destination, image, caption) ?: run {
+                AppLog.w("send", "mms compose failed destLen=${destination.length}")
+                return false
+            }
         } else {
             image
         }
@@ -219,6 +230,7 @@ object SendPipeline {
             } ?: false
         } catch (t: Exception) {
             Log.w("TxxT-Mms", "platform send failed", t)
+            AppLog.e("send", "mms platform send failed", t)
             MmsSentWaiters.complete(requestId, false)
             false
         }

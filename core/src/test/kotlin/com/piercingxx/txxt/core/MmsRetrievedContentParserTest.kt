@@ -34,10 +34,10 @@ class MmsRetrievedContentParserTest {
     }
 
     @Test
-    fun `unknown content is dropped unstored rather than invented as MMS`() {
+    fun `unknown content is not invented as MMS`() {
         val pdu = "application/vnd.wap.multipart.related\u0000".toByteArray(Charsets.ISO_8859_1)
         val parsed = MmsRetrievedContentParser.parse(pdu)
-        assertTrue(parsed.dropUnstored)
+        assertFalse(parsed.dropUnstored)
         assertEquals("", parsed.body)
     }
 

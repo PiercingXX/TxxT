@@ -206,4 +206,15 @@ class SettingsWiringTest {
             settingsActivity.contains("setDefaultNightMode"),
         )
     }
+
+    @Test
+    fun `SettingsActivity exposes on-phone logs copy and share`() {
+        val layout = sequenceOf(
+            File("src/main/res/layout/activity_settings.xml"),
+            File("app/src/main/res/layout/activity_settings.xml"),
+        ).first { it.exists() }.readText()
+        assertTrue(layout.contains("@+id/logs_button"))
+        assertTrue(settingsActivity.contains("AppLog.shareText()"))
+        assertTrue(settingsActivity.contains("ACTION_SEND"))
+    }
 }

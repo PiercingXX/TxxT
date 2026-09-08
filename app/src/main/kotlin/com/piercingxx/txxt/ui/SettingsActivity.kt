@@ -4,6 +4,8 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.app.NotificationManager
 import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -21,6 +23,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatDelegate
 import com.piercingxx.txxt.R
 import com.piercingxx.txxt.core.RoleSwitchCopy
+import com.piercingxx.txxt.log.AppLog
 import com.piercingxx.txxt.service.DefaultHandlerMonitor
 import com.piercingxx.txxt.service.NotificationPrefs
 import com.piercingxx.txxt.service.ensureMessageChannels
@@ -240,6 +243,9 @@ class SettingsActivity : Activity() {
         findViewById<Button>(R.id.unset_sms_button).setOnClickListener {
             confirmUnsetDefaultSms()
         }
+        findViewById<Button>(R.id.logs_button).setOnClickListener {
+            showLogs()
+        }
     }
 
     /**
@@ -255,6 +261,38 @@ class SettingsActivity : Activity() {
                 startActivity(DefaultHandlerMonitor().unsetSettingsIntent(this))
             }
             .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * On-phone log dump (same idea as SKPP Radio): last crash + recent
+     * ring. Copy or share as text. Nothing is uploaded.
+     */
+    private fun showLogs() {
+        val dump = AppLog.shareText()
+        val crash = AppLog.lastCrash()
+        val preview = if (crash != null) {
+            crash.take(4000)
+        } else {
+            dump.takeLast(4000).ifBlank { "(no lines yet)" }
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Logs")
+            .setMessage(preview)
+            .setPositiveButton("Copy") { _, _ ->
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("TxxT logs", dump))
+                Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show()
+            }
+            .setNeutralButton("Share") { _, _ ->
+                val send = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_SUBJECT, "TxxT logs")
+                    putExtra(Intent.EXTRA_TEXT, dump)
+                }
+                startActivity(Intent.createChooser(send, "Share logs"))
+            }
+            .setNegativeButton("Done", null)
             .show()
     }
 

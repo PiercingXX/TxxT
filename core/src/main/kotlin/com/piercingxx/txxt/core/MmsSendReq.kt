@@ -62,12 +62,21 @@ object MmsSendReq {
         val trimmed = to.trim()
         if (trimmed.isEmpty()) return null
         if ('@' in trimmed) return trimmed
-        val digits = trimmed.filter { it.isDigit() || it == '+' }
+        val hadPlus = trimmed.startsWith("+")
+        val digits = trimmed.filter { it.isDigit() }
         if (digits.isEmpty()) {
             return PhoneNumbers.conversationKey(trimmed).takeIf { it.isNotEmpty() }
         }
-        val withPlus = if (digits.startsWith("+")) digits else "+$digits"
-        return "$withPlus/TYPE=PLMN"
+        // Short codes have no country. A 10-digit US thread key must become
+        // +1…, not +555… — conversation rows store digits only.
+        if (digits.length < 7) return digits
+        val e164 = when {
+            hadPlus -> "+$digits"
+            digits.length == 10 -> "+1$digits"
+            digits.length == 11 && digits.startsWith("1") -> "+$digits"
+            else -> "+$digits"
+        }
+        return "$e164/TYPE=PLMN"
     }
 
     fun smil(imageName: String, hasText: Boolean): String {
