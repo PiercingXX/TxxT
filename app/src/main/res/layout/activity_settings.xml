@@ -170,6 +170,25 @@
             android:fontFamily="@font/font_body"
             android:layout_marginBottom="8dp" />
 
+        <Button
+            android:id="@+id/logs_button"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Logs"
+            android:textColor="#FFFFFF"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:id="@+id/logs_hint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="On-phone log. Survives a crash so we can see why. Copy or share — nothing leaves this phone unless you send it."
+            android:textColor="#80FFFFFF"
+            android:textSize="12sp"
+            android:fontFamily="@font/font_body"
+            android:layout_marginBottom="8dp" />
+
     </LinearLayout>
 
 </ScrollView>

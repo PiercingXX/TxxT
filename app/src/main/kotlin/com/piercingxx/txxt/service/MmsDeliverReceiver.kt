@@ -3,6 +3,7 @@ package com.piercingxx.txxt.service
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import com.piercingxx.txxt.block.InboundFilter
 import com.piercingxx.txxt.block.LiveInboundFilter
 import com.piercingxx.txxt.block.MessageDisposition
@@ -11,6 +12,7 @@ import com.piercingxx.txxt.core.MmsRetrievedContent
 import com.piercingxx.txxt.data.InboundStore
 import com.piercingxx.txxt.data.QuarantineStore
 import com.piercingxx.txxt.data.TxxTDatabase
+import com.piercingxx.txxt.log.AppLog
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -56,7 +58,9 @@ class MmsDeliverReceiver(
      * crafted PDUs without mocking intent extras.
      */
     private val extractPdu: (Intent) -> ByteArray? = { intent ->
-        intent.getByteArrayExtra("data") ?: intent.getByteArrayExtra("header")
+        intent.getByteArrayExtra("data")
+            ?: intent.getByteArrayExtra("pdu")
+            ?: intent.getByteArrayExtra("header")
     },
     /**
      * Fallback sender resolution when the parsed header carries no FROM:
@@ -104,12 +108,17 @@ class MmsDeliverReceiver(
 
         if (intent.action != mmsDeliverAction) return
 
-        val info = extractPdu(intent)?.let { MmsPduHeader.parse(it) }
-        if (info == null) return
+        val pdu = extractPdu(intent)
+        val info = pdu?.let { MmsPduHeader.parse(it) }
+        if (info == null) {
+            Log.w(TAG, "WAP_PUSH_DELIVER PDU missing or unparseable (${pdu?.size ?: 0} bytes)")
+            AppLog.w("mms", "deliver pdu missing or unparseable bytes=${pdu?.size ?: 0}")
+            return
+        }
 
-        val sender = info.from?.let(::cleanAddress)
-            ?: extractSenderFallback(intent)
-            ?: return
+        val sender = info.from?.let(::cleanAddress)?.takeIf { it.isNotBlank() }
+            ?: extractSenderFallback(intent)?.takeIf { it.isNotBlank() }
+            ?: UNKNOWN_SENDER
 
         val (disposition, _) = inboundFilterProvider().evaluate(sender, "")
         if (disposition == MessageDisposition.BLOCK) {
@@ -126,7 +135,9 @@ class MmsDeliverReceiver(
 
         val dateMillis = info.dateMillis ?: System.currentTimeMillis()
         val pendingResult = goAsync()
-        val exceptionHandler = CoroutineExceptionHandler { _, _ -> }
+        val exceptionHandler = CoroutineExceptionHandler { _, t ->
+            AppLog.e("mms", "deliver persist failed", t)
+        }
         CoroutineScope(Dispatchers.IO + exceptionHandler).launch {
             try {
                 val hold = disposition == MessageDisposition.QUARANTINE
@@ -177,6 +188,10 @@ class MmsDeliverReceiver(
     }
 
     companion object {
+
+        const val UNKNOWN_SENDER = "Unknown"
+
+        private const val TAG = "TxxT-Mms"
 
         /**
          * Strips a "/TYPE=..." addressing suffix (e.g. "/TYPE=PLMN") from a

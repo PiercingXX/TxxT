@@ -14,7 +14,8 @@ none survives the feature that motivated it (RECORD_AUDIO did not).
 Claims verified on the built APK:
   - the APK's permission set is EXACTLY the set the manifest declares: the
     default-SMS-handler role, POST_NOTIFICATIONS, the SMS/MMS runtime
-    permissions, READ_CONTACTS, and RECEIVE_BOOT_COMPLETED — nothing more
+    permissions, READ_CONTACTS, RECEIVE_BOOT_COMPLETED, and the MMS-retrieve
+    foreground-service pair — nothing more
   - the application is not backup-enabled (allowBackup=false), backing the
     local-first posture (nothing silently pushed to cloud backup)
 
@@ -46,6 +47,10 @@ EXPECTED_PERMISSIONS = {
     # naming a sender never requires modifying the contacts database.
     "android.permission.READ_CONTACTS",
     "android.permission.RECEIVE_BOOT_COMPLETED",
+    # Inbound MMS retrieve: a short-lived foreground service so GrapheneOS
+    # does not kill the MMSC GET after WAP_PUSH_DELIVER's broadcast ends.
+    "android.permission.FOREGROUND_SERVICE",
+    "android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING",
     # Family theme-sync: signature-level IPC with XX-Launcher. Not a dangerous
     # permission and not network — required to receive the launcher's
     # THEME_CHANGED broadcast (sendBroadcast with this permission name).

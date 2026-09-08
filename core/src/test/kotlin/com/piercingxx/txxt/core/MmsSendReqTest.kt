@@ -1,5 +1,6 @@
 package com.piercingxx.txxt.core
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -44,5 +45,18 @@ class MmsSendReqTest {
     fun `wireAddress keeps email and tags phone numbers`() {
         assertTrue(MmsSendReq.wireAddress("+15551234567")!!.endsWith("/TYPE=PLMN"))
         assertTrue(MmsSendReq.wireAddress("alice@carrier.example")!!.contains("@"))
+    }
+
+    @Test
+    fun `wireAddress gives ten-digit thread keys a US country code`() {
+        assertEquals("+15551234567/TYPE=PLMN", MmsSendReq.wireAddress("5551234567"))
+        assertEquals("+15551234567/TYPE=PLMN", MmsSendReq.wireAddress("(555) 123-4567"))
+        assertEquals("+15551234567/TYPE=PLMN", MmsSendReq.wireAddress("15551234567"))
+        assertEquals("+15551234567/TYPE=PLMN", MmsSendReq.wireAddress("+15551234567"))
+    }
+
+    @Test
+    fun `wireAddress does not invent a country for short codes`() {
+        assertEquals("24242", MmsSendReq.wireAddress("24242"))
     }
 }

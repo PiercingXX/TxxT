@@ -18,6 +18,7 @@ import com.piercingxx.txxt.core.MmsRetrievedContent
 import com.piercingxx.txxt.core.MmsRetrievedContentParser
 import com.piercingxx.txxt.data.MessageDao
 import com.piercingxx.txxt.data.TxxTDatabase
+import com.piercingxx.txxt.log.AppLog
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
@@ -72,23 +73,36 @@ object MmsRetrieve {
         location: String?,
     ): Boolean {
         val dao = TxxTDatabase.instance(context).messageDao()
-        val row = dao.getById(messageId) ?: return false
+        val row = dao.getById(messageId) ?: run {
+            AppLog.w("mms", "retrieve missing row id=$messageId")
+            return false
+        }
         val existingPath = row.mediaPath
         if (!existingPath.isNullOrBlank() && File(existingPath).isFile) return true
         val url = location?.takeIf { it.isNotBlank() } ?: row.contentLocation
-        if (url.isNullOrBlank()) return false
-        val pdu = MmsContentFetcher().fetch(context, url) ?: return false
-        return applyPdu(dao, messageId, pdu) { bytes, mime ->
+        if (url.isNullOrBlank()) {
+            AppLog.w("mms", "retrieve no location id=$messageId")
+            return false
+        }
+        AppLog.i("mms", "retrieve start id=$messageId")
+        val pdu = MmsContentFetcher().fetch(context, url)
+        if (pdu == null) {
+            AppLog.w("mms", "retrieve empty pdu id=$messageId")
+            return false
+        }
+        val ok = applyPdu(dao, messageId, pdu) { bytes, mime ->
             saveRetrievedImage(context, messageId, bytes, mime)
         }
+        AppLog.i("mms", "retrieve ${if (ok) "ok" else "pending"} id=$messageId bytes=${pdu.size}")
+        return ok
     }
 
     /**
-     * Applies a retrieved PDU onto the stored metadata row. Audio-only and
-     * empty/unknown content are deleted. An image becomes `[Photo]` plus a
-     * saved file (shown only after the operator taps). A captioned photo keeps
-     * the caption. Clears [contentLocation] once applied. An image MIME with
-     * no saved bytes is left pending so a tap can retry — it is not deleted.
+     * Applies a retrieved PDU onto the stored metadata row. Audio-only content
+     * is deleted. An image becomes `[Photo]` plus a saved file (shown only
+     * after the operator taps). A captioned photo keeps the caption. Clears
+     * [contentLocation] once applied. An image MIME with no saved bytes, or a
+     * SMIL-only/empty retrieve, is left pending so a tap can retry.
      */
     suspend fun applyPdu(
         messages: MessageDao,
@@ -98,7 +112,7 @@ object MmsRetrieve {
     ): Boolean {
         val row = messages.getById(messageId) ?: return false
         val parsed = MmsRetrievedContentParser.parse(pdu)
-        if (parsed.dropUnstored || parsed.body == MmsRetrievedContent.MMS_PLACEHOLDER) {
+        if (parsed.dropUnstored) {
             messages.deleteById(messageId)
             return true
         }
@@ -140,8 +154,9 @@ object MmsRetrieve {
                 return false
             }
             else -> {
-                messages.deleteById(messageId)
-                return true
+                // Empty / SMIL-only retrieve. Keep the pending [Photo] row so
+                // a tap can retry — do not delete a notification we already stored.
+                return false
             }
         }
     }
@@ -234,6 +249,7 @@ class MmsContentFetcher(
                 } catch (_: Exception) {
                 }
                 val bytes = readBytes(context, telephony)
+                    ?: readTelephonyParts(context, telephony)
                 if (bytes != null && bytes.isNotEmpty()) return bytes
             } finally {
                 deleteTelephonyDest(context, telephony)
@@ -309,6 +325,14 @@ class MmsContentFetcher(
                     cr.delete(msgUri, null, null)
                     null
                 } else {
+                    // Force the provider to allocate a backing file. MmsService
+                    // writes through openFileDescriptor; an insert-only part
+                    // can have no _data and the download lands empty.
+                    try {
+                        cr.openOutputStream(partUri)?.use { }
+                    } catch (t: Exception) {
+                        Log.w(TAG, "part dest not writable", t)
+                    }
                     Log.i(TAG, "download dest $partUri")
                     partUri
                 }
@@ -328,6 +352,40 @@ class MmsContentFetcher(
                 )
             } catch (_: Exception) {
             }
+        }
+
+        /**
+         * GrapheneOS MmsService may persist the retrieve-conf as sibling parts
+         * of the stub inbox row instead of writing the dest URI. Collect those
+         * bytes before the stub is deleted.
+         */
+        internal fun readTelephonyParts(context: Context, dest: Uri): ByteArray? {
+            val msgId = dest.pathSegments.firstOrNull { it.toLongOrNull() != null } ?: return null
+            val partsUri = Uri.parse("content://mms/$msgId/part")
+            val cursor = try {
+                context.contentResolver.query(partsUri, arrayOf("_id"), null, null, null)
+            } catch (_: Exception) {
+                null
+            } ?: return null
+            val chunks = ArrayList<ByteArray>()
+            cursor.use {
+                while (it.moveToNext()) {
+                    val partId = it.getLong(0)
+                    val partUri = Uri.parse("content://mms/$msgId/part/$partId")
+                    val bytes = try {
+                        context.contentResolver.openInputStream(partUri)?.use { stream ->
+                            stream.readBytes()
+                        }
+                    } catch (_: Exception) {
+                        null
+                    }
+                    if (bytes != null && bytes.isNotEmpty()) chunks += bytes
+                }
+            }
+            if (chunks.isEmpty()) return null
+            return chunks.firstOrNull { chunk ->
+                MmsRetrievedContentParser.parse(chunk).imageBytes != null
+            } ?: chunks.maxByOrNull { it.size }
         }
 
         internal suspend fun platformDownload(

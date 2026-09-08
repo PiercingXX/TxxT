@@ -49,12 +49,12 @@ object MmsRetrievedContentParser {
                 MmsRetrievedContent.PHOTO_PLACEHOLDER
             else -> ""
         }
-        val dropUnstored = body.isEmpty()
+        val dropUnstored = false
         return MmsRetrievedContent(
             body = body,
             dropUnstored = dropUnstored,
-            imageBytes = if (dropUnstored) null else image?.second,
-            imageMime = if (dropUnstored) null else image?.first,
+            imageBytes = image?.second,
+            imageMime = image?.first,
         )
     }
 

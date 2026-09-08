@@ -203,10 +203,27 @@ class MmsRetrieveTest {
             retrieve.contains("Telephony.Mms.Inbox.CONTENT_URI") &&
                 retrieve.contains("content://mms/"),
         )
+        assertTrue(
+            "MmsService may write sibling parts; those bytes must be read before the stub is deleted",
+            retrieve.contains("fun readTelephonyParts"),
+        )
     }
 
     @Test
-    fun `applyPdu deletes a retrieve that would only be an MMS placeholder`() = runBlocking {
+    fun `retrieve service is a foreground service so the download survives the broadcast`() {
+        val service = sourceText("service/MmsRetrieveService.kt")
+        assertTrue(
+            "enqueue must startForegroundService on O+",
+            service.contains("startForegroundService"),
+        )
+        assertTrue(
+            "onStartCommand must call startForeground before the coroutine",
+            service.contains("startRetrieveForeground"),
+        )
+    }
+
+    @Test
+    fun `applyPdu keeps a pending Photo row when the retrieve has no image yet`() = runBlocking {
         val dao = FakeMessageDao()
         dao.upsert(
             MessageEntity(
@@ -214,14 +231,15 @@ class MmsRetrieveTest {
                 conversationId = 1L,
                 direction = MessageDirection.INCOMING.name,
                 transport = MessageTransport.MMS.name,
-                body = "",
+                body = MmsRetrievedContent.COLLAPSED_PHOTO_PLACEHOLDER,
                 timestampMillis = 1L,
                 contentLocation = "http://mmsc.example/id",
             ),
         )
         val pdu = "application/smil\u0000".toByteArray()
-        assertTrue(MmsRetrieve.applyPdu(dao, 3L, pdu))
-        assertTrue(dao.rows.isEmpty())
+        assertFalse(MmsRetrieve.applyPdu(dao, 3L, pdu))
+        assertEquals(MmsRetrievedContent.COLLAPSED_PHOTO_PLACEHOLDER, dao.rows.getValue(3L).body)
+        assertEquals("http://mmsc.example/id", dao.rows.getValue(3L).contentLocation)
     }
 
     private fun sourceText(name: String): String =

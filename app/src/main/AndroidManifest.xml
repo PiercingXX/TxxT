@@ -61,6 +61,13 @@
          booting. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!-- Foreground service while an inbound photo is fetched from the MMSC.
+         WAP_PUSH_DELIVER's goAsync window is too short for Verizon's GET;
+         without this the retrieve is killed in the background and the photo
+         never lands. remoteMessaging is the SMS-app type (API 34+). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
+
     <!-- Family theme-sync. XX-Launcher defines and sendBroadcast()s with this
          signature permission; uses-permission is required to receive it. -->
     <uses-permission android:name="com.piercingxx.xxlauncher.permission.THEME_SYNC" />
@@ -91,6 +98,7 @@
          layouts (docs/DESIGN.md) — no title bar may sit above them. Theme.TxxT
          binds the txxt* color attributes the UI reads (values/themes.xml). -->
     <application
+        android:name=".TxxtApp"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -289,7 +297,8 @@
              writes the PDU. Started from MmsDeliverReceiver.onReceive. -->
         <service
             android:name=".service.MmsRetrieveService"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="remoteMessaging" />
 
         <service
             android:name=".service.RespondViaMessageService"

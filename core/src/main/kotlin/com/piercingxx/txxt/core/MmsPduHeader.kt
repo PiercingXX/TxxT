@@ -48,17 +48,13 @@ data class MmsPduInfo(
  *     - DATE (`Date-value = Long-integer`): length-octet (1..8) then
  *       big-endian bytes holding seconds since the epoch; converted to
  *       milliseconds by multiplying by 1000.
- *     - CONTENT-TYPE in its **extension-media** form: a null-terminated
- *       US-ASCII media-type string starting directly at the value position
- *       (what most carriers send, e.g.
- *       "application/vnd.wap.multipart.related"). The well-known-media
- *       Short-integer form (octet >= 0x80, optionally followed by WSP
- *       parameters) is deliberately **not** decoded: parameter lengths cannot
- *       be bounded without implementing the full WSP parameter grammar, so a
- *       PDU using that form fails closed (whole parse returns null) instead of
- *       risking header desynchronisation. A constrained-media octet < 0x80
- *       that does not decode as clean printable extension-media text likewise
- *       fails closed; no content-type code table is guessed at.
+ *     - CONTENT-TYPE in three WSP forms: Constrained-media (a single
+ *       well-known Short-integer, octet >= 0x80, no parameters),
+ *       Content-general-form (Value-length then media type + parameters,
+ *       skipped as a bounded span), and extension-media (null-terminated
+ *       US-ASCII, e.g. "application/vnd.wap.multipart.related"). Verizon
+ *       notification-ind PDUs use the well-known `application/vnd.wap.mms-message`
+ *       code; rejecting that form dropped the photo before it was stored.
  *     - Skip-over (no extraction) for bounded-shape fields: TO/CC/BCC/SUBJECT/
  *       RESPONSE-TEXT/RETRIEVE-TEXT (bare `Encoded-string-value`: optional
  *       charset octet, then null-terminated text), TRANSACTION-ID/MESSAGE-ID/
@@ -70,9 +66,10 @@ data class MmsPduInfo(
  *       MESSAGE-SIZE (`Long-integer`), and Value-length-delimited EXPIRY and
  *       DELIVERY-TIME.
  *
- * - Anything else — unknown field names, unsupported value shapes, truncated
- *   data, unterminated strings, absurd lengths, malformed UTF-8 — fails
- *   closed: [parse] returns null. It never throws on input.
+ * - Unknown field names are skipped with the WSP value-shape heuristic
+ *   (Value-length span, single high-bit octet, or null-terminated text).
+ *   Truncated data, unterminated strings, absurd lengths, and malformed
+ *   UTF-8 still fail closed: [parse] returns null. It never throws on input.
  *
  * - Leading message-type handling: per the TxxT receive pipeline convention
  *   the PDU begins with the X-Mms-Message-Type **value** octet (e.g. 0x82).
@@ -113,6 +110,23 @@ object MmsPduHeader {
     private const val FIELD_TO = 0x97
     private const val FIELD_TRANSACTION_ID = 0x98
     private const val FIELD_RETRIEVE_TEXT = 0x9A
+    private const val FIELD_RETRIEVE_STATUS = 0x99
+    private const val FIELD_READ_STATUS = 0x9B
+    private const val FIELD_REPLY_CHARGING = 0x9C
+    private const val FIELD_REPLY_CHARGING_DEADLINE = 0x9D
+    private const val FIELD_REPLY_CHARGING_ID = 0x9E
+    private const val FIELD_REPLY_CHARGING_SIZE = 0x9F
+    private const val FIELD_PREVIOUSLY_SENT_BY = 0xA0
+    private const val FIELD_PREVIOUSLY_SENT_DATE = 0xA1
+    private const val FIELD_STORED = 0xA7
+    private const val FIELD_DISTRIBUTION_INDICATOR = 0xB1
+    private const val FIELD_RECOMMENDED_RETRIEVAL_MODE = 0xB4
+    private const val FIELD_APPLIC_ID = 0xB7
+    private const val FIELD_REPLY_APPLIC_ID = 0xB8
+    private const val FIELD_AUX_APPLIC_INFO = 0xB9
+    private const val FIELD_CONTENT_CLASS = 0xBA
+    private const val FIELD_DRM_CONTENT = 0xBB
+    private const val FIELD_ADAPTATION_ALLOWED = 0xBC
 
     private const val END_OF_HEADER = 0x00
 
@@ -121,28 +135,48 @@ object MmsPduHeader {
     private const val TOKEN_INSERT_ADDRESS = 0x81
 
     // Value-length = Short-length | (Length-quote Uintvar-value); WAP-230-WSP.
-    private const val LENGTH_QUOTE = 0x1D
+    // Length-quote is octet 31 (0x1F), not 29 — a 0x1D is Short-length 29.
+    private const val LENGTH_QUOTE = 0x1F
     private const val MAX_SHORT_LENGTH = 30
     private const val MAX_UINTVAR_OCTETS = 5
     private const val MAX_LONG_INTEGER_OCTETS = 8
 
     /**
      * Parses the MM headers of an inbound PDU. Returns null on malformed input — fail closed.
+     *
+     * When the payload is still WSP-wrapped (first octet < 0x80), the parser
+     * looks for an X-Mms-Message-Type field and retries from there so a
+     * GrapheneOS/OEM `data` extra that still includes WSP headers is not
+     * dropped.
      */
     fun parse(pdu: ByteArray): MmsPduInfo? {
+        parseAt(pdu, 0)?.let { return it }
         val first = u(pdu, 0) ?: return null
+        if (first >= 0x80) return null
+        var i = 1
+        while (i < pdu.size - 1) {
+            if ((pdu[i].toInt() and 0xFF) == FIELD_MESSAGE_TYPE) {
+                parseAt(pdu, i)?.let { return it }
+            }
+            i++
+        }
+        return null
+    }
+
+    private fun parseAt(pdu: ByteArray, origin: Int): MmsPduInfo? {
+        val first = u(pdu, origin) ?: return null
         var pos: Int
         val messageType: Int
         when {
             first == FIELD_MESSAGE_TYPE -> {
-                val value = u(pdu, 1) ?: return null
+                val value = u(pdu, origin + 1) ?: return null
                 if (value < 0x80) return null
                 messageType = value
-                pos = 2
+                pos = origin + 2
             }
             first >= 0x80 -> {
                 messageType = first
-                pos = 1
+                pos = origin + 1
             }
             else -> return null
         }
@@ -167,7 +201,11 @@ object MmsPduHeader {
                 FIELD_DATE -> {
                     val parsed = readLongInteger(pdu, pos) ?: return null
                     pos = parsed.second
-                    if (dateMillis == null) dateMillis = parsed.first * 1000L
+                    if (dateMillis == null) {
+                        val seconds = parsed.first
+                        if (seconds < 0L || seconds > Long.MAX_VALUE / 1000L) return null
+                        dateMillis = seconds * 1000L
+                    }
                 }
                 FIELD_CONTENT_TYPE -> {
                     val parsed = readContentType(pdu, pos) ?: return null
@@ -195,15 +233,24 @@ object MmsPduHeader {
                     pos = skipMessageClass(pdu, pos) ?: return null
                 FIELD_DELIVERY_REPORT, FIELD_MESSAGE_TYPE, FIELD_MMS_VERSION, FIELD_PRIORITY,
                 FIELD_READ_REPORT, FIELD_REPORT_ALLOWED, FIELD_RESPONSE_STATUS,
-                FIELD_SENDER_VISIBILITY, FIELD_STATUS -> {
+                FIELD_SENDER_VISIBILITY, FIELD_STATUS, FIELD_RETRIEVE_STATUS,
+                FIELD_READ_STATUS, FIELD_REPLY_CHARGING, FIELD_STORED,
+                FIELD_DISTRIBUTION_INDICATOR, FIELD_RECOMMENDED_RETRIEVAL_MODE,
+                FIELD_CONTENT_CLASS, FIELD_DRM_CONTENT, FIELD_ADAPTATION_ALLOWED -> {
                     if (u(pdu, pos) == null) return null
                     pos++
                 }
-                FIELD_DELIVERY_TIME, FIELD_EXPIRY ->
+                FIELD_DELIVERY_TIME, FIELD_EXPIRY, FIELD_REPLY_CHARGING_DEADLINE,
+                FIELD_PREVIOUSLY_SENT_BY, FIELD_PREVIOUSLY_SENT_DATE ->
                     pos = skipValueLengthSpan(pdu, pos) ?: return null
-                FIELD_MESSAGE_SIZE ->
+                FIELD_MESSAGE_SIZE, FIELD_REPLY_CHARGING_SIZE ->
                     pos = skipLongInteger(pdu, pos) ?: return null
-                else -> return null
+                FIELD_REPLY_CHARGING_ID, FIELD_APPLIC_ID, FIELD_REPLY_APPLIC_ID,
+                FIELD_AUX_APPLIC_INFO -> {
+                    val parsed = readTextString(pdu, pos) ?: return null
+                    pos = parsed.second
+                }
+                else -> pos = skipUnknownValue(pdu, pos) ?: return null
             }
         }
 
@@ -400,21 +447,62 @@ object MmsPduHeader {
     }
 
     /**
-     * CONTENT-TYPE. Supported: extension-media — a null-terminated printable
-     * US-ASCII media-type string starting at the value position. An empty
-     * string yields null contentType without failing the walk. The
-     * well-known-media Short-integer form (octet >= 0x80, optionally followed
-     * by parameters whose length cannot be bounded here) fails closed.
-     * Returns the media type (or null) paired with the position past the
-     * field.
+     * CONTENT-TYPE. Constrained-media (well-known Short-integer, one octet),
+     * Content-general-form (Value-length span — parameters stay inside the
+     * span so they cannot desynchronise the header walk), or extension-media
+     * (null-terminated printable US-ASCII). An empty extension-media string
+     * yields null contentType without failing the walk.
      */
     private fun readContentType(pdu: ByteArray, start: Int): Pair<String?, Int>? {
         val lead = u(pdu, start) ?: return null
-        if (lead and 0x80 != 0) return null
+        if (lead and 0x80 != 0) {
+            return Pair(wellKnownMedia(lead and 0x7F), start + 1)
+        }
+        if (lead <= MAX_SHORT_LENGTH || lead == LENGTH_QUOTE) {
+            val span = valueLengthSpan(pdu, start) ?: return null
+            return Pair(mediaTypeInSpan(pdu, span.first, span.second), span.second)
+        }
         val terminator = indexOfNul(pdu, start) ?: return null
         val decoded = decodeStrictUtf8(pdu, start, terminator) ?: return null
         val mediaType = decoded.takeIf { it.isNotEmpty() && isPrintableAscii(it) }
             ?: return if (decoded.isEmpty()) Pair(null, terminator + 1) else null
         return Pair(mediaType, terminator + 1)
+    }
+
+    /** Well-known media codes as AOSP/MMS libraries number them (short-integer low 7 bits). */
+    private fun wellKnownMedia(code: Int): String? = when (code) {
+        0x03 -> "text/plain"
+        0x1C -> "image/gif"
+        0x1D -> "image/jpeg"
+        0x1E -> "image/tiff"
+        0x1F -> "image/png"
+        0x20 -> "image/vnd.wap.wbmp"
+        0x32, 0x33 -> "application/vnd.wap.multipart.related"
+        0x3E -> "application/vnd.wap.mms-message"
+        else -> null
+    }
+
+    private fun mediaTypeInSpan(pdu: ByteArray, start: Int, end: Int): String? {
+        if (start >= end) return null
+        val lead = u(pdu, start) ?: return null
+        if (lead and 0x80 != 0) return wellKnownMedia(lead and 0x7F)
+        val terminator = indexOfNul(pdu, start)?.takeIf { it <= end } ?: (end - 1)
+        val decoded = decodeStrictUtf8(pdu, start, terminator) ?: return null
+        return decoded.takeIf { it.isNotEmpty() && isPrintableAscii(it) }
+    }
+
+    /**
+     * Skip a header value whose field name is not in the known subset.
+     * WSP values are a Value-length span, a single high-bit octet, or a
+     * null-terminated string — matching those shapes keeps From / Content-Location
+     * reachable when a carrier adds MMS 1.3 or vendor fields.
+     */
+    private fun skipUnknownValue(pdu: ByteArray, start: Int): Int? {
+        val lead = u(pdu, start) ?: return null
+        return when {
+            lead == LENGTH_QUOTE || lead <= MAX_SHORT_LENGTH -> skipValueLengthSpan(pdu, start)
+            lead >= 0x80 -> start + 1
+            else -> skipNullTerminated(pdu, start)
+        }
     }
 }

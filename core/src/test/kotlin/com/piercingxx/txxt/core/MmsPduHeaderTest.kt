@@ -34,7 +34,7 @@ class MmsPduHeaderTest {
 
     /** Value-length in Length-quote + Uintvar form. */
     private fun vlQuoted(payload: ByteArray): ByteArray =
-        bytes(0x1D) + uintvar(payload.size) + payload
+        bytes(0x1F) + uintvar(payload.size) + payload
 
     private fun uintvar(value: Int): ByteArray {
         assertTrue(value >= 0)
@@ -297,8 +297,10 @@ class MmsPduHeaderTest {
     fun `value length overrunning array fails closed`() {
         assertNull(MmsPduHeader.parse(bytes(0x82, 0x89, 0x1E, 0xEA, 0x41, 0x42))) // claims 30, has 2
         assertNull(
-            MmsPduHeader.parse(bytes(0x82, 0x89, 0x1D, 0xFF, 0x01)) // quote + huge uintvar
+            MmsPduHeader.parse(bytes(0x82, 0x89, 0x1F, 0xFF, 0x01)) // quote + huge uintvar
         )
+        // 0x1D is Short-length 29, not Length-quote; still fails when truncated.
+        assertNull(MmsPduHeader.parse(bytes(0x82, 0x89, 0x1D, 0xFF, 0x01)))
     }
 
     @Test
@@ -308,17 +310,55 @@ class MmsPduHeaderTest {
     }
 
     @Test
-    fun `unknown field name fails closed`() {
-        val unknown = bytes(0xA7, 0x01) // X-Mms-Stored wire id — not in this parser's subset
-        assertNull(MmsPduHeader.parse(retrieveConf(unknown)))
+    fun `mms 1_3 stored octet does not drop a parseable notification`() {
+        val stored = bytes(0xA7, 0x80) // X-Mms-Stored = Yes
+        val info = MmsPduHeader.parse(retrieveConf(stored))
+        assertNotNull(info)
+        assertEquals(FROM_ADDR, info!!.from)
+        assertEquals(CT_MULTIPART_RELATED, info.contentType)
     }
 
     @Test
-    fun `well known media content type code form fails closed`() {
-        // Content-Type given as well-known-media Short-integer (multipart.related code),
-        // optionally followed by unbounded WSP parameters — cannot be skipped minimally.
+    fun `well known media content type is accepted as a single octet`() {
+        val pdu = bytes(0x82) +
+            fromField() +
+            bytes(0x83) + text("http://mmsc.example/m/1") +
+            bytes(0x84, 0xBE) + // well-known application/vnd.wap.mms-message
+            bytes(0x00)
+        val info = MmsPduHeader.parse(pdu)
+        assertNotNull(info)
+        assertEquals("application/vnd.wap.mms-message", info!!.contentType)
+        assertEquals("http://mmsc.example/m/1", info.contentLocation)
+        assertEquals(FROM_ADDR, info.from)
+    }
+
+    @Test
+    fun `well known multipart related content type is accepted`() {
         val pdu = bytes(0x84) + fromField() + dateField() + bytes(0x84, 0xB3) + bytes(0x00)
-        assertNull(MmsPduHeader.parse(pdu))
+        val info = MmsPduHeader.parse(pdu)
+        assertNotNull(info)
+        assertEquals("application/vnd.wap.multipart.related", info!!.contentType)
+        assertEquals(FROM_ADDR, info.from)
+    }
+
+    @Test
+    fun `a truncated unknown header still fails closed`() {
+        assertNull(MmsPduHeader.parse(bytes(0x82, 0xDF)))
+    }
+
+    @Test
+    fun `wsp wrapped payload is recovered from the message type field`() {
+        val inner = bytes(0x8C, 0x82) +
+            bytes(0x98) + text("TxnWsp") +
+            fromField() +
+            bytes(0x83) + text("http://mmsc.example/m/1") +
+            bytes(0x00)
+        val wrapped = bytes(0x44, 0x1E) + inner
+        val info = MmsPduHeader.parse(wrapped)
+        assertNotNull(info)
+        assertEquals(0x82, info!!.messageType)
+        assertEquals(FROM_ADDR, info.from)
+        assertEquals("http://mmsc.example/m/1", info.contentLocation)
     }
 
     @Test
