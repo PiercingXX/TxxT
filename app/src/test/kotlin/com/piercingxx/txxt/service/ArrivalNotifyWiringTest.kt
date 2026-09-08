@@ -38,4 +38,12 @@ class ArrivalNotifyWiringTest {
         assertTrue(manifest.contains("com.piercingxx.xxdialer.permission.TIER_SYNC"))
         assertTrue(manifest.contains("uses-permission android:name=\"com.piercingxx.xxdialer.permission.TIER_SYNC\""))
     }
+
+    @Test
+    fun `dialer groups reader uses the family groups path`() {
+        val groups = source("service/DialerGroups.kt")
+        assertTrue(groups.contains("/groups"))
+        assertTrue(groups.contains("COL_GROUP_NAME"))
+        assertFalse(groups.contains("ContactsContract.Groups"))
+    }
 }

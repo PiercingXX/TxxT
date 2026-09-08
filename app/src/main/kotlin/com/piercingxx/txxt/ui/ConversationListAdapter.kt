@@ -51,6 +51,11 @@ class ConversationListAdapter(
      * list costs at most one provider query per distinct address, ever.
      */
     private val displayName: (String) -> String = { it },
+    /**
+     * Optional Star / Business / Family / Block prefix, resolved at [submit]
+     * so the presenter stays free of android.* and a scroll never re-queries.
+     */
+    private val titleMarks: (Collection<String>) -> String = { "" },
 ) : RecyclerView.Adapter<ConversationListAdapter.RowHolder>() {
 
     private val rows = mutableListOf<ConversationRow>()
@@ -93,7 +98,11 @@ class ConversationListAdapter(
     /** Replaces the displayed conversations with [conversations] and refreshes. */
     fun submit(conversations: List<Conversation>) {
         rows.clear()
-        conversations.mapTo(rows) { ConversationListPresenter.present(it, displayName) }
+        conversations.mapTo(rows) {
+            val row = ConversationListPresenter.present(it, displayName)
+            val marks = titleMarks(it.participantAddresses)
+            if (marks.isEmpty()) row else row.copy(title = GroupGlyphs.withTitle(marks, row.title))
+        }
         if (attached) notifyDataSetChanged()
     }
 
