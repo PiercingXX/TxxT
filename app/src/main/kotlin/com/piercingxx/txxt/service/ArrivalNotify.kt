@@ -26,6 +26,11 @@ object ArrivalNotify {
         val gate = PermissionGate()
         if (!gate.canNotify(context)) return
         val hit = PhoneLookupIdentity.lookup(context, sender)
+        if (hit.lookupKey != null &&
+            hit.lookupKey in DialerGroups.keysNamed(context, DialerGroups.BLOCKED)
+        ) {
+            return
+        }
         val starred = NotificationPrefs.isStarred(context, sender) || hit.starred
         val quiet = BusinessSchedule.shouldQuiet(
             snapshot = DialerBusinessTier.load(context),
