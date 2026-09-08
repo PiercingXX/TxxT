@@ -43,6 +43,7 @@ import com.piercingxx.txxt.ui.ConversationListAdapter
 import com.piercingxx.txxt.ui.GroupGlyphs
 import com.piercingxx.txxt.ui.ConversationListLoader
 import com.piercingxx.txxt.ui.ConversationSearchFilter
+import com.piercingxx.txxt.ui.ConversationVisibility
 import com.piercingxx.txxt.ui.ConversationSwipeHelper
 import com.piercingxx.txxt.ui.NewConversationActivity
 import com.piercingxx.txxt.ui.QuarantineActivity
@@ -146,6 +147,7 @@ class MainActivity : Activity(), SwipeActionCallback {
     private data class MarksSnap(
         val biz: Set<String> = emptySet(),
         val family: Set<String> = emptySet(),
+        val blocked: Set<String> = emptySet(),
         val map: Map<String, String> = emptyMap(),
     )
 
@@ -482,9 +484,17 @@ class MainActivity : Activity(), SwipeActionCallback {
         marksSnap = MarksSnap(
             biz = DialerBusinessTier.load(this)?.keys.orEmpty(),
             family = DialerGroups.keysNamed(this, "Family"),
+            blocked = DialerGroups.keysNamed(this, DialerGroups.BLOCKED),
             map = blockingMap(),
         )
-        val filtered = searchFilter.filterConversations(conversations, query)
+        val filtered = searchFilter.filterConversations(conversations, query) { address ->
+            contactNames.labelFor(address)
+        }.filter { conversation ->
+            ConversationVisibility.showOnList(
+                isBlockedConversation(conversation.participantAddresses),
+                query,
+            )
+        }
         adapter.submit(filtered)
         emptyState.visibility = if (filtered.isEmpty()) View.VISIBLE else View.GONE
     }
@@ -554,8 +564,15 @@ class MainActivity : Activity(), SwipeActionCallback {
             starred = hit.starred || BlockingRules.isStarred(marksSnap.map, address),
             business = key != null && key in marksSnap.biz,
             family = key != null && key in marksSnap.family,
-            blocked = BlockingRules.isBlocked(marksSnap.map, address),
+            blocked = isBlockedConversation(listOf(address)),
         )
+    }
+
+    private fun isBlockedConversation(addresses: Collection<String>): Boolean {
+        val address = addresses.firstOrNull { it.isNotBlank() } ?: return false
+        if (BlockingRules.isBlocked(marksSnap.map, address)) return true
+        val key = PhoneLookupIdentity.lookup(this, address).lookupKey
+        return key != null && key in marksSnap.blocked
     }
 
     /** The persisted blocking/starred string map (the settings-screen shape). */

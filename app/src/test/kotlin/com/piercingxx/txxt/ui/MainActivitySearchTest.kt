@@ -137,5 +137,27 @@ class MainActivitySearchTest {
             "MainActivity.applySearchQuery must filter through ConversationSearchFilter.filterConversations",
             mainActivity.contains("searchFilter.filterConversations(conversations, query)"),
         )
+        assertTrue(
+            "Blocked-group threads stay off the open list until search",
+            mainActivity.contains("ConversationVisibility.showOnList"),
+        )
+        assertTrue(
+            "the list reads the shared dialer Blocked group",
+            mainActivity.contains("DialerGroups.BLOCKED"),
+        )
+    }
+
+    @Test
+    fun `search also matches a resolved contact name`() {
+        val ada = conversation(1L, "+15550001111", "hello")
+        val bob = conversation(2L, "+15550002222", "later")
+        val names = mapOf("+15550001111" to "Ada Lovelace")
+        assertEquals(
+            listOf(ada),
+            ConversationSearchFilter().filterConversations(
+                listOf(ada, bob),
+                "ada",
+            ) { address -> names[address] ?: address },
+        )
     }
 }

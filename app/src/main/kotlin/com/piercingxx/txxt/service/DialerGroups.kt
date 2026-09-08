@@ -10,6 +10,8 @@ import android.net.Uri
  */
 object DialerGroups {
 
+    const val BLOCKED = "Blocked"
+
     val GROUPS_URI: Uri = Uri.parse("content://${DialerBusinessTier.AUTHORITY}/groups")
     const val COL_GROUP_NAME = "group_name"
     const val COL_LOOKUP_KEY = "lookup_key"

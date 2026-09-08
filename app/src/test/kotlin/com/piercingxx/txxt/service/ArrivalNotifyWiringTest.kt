@@ -23,6 +23,8 @@ class ArrivalNotifyWiringTest {
     fun `arrival notify skips a sender whose thread is already on screen`() {
         val arrival = source("service/ArrivalNotify.kt")
         assertTrue(arrival.contains("ViewedThread.isOpenFor(sender)"))
+        assertTrue(arrival.contains("DialerGroups.BLOCKED"))
+        assertTrue(arrival.contains("keysNamed"))
     }
 
     @Test

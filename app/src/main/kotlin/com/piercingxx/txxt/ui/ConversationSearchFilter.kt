@@ -25,13 +25,19 @@ class ConversationSearchFilter(
      * Returns [conversations] reduced to those matching [query] (case-insensitive
      * over participant addresses and message bodies). A blank query matches all.
      */
-    fun filterConversations(conversations: List<Conversation>, query: String): List<Conversation> {
+    fun filterConversations(
+        conversations: List<Conversation>,
+        query: String,
+        displayName: (String) -> String = { it },
+    ): List<Conversation> {
         val q = query.trim()
         if (q.isEmpty()) return conversations
         val lower = q.lowercase()
         return conversations.filter { conversation ->
-            conversation.participantAddresses.any { it.lowercase().contains(lower) } ||
-                conversation.messages.any { it.body.lowercase().contains(lower) }
+            conversation.participantAddresses.any { address ->
+                address.lowercase().contains(lower) ||
+                    displayName(address).lowercase().contains(lower)
+            } || conversation.messages.any { it.body.lowercase().contains(lower) }
         }
     }
 
