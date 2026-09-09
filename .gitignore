@@ -15,3 +15,10 @@ local.properties
 
 # Mill-seeded venv is a house symlink or share dir — never tracked
 .venv
+
+# Mill COREPACK_HOME cache — never tracked
+.corepack/
+# Mill npm cache — never tracked
+.npm-cache/
+# Mill Go build cache — never tracked
+.gocache/
