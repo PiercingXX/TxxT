@@ -3,6 +3,7 @@ package com.piercingxx.txxt.data
 import com.piercingxx.txxt.core.BACKUP_VERSION
 import com.piercingxx.txxt.core.BackupData
 import com.piercingxx.txxt.core.BackupMessage
+import java.time.Instant
 
 /**
  * Builds the user-visible conversation export (todo.md T1).
@@ -25,16 +26,21 @@ import com.piercingxx.txxt.core.BackupMessage
  * (todo.md T1 "include MMS photo references honestly — export the files or write
  * 'photos not in this JSON'"; the JSON path is chosen, and said so in the UI).
  *
+ * The export also stamps [Export.exportedAt] with the ISO-8601 instant the
+ * payload was built, so a restored archive carries its origin time.
+ *
  * Pure Kotlin with zero `android.*` imports, mirroring [RestoreService], so the
  * mapping and the photo count are JVM-testable without a device.
  */
 object ConversationExporter {
 
-    /** The export payload plus the honest photo count the UI must say out loud. */
+    /** The export payload plus the honest photo count and the ISO-8601 export time. */
     data class Export(
         val backup: BackupData,
         /** Messages whose photo was NOT included in the JSON (their bytes live only on-device). */
         val photoCount: Int,
+        /** ISO-8601 instant the export was produced, so a restored archive carries its origin time. */
+        val exportedAt: String,
     )
 
     /**
@@ -80,6 +86,7 @@ object ConversationExporter {
                 starred = starred,
             ),
             photoCount = photoCount,
+            exportedAt = Instant.now().toString(),
         )
     }
 

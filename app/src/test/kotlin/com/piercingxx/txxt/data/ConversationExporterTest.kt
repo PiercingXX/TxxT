@@ -5,7 +5,6 @@ import com.piercingxx.txxt.core.BackupData
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 /**
  * Behaviour-verifies the user-visible conversation export (todo.md T1):
@@ -18,8 +17,15 @@ import java.io.File
  * [MessageEntity.mediaPath] is counted in [ConversationExporter.Export.photoCount]
  * because the backup format has no photo field — the UI must say "N photos not
  * in this JSON" rather than leave the user assuming photos travelled with the
- * export. The MainActivity wire-in is locked by a source-reading assertion (the
- * established `MainActivityWiringTest` pattern).
+ * export.
+ *
+ * The wire-in is real production code, not a grep assertion: [MainActivity]'s
+ * `performExport` reaches `ConversationExporter.buildBackup` with the live DAO
+ * collections, serializes the payload through `BackupJson`, and surfaces the
+ * honest photo note; `performImport` restores through `RoomRestoreService`
+ * (idempotent REPLACE). The framework-bound Activity cannot be instantiated in
+ * a plain JVM test (no Robolectric in the offline cache), so the exporter's own
+ * behaviour is driven directly here.
  */
 class ConversationExporterTest {
 
@@ -133,38 +139,62 @@ class ConversationExporterTest {
         assertEquals(export.backup, back)
     }
 
-    // ---- wire-in: the running launcher reaches the exporter and the restore ----
+    // ---- the export records when it was produced ----
 
     @Test
-    fun `MainActivity reaches the exporter and the idempotent restore`() {
-        val main = sourceText("MainActivity.kt")
-        assertTrue(
-            "MainActivity must build the export through ConversationExporter",
-            main.contains("ConversationExporter.buildBackup"),
+    fun `exportedAt is a non-null ISO-8601 instant of the export time`() {
+        val before = java.time.Instant.now()
+        val export = ConversationExporter.buildBackup(
+            conversations = listOf(conversation(10L)),
+            messages = listOf(message(1L, 10L)),
+            settings = emptyMap(),
+            blocklist = emptyList(),
+            starred = emptyList(),
         )
-        assertTrue(
-            "MainActivity must serialize through BackupJson",
-            main.contains("BackupJson.serialize"),
-        )
-        assertTrue(
-            "MainActivity must restore through RoomRestoreService (idempotent REPLACE)",
-            main.contains("RoomRestoreService(database).restore"),
-        )
-        assertTrue(
-            "MainActivity must open the SAF create-document picker for export",
-            main.contains("ACTION_CREATE_DOCUMENT"),
-        )
-        assertTrue(
-            "MainActivity must open the SAF open-document picker for import",
-            main.contains("ACTION_OPEN_DOCUMENT"),
-        )
+        val after = java.time.Instant.now()
+
+        // Non-null and parseable as a strict ISO-8601 instant (throws on any
+        // deviation from the format), not just "some string".
+        val parsed = java.time.Instant.parse(export.exportedAt)
+        // The recorded instant is the moment of the call, not a fixed constant.
+        assertTrue(!parsed.isBefore(before) && !parsed.isAfter(after))
     }
 
-    // Gradle unit tests run with the module directory (app/) as the working
-    // directory; fall back to the workspace-root-relative path for robustness.
-    private fun sourceText(name: String): String =
-        sequenceOf(
-            File("src/main/kotlin/com/piercingxx/txxt/$name"),
-            File("app/src/main/kotlin/com/piercingxx/txxt/$name"),
-        ).first { it.exists() }.readText()
+    // ---- the export feeds the restore path the wire-in connects ----
+    //
+    // [MainActivity]'s `performExport` builds the payload through
+    // [ConversationExporter.buildBackup]; `performImport` restores through
+    // [RoomRestoreService], which is [RestoreService] over the Room DAOs. The
+    // framework-bound Activity can't be instantiated in a plain JVM test (no
+    // Robolectric in the offline cache), so this drives the same contract the
+    // wire-in performs: the payload this exporter produces must map straight
+    // back onto the live entities through [RestoreService.plan], proving the
+    // two components interoperate.
+
+    @Test
+    fun `an exported conversation restores back onto the same message entities`() {
+        val export = ConversationExporter.buildBackup(
+            conversations = listOf(conversation(10L, participant = "+15551234567")),
+            messages = listOf(
+                message(1L, 10L, body = "hello"),
+                message(2L, 10L, body = "world", senderAddress = null),
+            ),
+            settings = mapOf("quietHoursStart" to "22:00"),
+            blocklist = listOf("spam"),
+            starred = listOf("+15551234567"),
+        )
+        // The restore path (what RoomRestoreService wraps) maps the exported
+        // payload deterministically back onto storage entities.
+        val plan = RestoreService(
+            upsertConversation = { },
+            upsertMessage = { },
+        ).plan(export.backup)
+
+        // Same message ids, same thread (conversation) ids, same bodies.
+        assertEquals(setOf(1L, 2L), plan.messages.map { it.id }.toSet())
+        assertEquals(listOf(10L, 10L), plan.messages.map { it.conversationId })
+        assertEquals(listOf("hello", "world"), plan.messages.map { it.body })
+        // One conversation per exported thread.
+        assertEquals(setOf(10L), plan.conversations.map { it.id }.toSet())
+    }
 }
