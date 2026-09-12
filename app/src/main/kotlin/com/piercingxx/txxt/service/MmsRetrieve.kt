@@ -90,6 +90,12 @@ object MmsRetrieve {
             AppLog.w("mms", "retrieve empty pdu id=$messageId")
             return false
         }
+        val parsed = MmsRetrievedContentParser.parse(pdu)
+        AppLog.i(
+            "mms",
+            "retrieve pdu id=$messageId bytes=${pdu.size} mime=${parsed.imageMime} " +
+                "image=${parsed.imageBytes?.size ?: 0}",
+        )
         val ok = applyPdu(dao, messageId, pdu) { bytes, mime ->
             saveRetrievedImage(context, messageId, bytes, mime)
         }
@@ -174,13 +180,46 @@ object MmsRetrieve {
             mime.contains("png") -> "png"
             mime.contains("gif") -> "gif"
             mime.contains("webp") -> "webp"
+            mime.contains("heic") || mime.contains("heif") -> "heic"
+            mime.contains("bmp") -> "bmp"
+            mime.contains("3gp") || mime.contains("mp4") || mime.startsWith("video/") -> "3gp"
             else -> "jpg"
+        }
+        if (ext == "3gp") {
+            stillFromVideo(dir, messageId, bytes)?.let { return it }
         }
         val file = File(dir, "$messageId.$ext")
         file.writeBytes(bytes)
         file.absolutePath
     } catch (_: Exception) {
         null
+    }
+
+    /**
+     * Verizon often wraps a still photo as `video/3gpp`. The thread can
+     * only show a bitmap, so pull the first frame.
+     */
+    internal fun stillFromVideo(dir: File, messageId: Long, bytes: ByteArray): String? {
+        val tmp = File(dir, "$messageId.video")
+        return try {
+            tmp.writeBytes(bytes)
+            val retriever = android.media.MediaMetadataRetriever()
+            retriever.setDataSource(tmp.absolutePath)
+            val frame = retriever.frameAtTime
+            retriever.release()
+            if (frame == null) null
+            else {
+                val out = File(dir, "$messageId.jpg")
+                java.io.FileOutputStream(out).use { stream ->
+                    frame.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, stream)
+                }
+                out.absolutePath
+            }
+        } catch (_: Exception) {
+            null
+        } finally {
+            tmp.delete()
+        }
     }
 }
 
@@ -250,7 +289,9 @@ class MmsContentFetcher(
                 }
                 val bytes = readBytes(context, telephony)
                     ?: readTelephonyParts(context, telephony)
-                if (bytes != null && bytes.isNotEmpty()) return bytes
+                val harvested = readRecentInboxImages(context, telephony)
+                val best = pickImagePdu(listOfNotNull(bytes) + harvested)
+                if (best != null && best.isNotEmpty()) return best
             } finally {
                 deleteTelephonyDest(context, telephony)
             }
@@ -361,17 +402,57 @@ class MmsContentFetcher(
          */
         internal fun readTelephonyParts(context: Context, dest: Uri): ByteArray? {
             val msgId = dest.pathSegments.firstOrNull { it.toLongOrNull() != null } ?: return null
-            val partsUri = Uri.parse("content://mms/$msgId/part")
+            return readMessageParts(context, msgId)
+        }
+
+        /**
+         * AOSP/GrapheneOS persistIfRequired stores the downloaded message as a
+         * *new* inbox row. Our dest stub can stay empty. Copy image parts from
+         * recently inserted inbox messages.
+         */
+        internal fun readRecentInboxImages(context: Context, dest: Uri): List<ByteArray> {
+            val stubId = dest.pathSegments.firstOrNull { it.toLongOrNull() != null }
+            val since = System.currentTimeMillis() / 1000L - 180L
             val cursor = try {
-                context.contentResolver.query(partsUri, arrayOf("_id"), null, null, null)
+                context.contentResolver.query(
+                    Telephony.Mms.Inbox.CONTENT_URI,
+                    arrayOf(Telephony.Mms._ID, Telephony.Mms.DATE),
+                    "${Telephony.Mms.DATE}>=?",
+                    arrayOf(since.toString()),
+                    "${Telephony.Mms.DATE} DESC",
+                )
+            } catch (_: Exception) {
+                null
+            } ?: return emptyList()
+            val out = ArrayList<ByteArray>()
+            cursor.use {
+                while (it.moveToNext()) {
+                    val id = it.getLong(0)
+                    if (stubId != null && id.toString() == stubId) continue
+                    readMessageParts(context, id.toString())?.let { bytes -> out += bytes }
+                }
+            }
+            return out
+        }
+
+        private fun readMessageParts(context: Context, msgId: String): ByteArray? {
+            val cursor = try {
+                context.contentResolver.query(
+                    Telephony.Mms.Part.CONTENT_URI,
+                    arrayOf(Telephony.Mms.Part._ID, Telephony.Mms.Part.CONTENT_TYPE),
+                    "${Telephony.Mms.Part.MSG_ID}=?",
+                    arrayOf(msgId),
+                    null,
+                )
             } catch (_: Exception) {
                 null
             } ?: return null
-            val chunks = ArrayList<ByteArray>()
+            val chunks = ArrayList<Pair<String?, ByteArray>>()
             cursor.use {
                 while (it.moveToNext()) {
                     val partId = it.getLong(0)
-                    val partUri = Uri.parse("content://mms/$msgId/part/$partId")
+                    val mime = if (it.columnCount > 1) it.getString(1) else null
+                    val partUri = ContentUris.withAppendedId(Telephony.Mms.Part.CONTENT_URI, partId)
                     val bytes = try {
                         context.contentResolver.openInputStream(partUri)?.use { stream ->
                             stream.readBytes()
@@ -379,13 +460,23 @@ class MmsContentFetcher(
                     } catch (_: Exception) {
                         null
                     }
-                    if (bytes != null && bytes.isNotEmpty()) chunks += bytes
+                    if (bytes != null && bytes.isNotEmpty()) chunks += mime to bytes
                 }
             }
             if (chunks.isEmpty()) return null
-            return chunks.firstOrNull { chunk ->
+            chunks.firstOrNull { (mime, bytes) ->
+                mime?.startsWith("image/") == true ||
+                    mime?.startsWith("video/") == true ||
+                    MmsRetrievedContentParser.parse(bytes).imageBytes != null
+            }?.let { return it.second }
+            return chunks.maxByOrNull { it.second.size }?.second
+        }
+
+        internal fun pickImagePdu(candidates: List<ByteArray>): ByteArray? {
+            if (candidates.isEmpty()) return null
+            return candidates.firstOrNull { chunk ->
                 MmsRetrievedContentParser.parse(chunk).imageBytes != null
-            } ?: chunks.maxByOrNull { it.size }
+            } ?: candidates.maxByOrNull { it.size }
         }
 
         internal suspend fun platformDownload(

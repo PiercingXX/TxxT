@@ -61,7 +61,13 @@ JDK 21, JVM 17 bytecode. AGP 8.9.1, Kotlin 2.1.20, Gradle 8.11.1.
 ```
 export ANDROID_HOME=$HOME/Android/Sdk
 ./gradlew assembleDebug :core:test :app:testDebugUnitTest
+./gradlew :app:installDebug
 ```
+
+`installDebug` also disables device RCS (`com.shannon.rcsservice`, plus the
+telephony UCE / single-registration flags) so Chat senders fall back to MMS.
+Voice IMS is left alone. A sideloaded SMS app cannot disable another package
+itself; the hook rides adb at install time.
 
 1016 JVM tests, green. `core/` holds the message and state-machine domain with
 zero `android.*` imports, so the logic that has to be correct is testable

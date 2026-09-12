@@ -104,6 +104,15 @@ class ThreadLayoutTest {
     }
 
     @Test
+    fun `the thread title is tappable so it can open the contact`() {
+        assertTrue(
+            "activity_thread.xml must mark thread_title clickable",
+            activityThread.contains("@+id/thread_title") &&
+                activityThread.contains("android:clickable=\"true\""),
+        )
+    }
+
+    @Test
     fun `the thread activity resizes with the keyboard so the list is not covered`() {
         val manifest = sequenceOf(
             java.io.File("src/main/AndroidManifest.xml"),

@@ -9,6 +9,7 @@ import com.piercingxx.txxt.data.MessageEntity
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -207,6 +208,33 @@ class MmsRetrieveTest {
             "MmsService may write sibling parts; those bytes must be read before the stub is deleted",
             retrieve.contains("fun readTelephonyParts"),
         )
+        assertTrue(
+            "MmsService persistIfRequired stores a new inbox row; harvest those image parts",
+            retrieve.contains("fun readRecentInboxImages"),
+        )
+        assertTrue(
+            "Verizon 3GP picture messages must become a still JPEG",
+            retrieve.contains("fun stillFromVideo"),
+        )
+        val importer = sourceText("service/TelephonyInboxImport.kt")
+        assertTrue(
+            "already-persisted telephony inbox photos must be copied into TxxT",
+            importer.contains("fun importPending"),
+        )
+    }
+
+    @Test
+    fun `pickImagePdu prefers a chunk that actually contains a JPEG`() {
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0x01, 0xFF.toByte(), 0xD9.toByte())
+        val smil = "application/smil\u0000".toByteArray()
+        val picked = MmsContentFetcher.pickImagePdu(listOf(smil, jpeg))
+        assertArrayEquals(jpeg, picked)
+        val video = "video/3gpp".toByteArray() + ByteArray(24)
+        val chosen = TelephonyInboxImport.pickPart(
+            listOf("application/smil" to smil, "video/3gpp" to video),
+        )
+        assertEquals("video/3gpp", chosen?.first)
+        assertArrayEquals(video, chosen?.second)
     }
 
     @Test

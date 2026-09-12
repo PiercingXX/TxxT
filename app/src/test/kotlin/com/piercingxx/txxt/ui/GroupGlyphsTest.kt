@@ -47,8 +47,8 @@ class GroupGlyphsTest {
     }
 
     @Test
-    fun withTitlePrefixesNonEmptyMarks() {
+    fun withTitlePutsMarksAfterTheName() {
         assertEquals("Ada", GroupGlyphs.withTitle("", "Ada"))
-        assertEquals("${GroupGlyphs.STAR} Ada", GroupGlyphs.withTitle(GroupGlyphs.STAR, "Ada"))
+        assertEquals("Ada ${GroupGlyphs.STAR}", GroupGlyphs.withTitle(GroupGlyphs.STAR, "Ada"))
     }
 }

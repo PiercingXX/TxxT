@@ -217,4 +217,31 @@ class SettingsWiringTest {
         assertTrue(settingsActivity.contains("AppLog.shareText()"))
         assertTrue(settingsActivity.contains("ACTION_SEND"))
     }
+
+    @Test
+    fun `conversation export and import live in Settings, not the conversation-list chrome`() {
+        val settingsLayout = sequenceOf(
+            File("src/main/res/layout/activity_settings.xml"),
+            File("app/src/main/res/layout/activity_settings.xml"),
+        ).first { it.exists() }.readText()
+        val mainLayout = sequenceOf(
+            File("src/main/res/layout/activity_main.xml"),
+            File("app/src/main/res/layout/activity_main.xml"),
+        ).first { it.exists() }.readText()
+        assertTrue(settingsLayout.contains("@+id/export_conversations_button"))
+        assertTrue(settingsLayout.contains("@+id/import_conversations_button"))
+        assertFalse(
+            "the conversation list chrome must not carry EXPORT/IMPORT",
+            mainLayout.contains("export_button") ||
+                mainLayout.contains("import_button") ||
+                mainLayout.contains("android:text=\"EXPORT\"") ||
+                mainLayout.contains("android:text=\"IMPORT\""),
+        )
+        assertTrue(settingsActivity.contains("R.id.export_conversations_button"))
+        assertTrue(settingsActivity.contains("R.id.import_conversations_button"))
+        assertFalse(
+            "MainActivity must not own conversation export",
+            mainActivity.contains("ConversationExporter"),
+        )
+    }
 }

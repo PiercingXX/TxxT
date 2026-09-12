@@ -341,5 +341,9 @@ class MmsDeliverReceiverTest {
             "WAP_PUSH_DELIVER cannot wait 90s inside goAsync; the retrieve service must be started",
             source.contains("MmsRetrieveService.enqueue"),
         )
+        assertTrue(
+            "a retrieve-conf in the WAP payload must be applied without an MMSC GET",
+            source.contains("applyInlineImage"),
+        )
     }
 }

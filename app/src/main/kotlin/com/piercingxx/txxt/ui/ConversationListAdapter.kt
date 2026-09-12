@@ -52,8 +52,9 @@ class ConversationListAdapter(
      */
     private val displayName: (String) -> String = { it },
     /**
-     * Optional Star / Business / Family / Block prefix, resolved at [submit]
+     * Optional Star / Business / Family / Block marks, resolved at [submit]
      * so the presenter stays free of android.* and a scroll never re-queries.
+     * Bound to a trailing view after the name, matching xx-contacts.
      */
     private val titleMarks: (Collection<String>) -> String = { "" },
 ) : RecyclerView.Adapter<ConversationListAdapter.RowHolder>() {
@@ -101,7 +102,7 @@ class ConversationListAdapter(
         conversations.mapTo(rows) {
             val row = ConversationListPresenter.present(it, displayName)
             val marks = titleMarks(it.participantAddresses)
-            if (marks.isEmpty()) row else row.copy(title = GroupGlyphs.withTitle(marks, row.title))
+            if (marks.isEmpty()) row else row.copy(marks = marks)
         }
         if (attached) notifyDataSetChanged()
     }
@@ -145,11 +146,17 @@ class ConversationListAdapter(
             tokens: ThemeTokens = deriveTokens(ThemePreset.DEFAULT),
         ) {
             val title = itemView.findViewById<TextView>(R.id.conversation_title)
+            val marks = itemView.findViewById<TextView>(R.id.conversation_marks)
             val snippet = itemView.findViewById<TextView>(R.id.conversation_snippet)
             val timestamp = itemView.findViewById<TextView>(R.id.conversation_timestamp)
             val unread = itemView.findViewById<TextView>(R.id.conversation_unread)
             title.text = row.title
             title.setTextColor(titleColor(tokens).toInt())
+            if (marks != null) {
+                marks.text = row.marks
+                marks.setTextColor(titleColor(tokens).toInt())
+                marks.visibility = if (row.marks.isEmpty()) View.GONE else View.VISIBLE
+            }
             snippet.text = EmojiNerdFont.display(row.snippet)
             snippet.setTextColor(mutedColor(tokens).toInt())
             timestamp.text =

@@ -342,6 +342,16 @@ class MmsPduHeaderTest {
     }
 
     @Test
+    fun `retrieve conf without end of header still parses and points at the body`() {
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0x01, 0xFF.toByte(), 0xD9.toByte())
+        val pdu = MmsSendReq.compose("+15551234567", jpeg)!!
+        val info = MmsPduHeader.parse(pdu)
+        assertNotNull(info)
+        assertTrue(info!!.headerEnd > 0)
+        assertTrue(info.headerEnd < pdu.size)
+    }
+
+    @Test
     fun `a truncated unknown header still fails closed`() {
         assertNull(MmsPduHeader.parse(bytes(0x82, 0xDF)))
     }

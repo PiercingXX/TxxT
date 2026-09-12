@@ -36,6 +36,17 @@
             android:maxLines="1"
             android:ellipsize="end" />
 
+        <!-- Star / business / family / block, after the name, right-aligned. -->
+        <TextView
+            android:id="@+id/conversation_marks"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:fontFamily="@font/font_body"
+            android:textSize="15sp"
+            android:textColor="?attr/txxtText"
+            android:visibility="gone" />
+
         <!-- Unread badge: "n new" in the theme text token; GONE at zero. -->
         <TextView
             android:id="@+id/conversation_unread"

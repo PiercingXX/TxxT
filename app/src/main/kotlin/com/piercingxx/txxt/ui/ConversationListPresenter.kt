@@ -87,4 +87,6 @@ data class ConversationRow(
     val timestampMillis: Long?,
     val unreadCount: Int,
     val muted: Boolean = false,
+    /** Star / business / family / block marks, shown after the name. */
+    val marks: String = "",
 )

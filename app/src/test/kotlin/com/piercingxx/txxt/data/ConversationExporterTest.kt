@@ -5,6 +5,7 @@ import com.piercingxx.txxt.core.BackupData
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 /**
  * Behaviour-verifies the user-visible conversation export (todo.md T1):
@@ -19,13 +20,9 @@ import org.junit.Test
  * in this JSON" rather than leave the user assuming photos travelled with the
  * export.
  *
- * The wire-in is real production code, not a grep assertion: [MainActivity]'s
- * `performExport` reaches `ConversationExporter.buildBackup` with the live DAO
- * collections, serializes the payload through `BackupJson`, and surfaces the
- * honest photo note; `performImport` restores through `RoomRestoreService`
- * (idempotent REPLACE). The framework-bound Activity cannot be instantiated in
- * a plain JVM test (no Robolectric in the offline cache), so the exporter's own
- * behaviour is driven directly here.
+ * The exporter's own behaviour is driven directly here. The SettingsActivity
+ * wire-in is locked by a source-reading assertion (the established
+ * `MainActivityWiringTest` pattern).
  */
 class ConversationExporterTest {
 
@@ -162,7 +159,7 @@ class ConversationExporterTest {
 
     // ---- the export feeds the restore path the wire-in connects ----
     //
-    // [MainActivity]'s `performExport` builds the payload through
+    // SettingsActivity's `performExport` builds the payload through
     // [ConversationExporter.buildBackup]; `performImport` restores through
     // [RoomRestoreService], which is [RestoreService] over the Room DAOs. The
     // framework-bound Activity can't be instantiated in a plain JVM test (no
@@ -197,4 +194,39 @@ class ConversationExporterTest {
         // One conversation per exported thread.
         assertEquals(setOf(10L), plan.conversations.map { it.id }.toSet())
     }
+
+    // ---- wire-in: Settings reaches the exporter and the restore ----
+
+    @Test
+    fun `SettingsActivity reaches the exporter and the idempotent restore`() {
+        val settings = sourceText("ui/SettingsActivity.kt")
+        assertTrue(
+            "SettingsActivity must build the export through ConversationExporter",
+            settings.contains("ConversationExporter.buildBackup"),
+        )
+        assertTrue(
+            "SettingsActivity must serialize through BackupJson",
+            settings.contains("BackupJson.serialize"),
+        )
+        assertTrue(
+            "SettingsActivity must restore through RoomRestoreService (idempotent REPLACE)",
+            settings.contains("RoomRestoreService(database).restore"),
+        )
+        assertTrue(
+            "SettingsActivity must open the SAF create-document picker for export",
+            settings.contains("ACTION_CREATE_DOCUMENT"),
+        )
+        assertTrue(
+            "SettingsActivity must open the SAF open-document picker for import",
+            settings.contains("ACTION_OPEN_DOCUMENT"),
+        )
+    }
+
+    // Gradle unit tests run with the module directory (app/) as the working
+    // directory; fall back to the workspace-root-relative path for robustness.
+    private fun sourceText(name: String): String =
+        sequenceOf(
+            File("src/main/kotlin/com/piercingxx/txxt/$name"),
+            File("app/src/main/kotlin/com/piercingxx/txxt/$name"),
+        ).first { it.exists() }.readText()
 }
