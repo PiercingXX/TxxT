@@ -141,6 +141,27 @@
             android:textColor="#FFFFFF"
             android:layout_marginBottom="8dp" />
 
+        <!-- Conversation archive (todo.md T1). SAF JSON of every thread and
+             message — not the settings dump above. Photos are not in the
+             JSON; the toast says so. -->
+        <Button
+            android:id="@+id/export_conversations_button"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Export conversations"
+            android:textColor="#FFFFFF"
+            android:layout_marginBottom="8dp" />
+
+        <Button
+            android:id="@+id/import_conversations_button"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Import conversations"
+            android:textColor="#FFFFFF"
+            android:layout_marginBottom="8dp" />
+
         <!-- Blocking management and starred contacts (WS12 T3). -->
         <Button
             android:id="@+id/blocking_button"

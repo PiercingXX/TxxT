@@ -35,38 +35,103 @@ data class MmsRetrievedContent(
 object MmsRetrievedContentParser {
 
     fun parse(pdu: ByteArray): MmsRetrievedContent {
-        val types = mediaTypesIn(pdu)
-        val text = extractTextPlain(pdu)
+        val parts = multipartParts(pdu)
+        val types = mediaTypesIn(pdu) + parts.mapNotNull { it.mime }
+        val text = parts.firstNotNullOfOrNull { part ->
+            if (part.mime?.startsWith("text/") == true) usableCaption(part.data.decodeToString())
+            else null
+        } ?: extractTextPlain(pdu)
         val audioOnly = types.any { it.startsWith("audio/") } &&
             types.none { it.startsWith("image/") || it.startsWith("text/") }
         if (audioOnly) {
             return MmsRetrievedContent(body = "", dropUnstored = true)
         }
-        val image = extractImage(pdu)
+        val image = parts.firstNotNullOfOrNull { imageFromPart(it) }
+            ?: extractImage(pdu)
+            ?: extractHeif(pdu)
+            ?: parts.firstNotNullOfOrNull { videoFromPart(it) }
         val body = when {
             !text.isNullOrBlank() -> text.trim()
-            image != null || types.any { it.startsWith("image/") } ->
+            image != null ||
+                types.any { it.startsWith("image/") || it.startsWith("video/") } ->
                 MmsRetrievedContent.PHOTO_PLACEHOLDER
             else -> ""
         }
-        val dropUnstored = false
         return MmsRetrievedContent(
             body = body,
-            dropUnstored = dropUnstored,
+            dropUnstored = false,
             imageBytes = image?.second,
             imageMime = image?.first,
         )
     }
 
-    /** JPEG / PNG / GIF / WebP payload, if present in the PDU. */
+    /**
+     * WSP multipart parts after the MM headers. Android MMS stores the JPEG
+     * here with a well-known Content-Type octet — no ASCII `image/jpeg`.
+     */
+    internal fun multipartParts(pdu: ByteArray): List<MmsPart> {
+        val start = MmsPduHeader.parse(pdu)?.headerEnd ?: 0
+        if (start !in 0 until pdu.size) return emptyList()
+        val count = MmsPduHeader.uintvarAt(pdu, start) ?: return emptyList()
+        if (count.first !in 1..40) return emptyList()
+        var pos = count.second
+        val parts = ArrayList<MmsPart>(count.first)
+        repeat(count.first) {
+            val headersLen = MmsPduHeader.uintvarAt(pdu, pos) ?: return parts
+            pos = headersLen.second
+            val dataLen = MmsPduHeader.uintvarAt(pdu, pos) ?: return parts
+            pos = dataLen.second
+            if (headersLen.first < 0 || dataLen.first < 0) return parts
+            if (pos + headersLen.first + dataLen.first > pdu.size) return parts
+            val headers = pdu.copyOfRange(pos, pos + headersLen.first)
+            pos += headersLen.first
+            val data = pdu.copyOfRange(pos, pos + dataLen.first)
+            pos += dataLen.first
+            parts += MmsPart(contentTypeFromPartHeaders(headers), data)
+        }
+        return parts
+    }
+
+    private fun contentTypeFromPartHeaders(headers: ByteArray): String? {
+        if (headers.isEmpty()) return null
+        val lead = headers[0].toInt() and 0xFF
+        if (lead and 0x80 != 0) return MmsPduHeader.wellKnownMediaType(lead and 0x7F)
+        val nul = headers.indexOf(0)
+        val end = if (nul < 0) headers.size else nul
+        val text = headers.copyOfRange(0, end).toString(Charsets.US_ASCII).trim()
+        return text.lowercase().takeIf { it.contains('/') }
+    }
+
+    private fun imageFromPart(part: MmsPart): Pair<String, ByteArray>? {
+        val mime = part.mime
+        if (mime != null && mime.startsWith("image/")) {
+            extractImage(part.data)?.let { return it }
+            extractHeif(part.data)?.let { return it }
+            if (part.data.size >= 16) return mime to part.data
+        }
+        return extractImage(part.data) ?: extractHeif(part.data)
+    }
+
+    private fun videoFromPart(part: MmsPart): Pair<String, ByteArray>? {
+        val mime = part.mime ?: return null
+        if (!mime.startsWith("video/") || part.data.size < 16) return null
+        return mime to part.data
+    }
+
+    internal data class MmsPart(val mime: String?, val data: ByteArray)
+
+    /** JPEG / PNG / GIF / WebP / BMP payload, if present in the PDU. */
     internal fun extractImage(pdu: ByteArray): Pair<String, ByteArray>? {
-        val jpeg = indexOf(pdu, byteArrayOf(0xFF.toByte(), 0xD8.toByte()))
+        val jpeg = indexOfJpegSoi(pdu)
         if (jpeg >= 0) {
             val eoi = lastIndexOf(pdu, byteArrayOf(0xFF.toByte(), 0xD9.toByte()))
             val end = if (eoi > jpeg) eoi + 2 else pdu.size
             if (end > jpeg + 2) {
                 return "image/jpeg" to pdu.copyOfRange(jpeg, end)
             }
+        }
+        if (pdu.size >= 2 && pdu[0] == 'B'.code.toByte() && pdu[1] == 'M'.code.toByte()) {
+            return "image/bmp" to pdu
         }
         val pngSig = byteArrayOf(
             0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
@@ -98,6 +163,28 @@ object MmsRetrievedContentParser {
         }
         return null
     }
+
+    /**
+     * iPhone photos often arrive as HEIC/HEIF (ISO BMFF `ftyp` + brand),
+     * which has no JPEG SOI. Carriers do not always transcode.
+     */
+    internal fun extractHeif(pdu: ByteArray): Pair<String, ByteArray>? {
+        val ftyp = indexOf(pdu, "ftyp".toByteArray(Charsets.ISO_8859_1))
+        if (ftyp < 4) return null
+        val brandAt = ftyp + 4
+        if (brandStart(brandAt, pdu) == null) return null
+        val boxStart = ftyp - 4
+        if (boxStart < 0) return null
+        return "image/heic" to pdu.copyOfRange(boxStart, pdu.size)
+    }
+
+    private fun brandStart(brandAt: Int, pdu: ByteArray): String? {
+        if (brandAt + 4 > pdu.size) return null
+        val brand = pdu.copyOfRange(brandAt, brandAt + 4).toString(Charsets.ISO_8859_1).lowercase()
+        return brand.takeIf { it in HEIF_BRANDS }
+    }
+
+    private val HEIF_BRANDS = setOf("heic", "heif", "heix", "mif1", "msf1")
 
     private fun indexOf(haystack: ByteArray, needle: ByteArray): Int {
         if (needle.isEmpty() || haystack.size < needle.size) return -1
@@ -158,9 +245,25 @@ object MmsRetrievedContentParser {
         val endNul = ascii.indexOf('\u0000', pos)
         val end = if (endNul < 0) ascii.length else endNul
         val slice = ascii.substring(pos, end)
-        val printable = slice.takeWhile { it.code in 0x09..0x7E }
-            .trim()
-            .takeIf { it.isNotEmpty() && it.any { ch -> ch.isLetterOrDigit() } }
-        return printable
+        val printable = slice.takeWhile { it.code in 0x09..0x7E }.trim()
+        return usableCaption(printable)
+    }
+
+    /**
+     * A caption the operator should see. WSP parameters (`charset=utf-8`)
+     * and SMIL must not replace the photo.
+     */
+    internal fun usableCaption(text: String?): String? {
+        val t = text?.trim().orEmpty()
+        if (t.isEmpty()) return null
+        if ('<' in t || '=' in t || '/' in t) return null
+        return t.takeIf { it.any { ch -> ch.isLetterOrDigit() } }
+    }
+
+    /** Prefer `FF D8 FF` (a real JPEG marker); fall back to a bare SOI. */
+    private fun indexOfJpegSoi(pdu: ByteArray): Int {
+        val marked = indexOf(pdu, byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte()))
+        if (marked >= 0) return marked
+        return indexOf(pdu, byteArrayOf(0xFF.toByte(), 0xD8.toByte()))
     }
 }

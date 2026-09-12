@@ -4,7 +4,6 @@ import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.ContentValues
 import android.content.Intent
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -27,7 +26,10 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.piercingxx.txxt.R
+import com.piercingxx.txxt.contacts.ContactLaunch
 import com.piercingxx.txxt.contacts.ContactNameResolver
+import com.piercingxx.txxt.contacts.PhoneLookupIdentity
+import com.piercingxx.txxt.data.Mappers.toMessage
 import com.piercingxx.txxt.data.Mappers.toMessage
 import com.piercingxx.txxt.data.OutboundStore
 import com.piercingxx.txxt.data.TxxTDatabase
@@ -36,6 +38,8 @@ import com.piercingxx.txxt.core.ViewedThread
 import com.piercingxx.txxt.service.MmsDownloadRetry
 import com.piercingxx.txxt.service.MmsDownloadState
 import com.piercingxx.txxt.service.MmsRetrieve
+import com.piercingxx.txxt.service.DialerBusinessTier
+import com.piercingxx.txxt.service.DialerGroups
 import com.piercingxx.txxt.service.NotificationService
 import com.piercingxx.txxt.service.SendPipeline
 import com.piercingxx.txxt.theme.SharedPreferencesThemeKeyValueStore
@@ -95,6 +99,7 @@ class ThreadActivity : Activity() {
     private lateinit var sendButton: Button
     private lateinit var settingsButton: Button
     private lateinit var threadTitle: TextView
+    private lateinit var threadMarks: TextView
     private lateinit var attachButton: Button
     private lateinit var attachmentRow: View
     private lateinit var attachmentLabel: TextView
@@ -186,6 +191,7 @@ class ThreadActivity : Activity() {
         sendButton = findViewById(R.id.send_button)
         settingsButton = findViewById(R.id.settings_button)
         threadTitle = findViewById(R.id.thread_title)
+        threadMarks = findViewById(R.id.thread_marks)
         attachButton = findViewById(R.id.attach_button)
         attachmentRow = findViewById(R.id.attachment_row)
         attachmentLabel = findViewById(R.id.attachment_label)
@@ -215,6 +221,7 @@ class ThreadActivity : Activity() {
         settingsButton.setOnClickListener { openSettings() }
         attachButton.setOnClickListener { launchPhotoPicker() }
         attachmentClear.setOnClickListener { clearAttachment() }
+        threadTitle.setOnClickListener { openContact() }
         threadTitle.setOnLongClickListener {
             copyThreadNumber()
             true
@@ -299,6 +306,7 @@ class ThreadActivity : Activity() {
             // The header is type, not chrome: it takes the theme's text token,
             // not the accent — the accent stays reserved for the affordances.
             threadTitle.setTextColor(text)
+            threadMarks.setTextColor(text)
             // The message rows follow the same theme: push the tokens into the
             // adapter so every row re-binds with the emphasis colours derived
             // from them (ThreadAdapter.emphasisColor), instead of the hardcoded
@@ -328,13 +336,53 @@ class ThreadActivity : Activity() {
             participantAddresses = addresses
             threadTitle.text =
                 ConversationListPresenter.title(addresses) { contactNames.labelFor(it) }
+            val marks = conversationMarks(addresses)
+            threadMarks.text = marks
+            threadMarks.visibility = if (marks.isEmpty()) View.GONE else View.VISIBLE
             if (started) dismissShadeNotification()
         }
+    }
+
+    private fun conversationMarks(addresses: Collection<String>): String {
+        val address = addresses.firstOrNull { it.isNotBlank() } ?: return ""
+        val hit = PhoneLookupIdentity.lookup(this, address)
+        val key = hit.lookupKey
+        val prefs = getSharedPreferences("txxt_settings", MODE_PRIVATE)
+        val map = SettingsBlockingStore.KEY_NAMES
+            .mapNotNull { name -> prefs.getString(name, null)?.let { name to it } }
+            .toMap()
+        return GroupGlyphs.marks(
+            starred = hit.starred || BlockingRules.isStarred(map, address),
+            business = key != null && key in DialerBusinessTier.load(this)?.keys.orEmpty(),
+            family = key != null && key in DialerGroups.keysNamed(this, "Family"),
+            blocked = BlockingRules.isBlocked(map, address) ||
+                (key != null && key in DialerGroups.keysNamed(this, DialerGroups.BLOCKED)),
+        )
     }
 
     /** Opens the settings screen (WS12 T5) from the thread's settings affordance. */
     private fun openSettings() {
         startActivity(Intent(this, SettingsActivity::class.java))
+    }
+
+    /**
+     * Tap the thread name to open XX-Contacts: the saved card when we have a
+     * lookup key, otherwise SHOW_OR_CREATE so a number can become a contact
+     * with birthday and note.
+     */
+    private fun openContact() {
+        scope.launch {
+            val address = destinationAddress() ?: participantAddresses.firstOrNull { it.isNotBlank() }
+            if (address.isNullOrBlank()) return@launch
+            val lookupKey = withContext(Dispatchers.IO) {
+                PhoneLookupIdentity.lookup(this@ThreadActivity, address).lookupKey
+            }
+            try {
+                startActivity(ContactLaunch.intent(lookupKey, address))
+            } catch (_: ActivityNotFoundException) {
+                Toast.makeText(this@ThreadActivity, "Contacts app is not installed", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     /**
@@ -426,7 +474,7 @@ class ThreadActivity : Activity() {
         val path = message.mediaPath
         if (path.isNullOrBlank() || !File(path).isFile) return
         hidePeek()
-        val bitmap = BitmapFactory.decodeFile(path) ?: return
+        val bitmap = ThreadAdapter.decodePhoto(path) ?: return
         val overlay = ImageView(this).apply {
             setBackgroundColor(0xFF000000.toInt())
             scaleType = ImageView.ScaleType.FIT_CENTER
@@ -452,10 +500,15 @@ class ThreadActivity : Activity() {
     }
 
     private fun hidePeek() {
-        peekView?.let { view ->
-            (view.parent as? ViewGroup)?.removeView(view)
-        }
+        val view = peekView ?: return
         peekView = null
+        view.setOnTouchListener(null)
+        val parent = view.parent as? ViewGroup ?: return
+        // removeView during this view's own ACTION_UP dispatch NPEs inside
+        // ViewGroup.removeFromArray. Detach on the next frame.
+        view.post {
+            if (view.parent === parent) parent.removeView(view)
+        }
     }
 
     private fun onPhotoDoubleTap(message: com.piercingxx.txxt.core.Message) {

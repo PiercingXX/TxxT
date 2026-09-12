@@ -18,6 +18,11 @@ data class MmsPduInfo(
     val transactionId: String? = null,
     /** X-Mms-Message-ID; null when absent. */
     val messageId: String? = null,
+    /**
+     * Index of the first body octet (WSP multipart) after the headers.
+     * Zero when the walk did not reach a body.
+     */
+    val headerEnd: Int = 0,
 )
 
 /**
@@ -250,7 +255,16 @@ object MmsPduHeader {
                     val parsed = readTextString(pdu, pos) ?: return null
                     pos = parsed.second
                 }
-                else -> pos = skipUnknownValue(pdu, pos) ?: return null
+                else -> {
+                    // Field names are Short-integers (>= 0x80). A low octet
+                    // here is the WSP multipart body (part-count uintvar), not
+                    // another header — stop, do not fail-closed on the JPEG.
+                    if (field == null || field < 0x80) {
+                        if (field != null) pos--
+                        break
+                    }
+                    pos = skipUnknownValue(pdu, pos) ?: return null
+                }
             }
         }
 
@@ -262,6 +276,7 @@ object MmsPduHeader {
             contentLocation,
             transactionId,
             messageId,
+            headerEnd = pos.coerceIn(0, pdu.size),
         )
     }
 
@@ -477,10 +492,17 @@ object MmsPduHeader {
         0x1E -> "image/tiff"
         0x1F -> "image/png"
         0x20 -> "image/vnd.wap.wbmp"
+        0x23 -> "application/vnd.wap.multipart.mixed"
         0x32, 0x33 -> "application/vnd.wap.multipart.related"
         0x3E -> "application/vnd.wap.mms-message"
         else -> null
     }
+
+    /** Well-known media code (low 7 bits) for part-header Content-Type. */
+    internal fun wellKnownMediaType(code: Int): String? = wellKnownMedia(code)
+
+    /** Uintvar at [start]; the pair is (value, position past the field). */
+    internal fun uintvarAt(pdu: ByteArray, start: Int): Pair<Int, Int>? = readUintvar(pdu, start)
 
     private fun mediaTypeInSpan(pdu: ByteArray, start: Int, end: Int): String? {
         if (start >= end) return null

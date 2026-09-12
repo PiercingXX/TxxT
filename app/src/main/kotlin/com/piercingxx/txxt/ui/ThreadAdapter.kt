@@ -1,12 +1,15 @@
 package com.piercingxx.txxt.ui
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
+import android.os.Build
 import android.view.GestureDetector
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
-import android.graphics.BitmapFactory
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -184,24 +187,18 @@ class ThreadAdapter(
             EmojiTypeface.apply(body)
             val photo = itemView.findViewById<View>(R.id.message_photo) as? ImageView
             val path = row.mediaPath
-            val trimmed = row.body.trim()
-            val collapsed = trimmed == MmsRetrievedContent.COLLAPSED_PHOTO_PLACEHOLDER
-            val showingPhoto = !collapsed &&
-                !path.isNullOrBlank() &&
-                java.io.File(path).isFile
+            val fileReady = !path.isNullOrBlank() && java.io.File(path).isFile
+            val bitmap = if (fileReady) decodePhoto(path!!) else null
             if (photo != null) {
-                if (showingPhoto) {
+                if (bitmap != null) {
                     photo.visibility = View.VISIBLE
-                    photo.setImageBitmap(BitmapFactory.decodeFile(path))
+                    photo.setImageBitmap(bitmap)
                 } else {
                     photo.visibility = View.GONE
                     photo.setImageDrawable(null)
                 }
             }
-            val hideMarker = showingPhoto && (
-                trimmed == MmsRetrievedContent.PHOTO_PLACEHOLDER ||
-                    trimmed == PhotoAttachment.PHOTO_ROW_PLACEHOLDER
-                )
+            val hideMarker = bitmap != null
             body.visibility = if (hideMarker) View.GONE else View.VISIBLE
             applyAlignment(rowContainer, body, timestamp, row.alignment)
             body.setTextColor(emphasisColor(row.emphasis, tokens).toInt())
@@ -291,6 +288,31 @@ class ThreadAdapter(
         fun layoutGravityFor(alignment: ThreadAlignment): Int = when (alignment) {
             ThreadAlignment.LEFT -> Gravity.START
             ThreadAlignment.RIGHT -> Gravity.END
+        }
+
+        /** JPEG via BitmapFactory; HEIC/HEIF via ImageDecoder on API 28+. */
+        fun decodePhoto(path: String): Bitmap? {
+            BitmapFactory.decodeFile(path)?.let { return it }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                try {
+                    ImageDecoder.decodeBitmap(ImageDecoder.createSource(java.io.File(path)))
+                        ?.let { return it }
+                } catch (_: Exception) {
+                }
+            }
+            val lower = path.lowercase()
+            if (lower.endsWith(".3gp") || lower.endsWith(".mp4") || lower.endsWith(".video")) {
+                return try {
+                    val retriever = android.media.MediaMetadataRetriever()
+                    retriever.setDataSource(path)
+                    val frame = retriever.frameAtTime
+                    retriever.release()
+                    frame
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            return null
         }
 
         /**

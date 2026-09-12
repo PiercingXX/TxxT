@@ -54,5 +54,5 @@ object GroupGlyphs {
     }
 
     fun withTitle(marks: String, title: String): String =
-        if (marks.isEmpty()) title else "$marks $title"
+        if (marks.isEmpty()) title else "$title $marks"
 }

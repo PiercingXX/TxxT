@@ -23,6 +23,10 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatDelegate
 import com.piercingxx.txxt.R
 import com.piercingxx.txxt.core.RoleSwitchCopy
+import com.piercingxx.txxt.data.BackupJson
+import com.piercingxx.txxt.data.ConversationExporter
+import com.piercingxx.txxt.data.RoomRestoreService
+import com.piercingxx.txxt.data.TxxTDatabase
 import com.piercingxx.txxt.log.AppLog
 import com.piercingxx.txxt.service.DefaultHandlerMonitor
 import com.piercingxx.txxt.service.NotificationPrefs
@@ -33,6 +37,13 @@ import com.piercingxx.txxt.theme.ThemeController
 import com.piercingxx.txxt.theme.ThemeStore
 import com.piercingxx.txxt.theme.ThemePreset
 import java.io.File
+import java.io.IOException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * The settings screen (WS12 T5).
@@ -79,6 +90,8 @@ class SettingsActivity : Activity() {
         const val BACKUP_FILE_NAME = "txxt-settings-backup.txt"
 
         private const val REQUEST_NOTIFICATION_SOUND = 71
+        private const val REQUEST_EXPORT = 72
+        private const val REQUEST_IMPORT = 73
     }
 
     private lateinit var prefs: SharedPreferences
@@ -88,6 +101,11 @@ class SettingsActivity : Activity() {
     private lateinit var autoSyncTheme: Switch
     private lateinit var themePreset: Spinner
     private lateinit var fontMode: Spinner
+
+    private val database: TxxTDatabase by lazy { TxxTDatabase.instance(this) }
+
+    private val scope: CoroutineScope =
+        CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**
      * The theme controller over the SAME persisted store the render path reads
@@ -148,6 +166,11 @@ class SettingsActivity : Activity() {
         bindControls()
         loadIntoControls()
         applyTheme()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        scope.cancel()
     }
 
     override fun onResume() {
@@ -228,6 +251,8 @@ class SettingsActivity : Activity() {
         }
         findViewById<Button>(R.id.backup_button).setOnClickListener { runBackup() }
         findViewById<Button>(R.id.restore_button).setOnClickListener { runRestore() }
+        findViewById<Button>(R.id.export_conversations_button).setOnClickListener { launchExport() }
+        findViewById<Button>(R.id.import_conversations_button).setOnClickListener { launchImport() }
         findViewById<Button>(R.id.blocking_button).setOnClickListener {
             // WS12-corrective T2: the blocking button load-and-applies the
             // *persisted* blocking/starred settings through the
@@ -423,6 +448,96 @@ class SettingsActivity : Activity() {
     }
 
     /**
+     * User-visible conversation export (todo.md T1). Opens the SAF
+     * create-document picker; the chosen URI is written in [onActivityResult].
+     */
+    private fun launchExport() {
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "application/json"
+            putExtra(Intent.EXTRA_TITLE, "txxt-backup.json")
+        }
+        startActivityForResult(intent, REQUEST_EXPORT)
+    }
+
+    /**
+     * User-visible conversation import (todo.md T1). Opens the SAF
+     * open-document picker; the chosen JSON is restored through
+     * [RoomRestoreService] in [onActivityResult].
+     */
+    private fun launchImport() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "application/json"
+        }
+        startActivityForResult(intent, REQUEST_IMPORT)
+    }
+
+    private fun performExport(uri: Uri) {
+        scope.launch {
+            try {
+                val export = ConversationExporter.buildBackup(
+                    conversations = database.conversationDao().getAll(),
+                    messages = database.messageDao().getAll(),
+                    settings = SettingsBackup.toSettingsMap(loadStore()),
+                    blocklist = loadBlockingStore().blockedAddresses().toList(),
+                    starred = loadBlockingStore().starredContacts().toList(),
+                )
+                val json = BackupJson.serialize(export.backup)
+                contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
+                    ?: throw IOException("could not open export destination")
+                val note = if (export.photoCount > 0) {
+                    " / ${export.photoCount} photos not in this JSON"
+                } else {
+                    ""
+                }
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        this@SettingsActivity,
+                        "Exported ${export.backup.messages.size} messages$note",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        this@SettingsActivity,
+                        "Export failed: ${e.message}",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            }
+        }
+    }
+
+    private fun performImport(uri: Uri) {
+        scope.launch {
+            try {
+                val json = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?.toString(Charsets.UTF_8)
+                    ?: throw IOException("could not open import source")
+                val data = BackupJson.deserialize(json)
+                val plan = RoomRestoreService(database).restore(data)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        this@SettingsActivity,
+                        "Restored ${plan.messages.size} messages",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        this@SettingsActivity,
+                        "Import failed: ${e.message}",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            }
+        }
+    }
+
+    /**
      * Opens the system ringtone picker so the operator can choose TxxT's
      * notification sound, including the phone default. Android freezes a
      * channel's sound at creation, so a pick bumps the channel generation.
@@ -446,13 +561,19 @@ class SettingsActivity : Activity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != REQUEST_NOTIFICATION_SOUND || resultCode != RESULT_OK) return
-        @Suppress("DEPRECATION")
-        val uri: Uri? = data?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
-        NotificationPrefs.setSound(this, uri)
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        ensureMessageChannels(this, manager)
-        Toast.makeText(this, "Notification sound updated", Toast.LENGTH_SHORT).show()
+        if (resultCode != RESULT_OK) return
+        when (requestCode) {
+            REQUEST_EXPORT -> data?.data?.let(::performExport)
+            REQUEST_IMPORT -> data?.data?.let(::performImport)
+            REQUEST_NOTIFICATION_SOUND -> {
+                @Suppress("DEPRECATION")
+                val uri: Uri? = data?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+                NotificationPrefs.setSound(this, uri)
+                val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                ensureMessageChannels(this, manager)
+                Toast.makeText(this, "Notification sound updated", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun openSystemChannelSettings() {

@@ -139,6 +139,7 @@ class ConversationRowColorTest {
         val unread = mockk<TextView>(relaxed = true)
         val itemView = mockk<View>(relaxed = true)
         every { itemView.findViewById<TextView>(R.id.conversation_title) } returns title
+        every { itemView.findViewById<TextView>(R.id.conversation_marks) } returns mockk(relaxed = true)
         every { itemView.findViewById<TextView>(R.id.conversation_snippet) } returns snippet
         every { itemView.findViewById<TextView>(R.id.conversation_timestamp) } returns timestamp
         every { itemView.findViewById<TextView>(R.id.conversation_unread) } returns unread

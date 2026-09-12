@@ -151,6 +151,10 @@ class ThreadWiringTest {
             threadActivity.contains("onPhotoPeek") && threadActivity.contains("hidePeek"),
         )
         assertTrue(
+            "hidePeek must post removeView so ACTION_UP does not NPE in ViewGroup",
+            Regex("""hidePeek[\s\S]*?view\.post\s*\{[\s\S]*?removeView""").containsMatchIn(threadActivity),
+        )
+        assertTrue(
             "double-tapping a photo must ask to save it",
             threadActivity.contains("Save this photo?"),
         )
@@ -161,6 +165,11 @@ class ThreadWiringTest {
         assertTrue(
             "leaving the thread must clear the viewed-thread marker",
             threadActivity.contains("ViewedThread.close("),
+        )
+        assertTrue(
+            "tapping the thread name must open the contacts app",
+            threadActivity.contains("openContact()") &&
+                threadActivity.contains("ContactLaunch.intent("),
         )
     }
 

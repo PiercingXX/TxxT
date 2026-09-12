@@ -9,6 +9,7 @@ import com.piercingxx.txxt.block.LiveInboundFilter
 import com.piercingxx.txxt.block.MessageDisposition
 import com.piercingxx.txxt.core.MmsPduHeader
 import com.piercingxx.txxt.core.MmsRetrievedContent
+import com.piercingxx.txxt.core.MmsRetrievedContentParser
 import com.piercingxx.txxt.data.InboundStore
 import com.piercingxx.txxt.data.QuarantineStore
 import com.piercingxx.txxt.data.TxxTDatabase
@@ -109,6 +110,7 @@ class MmsDeliverReceiver(
         if (intent.action != mmsDeliverAction) return
 
         val pdu = extractPdu(intent)
+        AppLog.i("mms", "deliver type=${intent.type} bytes=${pdu?.size ?: 0}")
         val info = pdu?.let { MmsPduHeader.parse(it) }
         if (info == null) {
             Log.w(TAG, "WAP_PUSH_DELIVER PDU missing or unparseable (${pdu?.size ?: 0} bytes)")
@@ -167,9 +169,15 @@ class MmsDeliverReceiver(
                     }
                 val location = MmsPduHeader.retrieveUrl(info)
                 val messageId = store(sender, dateMillis, location)
+                val appliedInline = persist == null &&
+                    applyInlineImage(context, messageId, pdu)
                 val fetch: suspend (Context, Long, String?) -> Boolean =
                     retrieve ?: { ctx, id, loc -> defaultRetrieve(ctx, id, loc) }
-                val kept = fetch(context, messageId, location)
+                val kept = if (appliedInline) {
+                    true
+                } else {
+                    fetch(context, messageId, location)
+                }
                 if (kept && !hold) {
                     val post: suspend (Context, String, String) -> Unit =
                         notify ?: { ctx, from, text ->
@@ -214,6 +222,23 @@ class MmsDeliverReceiver(
             val dao = TxxTDatabase.instance(app).messageDao()
             MmsRetrieve.retrieveAndStore(app, messageId, location)
             return dao.getById(messageId) != null
+        }
+
+        /**
+         * Some carriers put the photo in the WAP payload itself (m-retrieve-conf)
+         * instead of a Content-Location GET. Apply those bytes before hitting the MMSC.
+         */
+        internal suspend fun applyInlineImage(
+            context: Context,
+            messageId: Long,
+            pdu: ByteArray,
+        ): Boolean {
+            val parsed = MmsRetrievedContentParser.parse(pdu)
+            if (parsed.imageBytes == null) return false
+            val dao = TxxTDatabase.instance(context).messageDao()
+            return MmsRetrieve.applyPdu(dao, messageId, pdu) { bytes, mime ->
+                MmsRetrieve.saveRetrievedImage(context, messageId, bytes, mime)
+            }
         }
     }
 }

@@ -21,6 +21,7 @@ class ReceivePolicyTest {
         assertEquals(AttachmentDecision.STORE, ReceivePolicy.decideAttachment("image/jpeg"))
         assertEquals(AttachmentDecision.STORE, ReceivePolicy.decideAttachment("text/plain"))
         assertEquals(AttachmentDecision.STORE, ReceivePolicy.decideAttachment("video/mp4"))
+        assertEquals(AttachmentDecision.STORE, ReceivePolicy.decideAttachment("video/3gpp"))
     }
 
     @Test

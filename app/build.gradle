@@ -94,3 +94,22 @@ dependencies {
     androidTestImplementation 'androidx.test:core:1.5.0'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
 }
+
+// Disable Pixel RCS after every install. Shannon registers Chat/file-transfer
+// with the carrier even when TxxT holds ROLE_SMS, so inbound photos never
+// become MMS. Voice IMS (com.shannon.imsservice) is not touched.
+def disableRcs = tasks.register("disableRcs") {
+    group = "install"
+    description = "Disable device RCS so Chat senders fall back to MMS"
+    doLast {
+        exec {
+            workingDir rootProject.projectDir
+            commandLine "bash", "${rootProject.projectDir}/scripts/disable_rcs.sh"
+        }
+    }
+}
+tasks.configureEach { task ->
+    if (task.name == "installDebug" || task.name == "installRelease") {
+        task.finalizedBy(disableRcs)
+    }
+}

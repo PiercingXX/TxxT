@@ -58,7 +58,20 @@
             android:textStyle="bold"
             android:textColor="#E6FFFFFF"
             android:maxLines="1"
-            android:ellipsize="end" />
+            android:ellipsize="end"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="Open contact" />
+
+        <TextView
+            android:id="@+id/thread_marks"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:fontFamily="@font/font_body"
+            android:textSize="15sp"
+            android:textColor="#E6FFFFFF"
+            android:visibility="gone" />
 
         <!-- Settings affordance: opens the settings screen (WS12 T5).
              Borderless — a white glyph, no filled background. -->
