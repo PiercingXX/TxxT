@@ -446,8 +446,9 @@ class ThreadActivity : Activity() {
     private var peekView: ImageView? = null
 
     /**
-     * Tap: download a pending photo, toggle `[Photo]` ↔ image, otherwise
-     * read the row aloud.
+     * Tap: download a pending photo, toggle `[Photo]` ↔ image for this
+     * visit, otherwise read the row aloud. Reveal is session-only so
+     * leaving the thread auto-hides every photo.
      */
     private fun onMessageTap(message: com.piercingxx.txxt.core.Message) {
         if (MmsRetrieve.needsRetrieve(message)) {
@@ -455,16 +456,16 @@ class ThreadActivity : Activity() {
             scope.launch(Dispatchers.IO) {
                 val state = mmsRetry.download(message.id)
                 if (state != MmsDownloadState.DOWNLOADED) return@launch
-                revealInboundPhoto(message.id)
+                withContext(Dispatchers.Main) { revealInboundPhoto(message.id) }
             }
             return
         }
-        if (message.isCollapsedPhoto) {
-            scope.launch(Dispatchers.IO) { revealInboundPhoto(message.id) }
-            return
-        }
-        if (!message.mediaPath.isNullOrBlank()) {
-            scope.launch(Dispatchers.IO) { collapseInboundPhoto(message.id) }
+        if (ThreadAdapter.isPhotoRow(message)) {
+            if (adapter.isPhotoRevealed(message.id)) {
+                collapseInboundPhoto(message.id)
+            } else {
+                revealInboundPhoto(message.id)
+            }
             return
         }
         readMessageAloud(message)
@@ -564,18 +565,34 @@ class ThreadActivity : Activity() {
         }
     }
 
-    private suspend fun revealInboundPhoto(messageId: Long) {
-        val row = database.messageDao().getById(messageId) ?: return
-        val revealed = row.toMessage().revealPhoto()
-        if (revealed.body == row.body) return
-        database.messageDao().upsert(row.copy(body = revealed.body))
+    private fun revealInboundPhoto(messageId: Long) {
+        adapter.revealPhoto(messageId)
     }
 
-    private suspend fun collapseInboundPhoto(messageId: Long) {
-        val row = database.messageDao().getById(messageId) ?: return
-        val collapsed = row.toMessage().collapsePhoto()
-        if (collapsed.body == row.body) return
-        database.messageDao().upsert(row.copy(body = collapsed.body))
+    private fun collapseInboundPhoto(messageId: Long) {
+        adapter.collapsePhoto(messageId)
+    }
+
+    /**
+     * Writes leftover revealed `[photo]` bodies back to `[Photo]`. Reveal
+     * is no longer persisted; this only migrates rows a previous build left
+     * open so the snippet and a reopen both start hidden.
+     */
+    private fun persistCollapsedPhotos(messages: List<com.piercingxx.txxt.core.Message>) {
+        val leftover = messages.filter { message ->
+            !message.mediaPath.isNullOrBlank() &&
+                message.body.trim() == MmsRetrievedContent.PHOTO_PLACEHOLDER
+        }
+        if (leftover.isEmpty()) return
+        val dao = database.messageDao()
+        CoroutineScope(Dispatchers.IO).launch {
+            val updates = leftover.mapNotNull { message ->
+                val row = dao.getById(message.id) ?: return@mapNotNull null
+                val collapsed = row.toMessage().collapsePhoto()
+                if (collapsed.body == row.body) null else row.copy(body = collapsed.body)
+            }
+            if (updates.isNotEmpty()) dao.upsertAll(updates)
+        }
     }
 
     /**
@@ -629,6 +646,8 @@ class ThreadActivity : Activity() {
         super.onStop()
         started = false
         hidePeek()
+        adapter.hideAllPhotos()
+        persistCollapsedPhotos(allMessages)
         ViewedThread.close(conversationId)
     }
 
@@ -639,6 +658,7 @@ class ThreadActivity : Activity() {
                 .messages()
                 .collect { messages ->
                     allMessages = messages
+                    persistCollapsedPhotos(messages)
                     val follow = followingLatest()
                     adapter.submit(ThreadSearchFilter.filter(messages, threadQuery))
                     if (follow) pinToLatest()

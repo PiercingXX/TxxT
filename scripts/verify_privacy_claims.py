@@ -41,6 +41,11 @@ EXPECTED_PERMISSIONS = {
     "android.permission.SEND_SMS",
     "android.permission.READ_SMS",
     "android.permission.WRITE_SMS",
+    # Default-SMS role completeness. SmsApplication auto-grants these to
+    # the default SMS app; declaring them stops the "lost … (fixing)"
+    # error. TxxT does not read cell-broadcast / WEA payloads.
+    "android.permission.RECEIVE_WAP_PUSH",
+    "android.permission.READ_CELL_BROADCASTS",
     # Contact-name resolution: ContactsContract.PhoneLookup turns a number into
     # the name the operator saved for it (contacts/ContactNameResolver.kt).
     # READ only — a contacts WRITE permission is asserted absent below, because

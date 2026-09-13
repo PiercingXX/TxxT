@@ -34,6 +34,15 @@
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.WRITE_SMS" />
+    <!-- Default-SMS role completeness. SmsApplication treats these as part
+         of the SMS-app set; without the declarations the OS logs
+         "lost … (fixing)" and auto-grants them anyway. RECEIVE_WAP_PUSH is
+         the app-level pair to the WAP_PUSH receivers already in this
+         manifest. READ_CELL_BROADCASTS is declared so the role check is
+         complete — TxxT does not read, store, or display cell-broadcast /
+         WEA payloads; those stay with the platform CellBroadcastReceiver. -->
+    <uses-permission android:name="android.permission.RECEIVE_WAP_PUSH" />
+    <uses-permission android:name="android.permission.READ_CELL_BROADCASTS" />
 
     <!-- Contact-name resolution AND the NEW-conversation recipient picker.
          READ-ONLY, LOCAL-ONLY, and the app stays fully usable without it.
