@@ -156,6 +156,18 @@ class DefaultHandlerManifestTest {
     }
 
     @Test
+    fun `the default SMS role declares WAP_PUSH and cell-broadcast permissions`() {
+        assertTrue(
+            "RECEIVE_WAP_PUSH is the app-level pair to the WAP_PUSH receivers",
+            manifestText.contains("android.permission.RECEIVE_WAP_PUSH"),
+        )
+        assertTrue(
+            "READ_CELL_BROADCASTS completes the SmsApplication role check",
+            manifestText.contains("android.permission.READ_CELL_BROADCASTS"),
+        )
+    }
+
+    @Test
     fun `no signature-held deliver permission leaks into uses-permission`() {
         // BROADCAST_SMS / BROADCAST_WAP_PUSH / SEND_RESPOND_VIA_MESSAGE are
         // platform-held signatures: they belong ONLY in android:permission

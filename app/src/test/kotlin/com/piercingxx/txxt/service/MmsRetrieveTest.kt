@@ -221,6 +221,23 @@ class MmsRetrieveTest {
             "already-persisted telephony inbox photos must be copied into TxxT",
             importer.contains("fun importPending"),
         )
+        assertFalse(
+            "text-only / sender-less inbox rows must not warn on every launch",
+            importer.contains("inbox import no from") || importer.contains("inbox import no part"),
+        )
+        assertTrue(
+            "unimportable inbox rows must be summarized once per scan",
+            importer.contains("inbox import skipped"),
+        )
+    }
+
+    @Test
+    fun `stale inbox rows are given up after ten minutes`() {
+        val now = 1_800_000_000_000L
+        assertEquals(1_700_000_000_000L, TelephonyInboxImport.dateMillis(1_700_000_000L))
+        assertEquals(now, TelephonyInboxImport.dateMillis(now))
+        assertTrue(TelephonyInboxImport.isStale(now - TelephonyInboxImport.STALE_MS, now))
+        assertFalse(TelephonyInboxImport.isStale(now - TelephonyInboxImport.STALE_MS + 1, now))
     }
 
     @Test

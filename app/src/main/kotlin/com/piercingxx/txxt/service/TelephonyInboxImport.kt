@@ -23,6 +23,8 @@ object TelephonyInboxImport {
     private const val KEY_IDS = "imported_ids"
     private const val FROM_TYPE = 137 // PduHeaders.FROM
     private const val MATCH_WINDOW_MS = 180_000L
+    /** Give up on inbox rows that never grew a sender or image. */
+    internal const val STALE_MS = 10 * 60 * 1000L
 
     suspend fun importPending(context: Context): Int {
         val app = context.applicationContext
@@ -48,6 +50,9 @@ object TelephonyInboxImport {
         }
         AppLog.i("mms", "inbox import rows=${cursor.count}")
         var count = 0
+        var skippedNoFrom = 0
+        var skippedNoPart = 0
+        val now = System.currentTimeMillis()
         val db = TxxTDatabase.instance(app)
         cursor.use {
             val idCol = it.getColumnIndex(Telephony.Mms._ID)
@@ -55,18 +60,19 @@ object TelephonyInboxImport {
             while (it.moveToNext()) {
                 val id = it.getLong(idCol)
                 if (imported.contains(id.toString())) continue
-                val dateSecs = it.getLong(dateCol)
+                val dateMillis = dateMillis(it.getLong(dateCol))
                 val from = fromAddress(app, id)
                 if (from == null) {
-                    AppLog.w("mms", "inbox import no from id=$id")
+                    skippedNoFrom++
+                    if (isStale(dateMillis, now)) imported += id.toString()
                     continue
                 }
                 val part = imageOrVideoPart(app, id)
                 if (part == null) {
-                    AppLog.w("mms", "inbox import no part id=$id")
+                    skippedNoPart++
+                    if (isStale(dateMillis, now)) imported += id.toString()
                     continue
                 }
-                val dateMillis = if (dateSecs < 10_000_000_000L) dateSecs * 1000L else dateSecs
                 val convId = InboundStore.findOrCreateConversation(db.conversationDao(), from)
                 val path = attachOrPersist(
                     app,
@@ -83,8 +89,17 @@ object TelephonyInboxImport {
         }
         prefs.edit().putStringSet(KEY_IDS, imported).apply()
         if (count > 0) AppLog.i("mms", "inbox import attached=$count")
+        if (skippedNoFrom > 0 || skippedNoPart > 0) {
+            AppLog.i("mms", "inbox import skipped no-from=$skippedNoFrom no-part=$skippedNoPart")
+        }
         return count
     }
+
+    internal fun dateMillis(dateSecs: Long): Long =
+        if (dateSecs < 10_000_000_000L) dateSecs * 1000L else dateSecs
+
+    internal fun isStale(dateMillis: Long, now: Long): Boolean =
+        now - dateMillis >= STALE_MS
 
     internal fun pickPart(parts: List<Pair<String?, ByteArray>>): Pair<String, ByteArray>? {
         parts.firstOrNull { (mime, bytes) ->

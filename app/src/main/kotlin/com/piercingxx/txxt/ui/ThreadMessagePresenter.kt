@@ -52,19 +52,37 @@ object ThreadMessagePresenter {
      * INCOMING → left-aligned, RECEIVED emphasis. Body and timestamp pass
      * through unchanged — the presenter owns layout semantics, not content.
      */
-    fun present(message: Message): ThreadRow {
+    fun present(message: Message, revealed: Boolean = false): ThreadRow {
         val (alignment, emphasis) = when (message.direction) {
             MessageDirection.OUTGOING -> ThreadAlignment.RIGHT to ThreadEmphasis.SENT
             MessageDirection.INCOMING -> ThreadAlignment.LEFT to ThreadEmphasis.RECEIVED
         }
+        val showPhoto = showsPhoto(message, revealed)
         return ThreadRow(
             alignment = alignment,
             emphasis = emphasis,
-            body = bodyFor(message),
+            body = displayBody(bodyFor(message), showPhoto),
             timestampMillis = message.timestampMillis,
             mediaPath = message.mediaPath,
+            showPhoto = showPhoto,
         )
     }
+
+    /**
+     * The image is shown only for a tap-reveal in this visit. Collapsed
+     * `[Photo]` rows and captioned MMS stay as text until the operator
+     * asks; leaving the thread clears the reveal.
+     */
+    internal fun showsPhoto(message: Message, revealed: Boolean): Boolean =
+        revealed && !message.mediaPath.isNullOrBlank()
+
+    /** A stored `[photo]` leftover still renders as `[Photo]` until revealed. */
+    private fun displayBody(body: String, showPhoto: Boolean): String =
+        if (!showPhoto && body.trim() == MmsRetrievedContent.PHOTO_PLACEHOLDER) {
+            MmsRetrievedContent.COLLAPSED_PHOTO_PLACEHOLDER
+        } else {
+            body
+        }
 
     /**
      * The text a row shows.
@@ -99,4 +117,6 @@ data class ThreadRow(
     val body: String,
     val timestampMillis: Long,
     val mediaPath: String? = null,
+    /** True only while this visit has the photo revealed; never the default. */
+    val showPhoto: Boolean = false,
 )

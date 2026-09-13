@@ -55,6 +55,13 @@ class ThreadAdapter(
     private val messages = mutableListOf<Message>()
 
     /**
+     * Photo ids revealed in this visit. Session-only: a tap adds, another
+     * tap removes, [hideAllPhotos] clears the set when the thread leaves
+     * the screen. The Room body stays `[Photo]` so a reopen starts hidden.
+     */
+    private val revealedPhotoIds = mutableSetOf<Long>()
+
+    /**
      * The theme tokens the rows are painted from. Defaults to the brand's
      * default preset (AMOLED black) so the adapter stays constructible — and
      * JVM-testable — without a `Context`; the thread screen pushes the live
@@ -94,6 +101,30 @@ class ThreadAdapter(
         if (attached) notifyDataSetChanged()
     }
 
+    fun revealPhoto(messageId: Long) {
+        if (!revealedPhotoIds.add(messageId)) return
+        if (attached) notifyDataSetChanged()
+    }
+
+    fun collapsePhoto(messageId: Long) {
+        if (!revealedPhotoIds.remove(messageId)) return
+        if (attached) notifyDataSetChanged()
+    }
+
+    fun togglePhoto(messageId: Long) {
+        if (!revealedPhotoIds.add(messageId)) revealedPhotoIds.remove(messageId)
+        if (attached) notifyDataSetChanged()
+    }
+
+    /** Auto-hide: every revealed photo goes back to `[Photo]`. */
+    fun hideAllPhotos() {
+        if (revealedPhotoIds.isEmpty()) return
+        revealedPhotoIds.clear()
+        if (attached) notifyDataSetChanged()
+    }
+
+    fun isPhotoRevealed(messageId: Long): Boolean = messageId in revealedPhotoIds
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RowHolder {
         val itemView = LayoutInflater.from(parent.context)
             .inflate(R.layout.item_message, parent, false)
@@ -106,7 +137,10 @@ class ThreadAdapter(
         val message = messages[position]
         // The wire-in: every rendered row goes through the presenter, so the
         // direction → alignment/emphasis mapping is the single source of truth.
-        val row = ThreadMessagePresenter.present(message)
+        val row = ThreadMessagePresenter.present(
+            message,
+            revealed = message.id in revealedPhotoIds,
+        )
         bindPhotoGestures(holder.itemView, message)
         bindRow(holder.itemView, row, theme)
     }
@@ -187,7 +221,9 @@ class ThreadAdapter(
             EmojiTypeface.apply(body)
             val photo = itemView.findViewById<View>(R.id.message_photo) as? ImageView
             val path = row.mediaPath
-            val fileReady = !path.isNullOrBlank() && java.io.File(path).isFile
+            val fileReady = row.showPhoto &&
+                !path.isNullOrBlank() &&
+                java.io.File(path).isFile
             val bitmap = if (fileReady) decodePhoto(path!!) else null
             if (photo != null) {
                 if (bitmap != null) {
@@ -198,7 +234,7 @@ class ThreadAdapter(
                     photo.setImageDrawable(null)
                 }
             }
-            val hideMarker = bitmap != null
+            val hideMarker = bitmap != null && isPhotoMarker(row.body)
             body.visibility = if (hideMarker) View.GONE else View.VISIBLE
             applyAlignment(rowContainer, body, timestamp, row.alignment)
             body.setTextColor(emphasisColor(row.emphasis, tokens).toInt())
@@ -283,6 +319,12 @@ class ThreadAdapter(
             return trimmed == MmsRetrievedContent.COLLAPSED_PHOTO_PLACEHOLDER ||
                 trimmed == MmsRetrievedContent.PHOTO_PLACEHOLDER ||
                 MmsRetrieve.needsRetrieve(message)
+        }
+
+        fun isPhotoMarker(body: String): Boolean {
+            val trimmed = body.trim()
+            return trimmed == MmsRetrievedContent.COLLAPSED_PHOTO_PLACEHOLDER ||
+                trimmed == MmsRetrievedContent.PHOTO_PLACEHOLDER
         }
 
         fun layoutGravityFor(alignment: ThreadAlignment): Int = when (alignment) {

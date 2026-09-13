@@ -147,6 +147,14 @@ class ThreadWiringTest {
                 threadActivity.contains("collapsePhoto"),
         )
         assertTrue(
+            "leaving the thread must auto-hide every revealed photo",
+            threadActivity.contains("hideAllPhotos()"),
+        )
+        assertTrue(
+            "the bind path must refuse to paint a photo that is not revealed",
+            threadAdapterSource.contains("row.showPhoto"),
+        )
+        assertTrue(
             "long-pressing a photo must peek fullscreen until the finger lifts",
             threadActivity.contains("onPhotoPeek") && threadActivity.contains("hidePeek"),
         )
@@ -206,5 +214,29 @@ class ThreadWiringTest {
 
         assertEquals(ThreadAlignment.LEFT, bound?.alignment)
         assertEquals(ThreadEmphasis.RECEIVED, bound?.emphasis)
+    }
+
+    @Test
+    fun `a photo stays hidden until reveal and hides again on hideAllPhotos`() {
+        var bound: ThreadRow? = null
+        val adapter = ThreadAdapter(bindRow = { _, row, _ -> bound = row })
+        val holder = ThreadAdapter.RowHolder(mockk(relaxed = true))
+        val photo = message(
+            id = 20L,
+            direction = MessageDirection.INCOMING,
+            body = "[Photo]",
+        ).copy(transport = MessageTransport.MMS, mediaPath = "/tmp/p.jpg")
+
+        adapter.submit(listOf(photo))
+        adapter.onBindViewHolder(holder, 0)
+        assertEquals(false, bound?.showPhoto)
+
+        adapter.revealPhoto(photo.id)
+        adapter.onBindViewHolder(holder, 0)
+        assertEquals(true, bound?.showPhoto)
+
+        adapter.hideAllPhotos()
+        adapter.onBindViewHolder(holder, 0)
+        assertEquals(false, bound?.showPhoto)
     }
 }

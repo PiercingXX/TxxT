@@ -58,6 +58,7 @@ class ThreadMessagePresenterTest {
         )
         assertEquals("[Photo]", row.body)
         assertEquals("/tmp/p.jpg", row.mediaPath)
+        assertEquals(false, row.showPhoto)
     }
 
     @Test
@@ -77,6 +78,23 @@ class ThreadMessagePresenterTest {
         )
         assertEquals("[Photo]", row.body)
         assertEquals("/tmp/p.jpg", row.mediaPath)
+        assertEquals(false, row.showPhoto)
+    }
+
+    @Test
+    fun `a revealed photo is the only row that shows the image`() {
+        val collapsed = message(id = 11L, direction = MessageDirection.INCOMING, body = "[Photo]")
+            .copy(transport = MessageTransport.MMS, mediaPath = "/tmp/p.jpg")
+        assertEquals(false, present(collapsed).showPhoto)
+        assertEquals(true, present(collapsed, revealed = true).showPhoto)
+        assertEquals(
+            false,
+            present(collapsed.copy(mediaPath = null), revealed = true).showPhoto,
+        )
+        assertEquals(
+            "[Photo]",
+            present(collapsed.copy(body = "[photo]")).body,
+        )
     }
 
     @Test
@@ -101,11 +119,11 @@ class ThreadMessagePresenterTest {
         val outgoing = present(message(id = 4L, direction = MessageDirection.OUTGOING))
         val incoming = present(message(id = 5L, direction = MessageDirection.INCOMING))
         assertEquals(
-            setOf("alignment", "emphasis", "body", "timestampMillis", "mediaPath"),
+            setOf("alignment", "emphasis", "body", "timestampMillis", "mediaPath", "showPhoto"),
             outgoing::class.java.declaredFields.map { it.name }.toSet(),
         )
         assertEquals(
-            setOf("alignment", "emphasis", "body", "timestampMillis", "mediaPath"),
+            setOf("alignment", "emphasis", "body", "timestampMillis", "mediaPath", "showPhoto"),
             incoming::class.java.declaredFields.map { it.name }.toSet(),
         )
     }
