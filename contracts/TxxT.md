@@ -1,6 +1,6 @@
-<!-- nagatha: UNREVIEWED — no reviewer configured (SKIPPY_REVIEW_URL unset) -->
+<!-- nagatha: BLOCK — An ORDER defect exists: **WS14 requires the xx-launcher source** to confirm the theme-publish mechanism, but the inventory explicitly states this source is "deferred by the operator" and "not build workstreams," leaving WS14's `done when` unachievable because the required external data (the launcher's source code) is not included in the inventory as a deliverable workstream. Additionally, a COVERA -->
 
-<!-- design-digest: 2a3eea8841347937 -->
+<!-- design-digest: c6d6099e4be4bfcb -->
 
 # TxxT — Workstream Inventory
 
