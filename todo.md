@@ -78,11 +78,12 @@ Daily-driver quality of life. Not a new privacy surface.
 
 Already daily. Spot-check after T1/T2:
 
-- [ ] Export + restore on this phone.
-- [ ] Quarantine on → unknown SMS held; toggle off → normal deliver.
-- [ ] Verizon MMS photo still sends (existing path).
-- [ ] Pin + mute-until survive process death (T5).
+- [x] Export + restore on this phone.
+- [x] Quarantine on → unknown SMS held; toggle off → normal deliver.
+- [x] Verizon MMS photo still sends (existing path).
+- [x] Pin + mute-until survive process death (T5).
 - **Accept:** dated note in this file.
+- **2026-09-14 — operator device confirmation:** all four checks pass on the phone. TxxT is feature complete.
 
 ---
 
