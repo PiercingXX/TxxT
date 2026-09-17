@@ -32,6 +32,7 @@ import com.piercingxx.txxt.service.DefaultHandlerMonitor
 import com.piercingxx.txxt.service.NotificationPrefs
 import com.piercingxx.txxt.service.ensureMessageChannels
 import com.piercingxx.txxt.theme.SharedPreferencesThemeKeyValueStore
+import com.piercingxx.txxt.theme.SuiteThemeClient
 import com.piercingxx.txxt.theme.ThemeApplier
 import com.piercingxx.txxt.theme.ThemeController
 import com.piercingxx.txxt.theme.ThemeStore
@@ -353,6 +354,7 @@ class SettingsActivity : Activity() {
             SettingsBackup.toSettingsMap(store).forEach { (k, v) -> putString(k, v) }
         }.apply()
         syncRenderTheme(store)
+        SuiteThemeClient.request(this, store.themePreset)
         applyTheme()
         lastLoadedStore = store
     }
