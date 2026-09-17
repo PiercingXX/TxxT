@@ -109,3 +109,18 @@ link previews, bubbles.
 3. T5 pin / mute-until
 4. T3 copy
 5. T4 spot-check
+
+- [ ] SMOKE — the app fails its emulator smoke run
+  - reason: no launcher activity: the manifest declares no MAIN/LAUNCHER activity
+  - files: app/src/main/AndroidManifest.xml, app/src/main/java, app/src/test/java
+  - verify: python3 /home/piercingxx/.skippy/app/scripts/android_smoke.py . 2>&1 | tail -1 | grep -q 'SMOKE PASS'
+
+---
+
+## WAVE-1 — xx-apps catalog (operator 2026-09-17)
+
+Package `com.piercingxx.txxt`. Default-on. No fabric login. xx-apps may
+uninstall this APK when the Skippy user is disabled. Keep `INTERNET`
+absent.
+
+- [ ] Tx-E1 — Package id frozen for the store seed. Theme sync stays.
