@@ -20,8 +20,7 @@ class TxxtApp : Application() {
     override fun onCreate() {
         super.onCreate()
         AppLog.init(this)
-        AppLog.installCrashHandler()
-        AppLog.i("app", "start ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+        AppLog.installFieldDiagnostics(this)
         appScope.launch {
             AppLog.i("mms", "inbox import scheduled")
             try {
